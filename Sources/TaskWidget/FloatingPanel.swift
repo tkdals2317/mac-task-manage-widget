@@ -55,11 +55,12 @@ final class FloatingPanel: NSPanel, NSWindowDelegate {
     }
 
     func toggle() {
-        if isVisible { orderOut(nil) } else { makeKeyAndOrderFront(nil) }
+        if isVisible { hovering = false; orderOut(nil) } else { makeKeyAndOrderFront(nil) }
     }
 
     /// 닫기 버튼 = 숨기기. 앱은 메뉴바에 계속 산다.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        hovering = false
         orderOut(nil)
         return false
     }
