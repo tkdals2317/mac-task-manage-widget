@@ -7,6 +7,7 @@ final class Scheduler {
     private let state: AppState
     private var timer: Timer?
     private var scheduledKey = ""
+    private var catchUpTask: Task<Void, Never>?
     private var observers: [Any] = []
 
     init(state: AppState) {
@@ -19,7 +20,11 @@ final class Scheduler {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.catchUp() }
+            // Timer(fire:) 데드라인은 잠자는 동안 멈춘다. 깨어나면 다시 걸어야 다음 날 요약이 일찍 생성되지 않는다.
+            Task { @MainActor in
+                self?.reschedule()
+                self?.catchUp()
+            }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
@@ -37,7 +42,13 @@ final class Scheduler {
     private func settingsChanged() {
         guard currentKey != scheduledKey else { return }
         reschedule()
-        catchUp()
+        // 시·분은 피커가 따로라 중간 값(과거 시각)이 잠깐 설정될 수 있다. 멈춘 뒤에만 catch-up.
+        catchUpTask?.cancel()
+        catchUpTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.catchUp()
+        }
     }
 
     func reschedule() {
