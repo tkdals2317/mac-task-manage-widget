@@ -12,10 +12,11 @@ public enum GitActivity {
         guard probe.status == 0, probe.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "true" else { return [] }
 
         // 같은 저장소의 다른 사람 커밋이 내 업무로 섞이지 않게 로컬 사용자 이메일로 거른다. 설정이 없으면 필터 없음.
+        // --author 는 "Name <email>" 에 대한 정규식이라 <> 로 감싸야 kim@co.com 이 jkim@co.com 에 걸리지 않는다.
         let me = ProcessRunner.run(executable: "/usr/bin/git", arguments: ["-C", cwd, "config", "user.email"], timeout: timeout)
         let email = me.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         var args = ["-C", cwd, "log"]
-        if me.status == 0, !email.isEmpty { args.append("--author=\(email)") }
+        if me.status == 0, !email.isEmpty { args.append("--author=<\(email)>") }
 
         let key = DayKey.string(from: day, calendar: calendar)
         let r = ProcessRunner.run(executable: "/usr/bin/git",

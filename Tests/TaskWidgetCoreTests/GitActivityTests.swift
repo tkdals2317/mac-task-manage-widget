@@ -39,7 +39,7 @@ final class GitActivityTests: XCTestCase {
     func testAuthorFilter() throws {
         git(["init", "-q"])
         git(["config", "user.email", "me@test"])
-        for (name, email) in [("mine", "me@test"), ("theirs", "other@test")] {
+        for (name, email) in [("mine", "me@test"), ("theirs", "other@test"), ("prefixed", "xme@test")] {
             try name.write(to: dir.appendingPathComponent("\(name).txt"), atomically: true, encoding: .utf8)
             git(["add", "."])
             git(["-c", "user.name=t", "-c", "user.email=\(email)", "commit", "-q", "-m", "by \(name)"])

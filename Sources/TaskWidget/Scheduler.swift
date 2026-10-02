@@ -75,15 +75,21 @@ final class Scheduler {
     }
 
     /// 최근 7일 + (예정 시각이 지났으면) 오늘 중 요약 파일이 없는 날을 오래된 날부터 하나씩 생성.
+    /// 과거 날 실패는 나머지 과거 날만 건너뛰고, 오늘은 항상 시도한다.
     private func catchUpMissed() async {
         let s = Settings.shared
         let service = state.summaryService
+        var skipPastDays = false
+        var triedToday = false
         for day in Schedule.catchUpDays(now: Date(), hour: s.summaryHour, minute: s.summaryMinute) {
+            let isToday = Calendar.current.isDateInToday(day)
+            if skipPastDays && !isToday { continue }
             // 다른 생성이 진행 중이면 중단. 다음 트리거(타이머, 깨어남, 설정 변경)가 이어서 처리한다.
             guard !state.summaryGenerating else { return }
             guard service.existing(for: day) == nil else { continue }
 
-            if Calendar.current.isDateInToday(day) {
+            if isToday {
+                triedToday = true
                 await generateIfMissing()
                 continue
             }
@@ -101,8 +107,14 @@ final class Scheduler {
                     notify("요약 실패", body: "\(key): \(e)")
                 }
             }
-            // 실패 원인(claude 없음, 시간 초과 등)은 대개 다음 날짜에도 같다. 알림이 쌓이지 않게 여기서 멈추고 다음 트리거에 재시도.
-            if !ok { return }
+            // 실패 원인(claude 없음, 시간 초과 등)은 대개 다음 과거 날짜에도 같다. 알림이 쌓이지 않게 나머지 과거 날은 건너뛴다.
+            if !ok { skipPastDays = true }
+        }
+
+        // 과거 날을 처리하는 동안 예정 시각이 지났을 수 있다. 그 사이 발화한 타이머는 busy 가드에 걸려 빠졌으므로 오늘을 다시 확인한다.
+        if !triedToday, let last = Schedule.catchUpDays(now: Date(), hour: s.summaryHour, minute: s.summaryMinute).last,
+           Calendar.current.isDateInToday(last) {
+            await generateIfMissing()  // 이미 있거나 생성 중이면 조용히 빠진다
         }
     }
 

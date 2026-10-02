@@ -354,7 +354,7 @@ abc1234 feat: ...
 func run(prompt: String, model: String?, timeout: TimeInterval = 180) async throws -> String
 ```
 
-- `Process`: `<claudePath> -p --output-format text [--model <model>]`
+- `Process`: `<claudePath> -p --output-format text --tools "" --strict-mcp-config --no-session-persistence [--model <model>]`. 비감독 실행이라 도구/MCP 차단.
 - 프롬프트는 stdin으로 전달.
 - `currentDirectoryURL` = `DATA` (훅이 이 cwd를 제외하므로 자기 기록 안 됨).
 - 환경: 현재 환경 복사 후 `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT` 제거. `PATH` 앞에 `~/.local/bin:/opt/homebrew/bin:/usr/local/bin` 추가.
@@ -385,7 +385,7 @@ func nextFireDate(after now: Date, hour: Int, minute: Int, calendar: Calendar) -
 
 - 시작 시 `Timer`를 `nextFireDate`에 등록. 설정 시각 변경 시 재등록.
 - 발화: 오늘 파일 없으면 `generate(today, force: false)`. 끝나면 다음 날로 재등록.
-- catch-up: 앱 시작, `NSWorkspace.didWakeNotification`, 설정 시각 변경 시 → `now ≥ 오늘 설정 시각`이고 오늘 파일 없으면 즉시 생성.
+- catch-up: 앱 시작·깨어남·타이머 발화 시 최근 7일 중 요약 파일이 없는 날을 오래된 순으로 확인. 과거 날짜는 기록이 있을 때만 생성("기록 없음" 자리표시자는 오늘만). 과거 날짜 실패 시 나머지 과거 날짜는 건너뛰고 오늘은 항상 시도. 오늘은 `now ≥ 오늘 설정 시각`일 때만 대상.
 - `summaryNotify`가 켜져 있으면 완료 시 `UNUserNotificationCenter` "오늘 요약 완료", 실패 시 "요약 실패: {이유}". 권한은 첫 실행 때 요청.
 
 ### 10.3 에러 처리
