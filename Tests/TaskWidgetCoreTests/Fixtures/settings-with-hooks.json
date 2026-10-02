@@ -1,0 +1,11 @@
+{
+  "permissions": { "allow": ["Bash(ls:*)"] },
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "node /Users/x/.claude/hooks/other.js", "timeout": 5 } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "node /Users/x/.claude/hooks/start.js" } ] }
+    ]
+  }
+}
