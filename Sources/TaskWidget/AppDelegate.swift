@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel!
     private let state = AppState()
     private var defaultsObserver: Any?
+    private var scheduler: Scheduler!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? Paths.ensureDirectories()
@@ -28,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.panel.applyAppearance() }
         }
 
+        scheduler = Scheduler(state: state)
+        scheduler.start()
+
         panel.makeKeyAndOrderFront(nil)
     }
 
@@ -44,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let toggleItem = NSMenuItem(title: "패널 보이기/숨기기", action: #selector(togglePanel), keyEquivalent: "")
         toggleItem.target = self
         menu.addItem(toggleItem)
+        let genItem = NSMenuItem(title: "요약 지금 생성", action: #selector(generateNow), keyEquivalent: "")
+        genItem.target = self
+        menu.addItem(genItem)
         let settingsItem = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -59,6 +66,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePanel() { panel.toggle() }
+
+    @objc private func generateNow() {
+        panel.makeKeyAndOrderFront(nil)
+        UserDefaults.standard.set("summary", forKey: SettingsKey.lastTab)
+        Task { await state.generateSummary(for: Date(), force: true) }
+    }
 
     @objc private func openSettings() {
         panel.makeKeyAndOrderFront(nil)
