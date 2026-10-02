@@ -110,6 +110,54 @@ final class ClaudeIntegrationTests: XCTestCase {
         XCTAssertEqual(ourCommands(try readJSON(), "Stop").count, 1)
     }
 
+    func testUnreadableSettingsThrowsAndLeavesFile() throws {
+        let url = dir.appendingPathComponent("settings.json")
+        let original = #"{"model":"opus","permissions":{"allow":["Bash(ls:*)"]}}"#
+        try original.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
+        try XCTSkipIf(FileManager.default.isReadableFile(atPath: url.path), "root 로 실행 중이면 000 파일도 읽힌다")
+
+        let ci = ClaudeIntegration(claudeDir: dir, executablePath: exeA)
+        XCTAssertThrowsError(try ci.installHook()) { XCTAssertEqual($0 as? IntegrationError, .invalidSettingsJSON) }
+        XCTAssertThrowsError(try ci.removeHook()) { XCTAssertEqual($0 as? IntegrationError, .invalidSettingsJSON) }
+        XCTAssertEqual(ci.hookStatus(), .notInstalled)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), original, "읽을 수 없던 파일은 그대로")
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.contains(".bak-") }
+        XCTAssertEqual(backups, [])
+    }
+
+    func testSymlinkedSettingsKeepsLinkAndWritesTarget() throws {
+        let real = dir.appendingPathComponent("real-settings.json")
+        try #"{"model":"opus"}"#.write(to: real, atomically: true, encoding: .utf8)
+        let link = dir.appendingPathComponent("settings.json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+
+        let ci = ClaudeIntegration(claudeDir: dir, executablePath: exeA)
+        try ci.installHook()
+
+        XCTAssertNoThrow(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), "심볼릭 링크 유지")
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: real)) as! [String: Any]
+        XCTAssertEqual(root["model"] as? String, "opus")
+        XCTAssertEqual(ourCommands(root, "Stop"), [ci.hookCommand], "링크 대상 파일에 기록")
+        XCTAssertEqual(ci.hookStatus(), .installed)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        XCTAssertEqual(names.filter { $0.hasPrefix("real-settings.json.bak-") }.count, 1, "백업은 대상 옆에")
+        XCTAssertEqual(names.filter { $0.hasPrefix("settings.json.bak-") }.count, 0)
+    }
+
+    func testSecondInstallInSameSecondKeepsEarlierBackup() throws {
+        try copyFixture()
+        let ci = ClaudeIntegration(claudeDir: dir, executablePath: exeA)
+        try ci.installHook()
+        try ci.installHook()
+        try ci.removeHook()
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("settings.json.bak-") }
+        XCTAssertEqual(backups.count, 3, "쓸 때마다 백업, 같은 초여도 덮어쓰지 않음")
+    }
+
     func testHookCommandQuotesPath() {
         let ci = ClaudeIntegration(claudeDir: dir, executablePath: "/Users/me/My Apps/TaskWidget.app/Contents/MacOS/TaskWidget")
         XCTAssertEqual(ci.hookCommand, "\"/Users/me/My Apps/TaskWidget.app/Contents/MacOS/TaskWidget\" --hook")
@@ -126,6 +174,18 @@ final class ClaudeIntegrationTests: XCTestCase {
         XCTAssertTrue(md.contains("## HH:mm · <프로젝트명>"))
         try ci.removeSkill()
         XCTAssertFalse(ci.skillInstalled())
-        XCTAssertFalse(FileManager.default.fileExists(atPath: ci.skillURL.deletingLastPathComponent().path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ci.skillURL.deletingLastPathComponent().path), "SKILL.md 만 있었으면 디렉터리도 삭제")
+    }
+
+    func testRemoveSkillKeepsOtherFilesInDirectory() throws {
+        let ci = ClaudeIntegration(claudeDir: dir, executablePath: exeA)
+        try ci.installSkill()
+        let notes = ci.skillURL.deletingLastPathComponent().appendingPathComponent("notes.md")
+        try "mine".write(to: notes, atomically: true, encoding: .utf8)
+        try ci.removeSkill()
+        XCTAssertFalse(ci.skillInstalled())
+        XCTAssertEqual(try String(contentsOf: notes, encoding: .utf8), "mine")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ci.skillURL.deletingLastPathComponent().path))
+        try ci.removeSkill()   // 이미 없어도 던지지 않는다
     }
 }

@@ -30,24 +30,35 @@ public struct ClaudeIntegration {
 
     // MARK: settings.json
 
+    /// 파일이 없을 때만 빈 설정. 있는데 읽거나 파싱할 수 없으면 던진다 (사용자 설정을 덮어쓰지 않기 위해).
     func readSettings() throws -> [String: Any] {
-        guard let data = try? Data(contentsOf: settingsURL) else { return [:] }
-        guard let obj = try? JSONSerialization.jsonObject(with: data), let dict = obj as? [String: Any] else {
+        guard FileManager.default.fileExists(atPath: settingsURL.path) else { return [:] }
+        guard let data = try? Data(contentsOf: settingsURL),
+              let obj = try? JSONSerialization.jsonObject(with: data), let dict = obj as? [String: Any] else {
             throw IntegrationError.invalidSettingsJSON
         }
         return dict
     }
 
+    /// 기존 파일은 백업이 성공해야만 덮어쓴다. settings.json 이 심볼릭 링크면 링크 대상에 쓴다 (링크 보존).
     func writeSettings(_ root: [String: Any]) throws {
-        if FileManager.default.fileExists(atPath: settingsURL.path) {
+        let fm = FileManager.default
+        let target = settingsURL.resolvingSymlinksInPath()
+        if fm.fileExists(atPath: target.path) {
             let f = DateFormatter()
             f.dateFormat = "yyyyMMdd-HHmmss"
-            let backup = settingsURL.appendingPathExtension("bak-" + f.string(from: Date()))
-            try? FileManager.default.copyItem(at: settingsURL, to: backup)
+            let stamp = f.string(from: Date())
+            var backup = target.appendingPathExtension("bak-" + stamp)
+            var n = 1
+            while fm.fileExists(atPath: backup.path) {   // 같은 초에 두 번 쓰면 기존 백업을 덮지 않고 번호를 붙인다
+                backup = target.appendingPathExtension("bak-\(stamp)-\(n)")
+                n += 1
+            }
+            try fm.copyItem(at: target, to: backup)
         }
-        try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: claudeDir, withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        try data.write(to: settingsURL, options: .atomic)
+        try data.write(to: target, options: .atomic)
     }
 
     public func hookStatus() -> HookStatus {
@@ -119,10 +130,15 @@ public struct ClaudeIntegration {
         try Self.skillMarkdown.write(to: skillURL, atomically: true, encoding: .utf8)
     }
 
+    /// SKILL.md 만 지우고, 디렉터리는 비었을 때만 지운다 (사용자가 넣어 둔 다른 파일 보존).
     public func removeSkill() throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: skillURL.path) {
+            try fm.removeItem(at: skillURL)
+        }
         let dir = skillURL.deletingLastPathComponent()
-        if FileManager.default.fileExists(atPath: dir.path) {
-            try FileManager.default.removeItem(at: dir)
+        if let rest = try? fm.contentsOfDirectory(atPath: dir.path), rest.isEmpty {
+            try fm.removeItem(at: dir)
         }
     }
 
