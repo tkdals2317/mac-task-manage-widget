@@ -10,7 +10,18 @@ final class AppState: ObservableObject {
     @Published var jiraLoading = false
     @Published var jiraConfigured = false
     @Published var jiraTruncated = false
+    @Published var summary: Summary?
+    @Published var worklogRaw: String?
+    @Published var summaryDay = Date()
+    @Published var summaryGenerating = false
+    @Published var summaryError: String?
     let todoStore: TodoStore
+
+    /// runner 는 호출 시점의 설정(모델, 경로)을 읽는다.
+    let summaryService = SummaryService { prompt in
+        let s = Settings.shared
+        return try ClaudeRunner(configuredPath: s.claudePath, model: s.claudeModel).run(prompt: prompt)
+    }
 
     init(todoStore: TodoStore = TodoStore()) {
         self.todoStore = todoStore
@@ -88,5 +99,33 @@ final class AppState: ObservableObject {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             jiraError = error.localizedDescription
         }
+    }
+
+    // MARK: - Summary
+
+    func loadSummary(for day: Date) {
+        summaryDay = day
+        summary = summaryService.existing(for: day)
+        worklogRaw = Worklog.raw(on: day)
+    }
+
+    /// 성공하면 true. 실패는 summaryError 에.
+    @discardableResult
+    func generateSummary(for day: Date, force: Bool) async -> Bool {
+        guard !summaryGenerating else { return false }
+        summaryGenerating = true
+        summaryError = nil
+        defer { summaryGenerating = false }
+        let service = summaryService
+        do {
+            let s = try await Task.detached { try service.generate(for: day, force: force) }.value
+            if Calendar.current.isDate(day, inSameDayAs: summaryDay) { summary = s }
+            return true
+        } catch let e as SummaryError {
+            summaryError = e.userMessage
+        } catch {
+            summaryError = error.localizedDescription
+        }
+        return false
     }
 }
