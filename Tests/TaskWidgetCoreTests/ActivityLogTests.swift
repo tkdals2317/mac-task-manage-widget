@@ -107,6 +107,18 @@ final class ActivityLogTests: XCTestCase {
         XCTAssertFalse(ActivityLog.records(on: oct2Utc, from: url, calendar: utc).contains { $0.session == "s2" })
     }
 
+    func testInvalidUtf8ByteDoesNotHideOtherLines() throws {
+        let file = dir.appendingPathComponent("activity.jsonl")
+        let r1 = ActivityRecord(ts: now, event: "prompt", session: "a", cwd: "/p", text: "one")
+        let r2 = ActivityRecord(ts: now.addingTimeInterval(1), event: "stop", session: "b", cwd: "/p", text: "two")
+        var data = try ActivityLog.encoder.encode(r1)
+        data.append(contentsOf: [0x0A, 0xFF, 0x0A])
+        data.append(try ActivityLog.encoder.encode(r2))
+        data.append(0x0A)
+        try data.write(to: file)
+        XCTAssertEqual(ActivityLog.records(on: now, from: file).map(\.session), ["a", "b"], "깨진 바이트 한 줄이 파일 전체를 날리면 안 된다")
+    }
+
     func testMissingFileIsEmpty() {
         XCTAssertEqual(ActivityLog.records(on: now, from: dir.appendingPathComponent("none.jsonl")), [])
     }

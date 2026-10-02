@@ -71,9 +71,10 @@ public enum ActivityLog {
 
     /// 그날(로컬 달력) 레코드만, ts 오름차순. 깨진 줄은 건너뜀.
     public static func records(on day: Date, from url: URL, calendar: Calendar = .current) -> [ActivityRecord] {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        // String(contentsOf:encoding:) 는 잘못된 바이트 하나에 파일 전체가 nil 이 된다. decoding 은 U+FFFD 로 대체해 그 줄만 깨진다.
+        guard let data = try? Data(contentsOf: url) else { return [] }
         // ponytail: 파일 전체 로드. 수십 MB 넘으면 뒤에서부터 읽는 스트리밍으로 교체.
-        return text.split(separator: "\n")
+        return String(decoding: data, as: UTF8.self).split(separator: "\n")
             .compactMap { try? decoder.decode(ActivityRecord.self, from: Data($0.utf8)) }
             .filter { calendar.isDate($0.ts, inSameDayAs: day) }
             .sorted { $0.ts < $1.ts }
@@ -89,7 +90,7 @@ public enum ActivityLog {
             try? FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
             let msg = "\(iso.string(from: now)) append failed: \(error)\n"
             if let h = try? FileHandle(forWritingTo: log) {
-                try? h.seekToEnd()
+                _ = try? h.seekToEnd()
                 try? h.write(contentsOf: Data(msg.utf8))
                 try? h.close()
             } else {

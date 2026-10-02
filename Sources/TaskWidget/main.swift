@@ -2,7 +2,8 @@ import Foundation
 import TaskWidgetCore
 
 if CommandLine.arguments.contains("--hook") {
-    ActivityLog.handleHook(input: FileHandle.standardInput.readDataToEndOfFile())
+    // readDataToEndOfFile 은 읽기 오류 시 ObjC 예외를 던져 Swift 로 못 잡는다. readToEnd 는 throws.
+    ActivityLog.handleHook(input: (try? FileHandle.standardInput.readToEnd()) ?? Data())
     exit(0)
 }
 
