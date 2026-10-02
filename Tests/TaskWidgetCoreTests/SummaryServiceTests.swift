@@ -90,6 +90,31 @@ final class SummaryServiceTests: XCTestCase {
         XCTAssertTrue(log.contains("error: timeout"))
     }
 
+    func testCollectDedupesCommitsAcrossCwds() throws {
+        // git --since/--until 은 로컬 시간 기준이라 이 테스트만 Date() + Calendar.current 사용
+        let repo = dir.appendingPathComponent("repo")
+        let sub = repo.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        func git(_ args: [String]) {
+            let r = ProcessRunner.run(executable: "/usr/bin/git", arguments: ["-C", repo.path] + args, timeout: 10)
+            XCTAssertEqual(r.status, 0, r.stderr)
+        }
+        git(["init", "-q"])
+        git(["config", "user.email", "me@test"])
+        try "a".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        git(["add", "."])
+        git(["-c", "user.name=t", "commit", "-q", "-m", "feat: once"])
+
+        let now = Date()
+        for cwd in [repo.path, sub.path] {
+            try ActivityLog.append(ActivityRecord(ts: now, event: "prompt", session: "s", cwd: cwd, text: "t"),
+                                   to: dir.appendingPathComponent("activity.jsonl"))
+        }
+        let input = SummaryService(dataDir: dir, calendar: .current) { _ in "x" }.collect(for: now)
+        let all = input.commits.values.flatMap { $0 }
+        XCTAssertEqual(all.filter { $0.hasSuffix(" feat: once") }.count, 1, "\(input.commits)")
+    }
+
     func testExistingNilWhenMissing() {
         let svc = SummaryService(dataDir: dir, calendar: seoul) { _ in "x" }
         XCTAssertNil(svc.existing(for: day))

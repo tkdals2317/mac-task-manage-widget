@@ -38,7 +38,7 @@ final class ClaudeRunnerTests: XCTestCase {
 
     func testRunPassesPromptOnStdinAndReturnsStdout() throws {
         let fake = dir.appendingPathComponent("claude")
-        try makeExecutable(fake, script: "#!/bin/sh\n# 인자 확인 후 stdin 을 그대로 출력\ncase \"$*\" in *'-p --output-format text'*) ;; *) echo bad-args 1>&2; exit 9;; esac\ncat\n")
+        try makeExecutable(fake, script: "#!/bin/sh\n# 인자 확인 후 stdin 을 그대로 출력\ncase \"$*\" in *'-p --output-format text --tools  --strict-mcp-config --no-session-persistence'*) ;; *) echo bad-args 1>&2; exit 9;; esac\ncat\n")
         let out = try ClaudeRunner(configuredPath: fake.path).run(prompt: "hello prompt", workingDirectory: dir)
         XCTAssertEqual(out, "hello prompt")
     }
@@ -47,7 +47,7 @@ final class ClaudeRunnerTests: XCTestCase {
         let fake = dir.appendingPathComponent("claude")
         try makeExecutable(fake, script: "#!/bin/sh\necho \"$*\"\n")
         let out = try ClaudeRunner(configuredPath: fake.path, model: "claude-sonnet-5-5").run(prompt: "x", workingDirectory: dir)
-        XCTAssertEqual(out, "-p --output-format text --model claude-sonnet-5-5")
+        XCTAssertEqual(out, "-p --output-format text --tools  --strict-mcp-config --no-session-persistence --model claude-sonnet-5-5")
     }
 
     func testRunRemovesNestingEnv() throws {
@@ -72,6 +72,14 @@ final class ClaudeRunnerTests: XCTestCase {
         try makeExecutable(fake, script: "#!/bin/sh\nsleep 5\n")
         XCTAssertThrowsError(try ClaudeRunner(configuredPath: fake.path, timeout: 0.3).run(prompt: "x", workingDirectory: dir)) { e in
             XCTAssertEqual(e as? SummaryError, .timeout)
+        }
+    }
+
+    func testFailureMessageFallsBackToStdout() throws {
+        let fake = dir.appendingPathComponent("claude")
+        try makeExecutable(fake, script: "#!/bin/sh\necho \"out-line\"\nexit 2\n")
+        XCTAssertThrowsError(try ClaudeRunner(configuredPath: fake.path).run(prompt: "x", workingDirectory: dir)) { e in
+            XCTAssertEqual(e as? SummaryError, .claudeFailed(2, "out-line\n"))
         }
     }
 

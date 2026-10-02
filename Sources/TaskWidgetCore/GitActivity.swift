@@ -11,11 +11,16 @@ public enum GitActivity {
                                       timeout: timeout)
         guard probe.status == 0, probe.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "true" else { return [] }
 
+        // 같은 저장소의 다른 사람 커밋이 내 업무로 섞이지 않게 로컬 사용자 이메일로 거른다. 설정이 없으면 필터 없음.
+        let me = ProcessRunner.run(executable: "/usr/bin/git", arguments: ["-C", cwd, "config", "user.email"], timeout: timeout)
+        let email = me.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        var args = ["-C", cwd, "log"]
+        if me.status == 0, !email.isEmpty { args.append("--author=\(email)") }
+
         let key = DayKey.string(from: day, calendar: calendar)
         let r = ProcessRunner.run(executable: "/usr/bin/git",
-                                  arguments: ["-C", cwd, "log",
-                                              "--since=\(key) 00:00:00", "--until=\(key) 23:59:59",
-                                              "--format=%h %s", "-n", "30"],
+                                  arguments: args + ["--since=\(key) 00:00:00", "--until=\(key) 23:59:59",
+                                                     "--format=%h %s", "-n", "30"],
                                   timeout: timeout)
         guard r.status == 0 else { return [] }
         return r.stdout.split(separator: "\n").map(String.init).filter { !$0.isEmpty }

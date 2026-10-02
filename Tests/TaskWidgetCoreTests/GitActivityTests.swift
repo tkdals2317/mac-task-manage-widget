@@ -27,6 +27,7 @@ final class GitActivityTests: XCTestCase {
 
     func testTodayCommitListed() throws {
         git(["init", "-q"])
+        git(["config", "user.email", "t@t"])  // author 필터가 이 값을 쓰므로 전역 설정에 의존하지 않게 고정
         try "a".write(to: dir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
         git(["add", "."])
         git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "feat: first commit"])
@@ -35,8 +36,22 @@ final class GitActivityTests: XCTestCase {
         XCTAssertTrue(lines[0].hasSuffix(" feat: first commit"), lines[0])
     }
 
+    func testAuthorFilter() throws {
+        git(["init", "-q"])
+        git(["config", "user.email", "me@test"])
+        for (name, email) in [("mine", "me@test"), ("theirs", "other@test")] {
+            try name.write(to: dir.appendingPathComponent("\(name).txt"), atomically: true, encoding: .utf8)
+            git(["add", "."])
+            git(["-c", "user.name=t", "-c", "user.email=\(email)", "commit", "-q", "-m", "by \(name)"])
+        }
+        let lines = GitActivity.commits(in: dir.path, on: Date())
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertTrue(lines[0].hasSuffix(" by mine"), lines[0])
+    }
+
     func testYesterdayExcluded() throws {
         git(["init", "-q"])
+        git(["config", "user.email", "t@t"])  // author 필터가 이 값을 쓰므로 전역 설정에 의존하지 않게 고정
         try "a".write(to: dir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
         git(["add", "."])
         git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "old"])

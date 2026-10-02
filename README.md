@@ -73,3 +73,5 @@ make run     # build/TaskWidget.app 실행
 - [ ] 설정 시트에서 텍스트 필드 입력 가능
 - [ ] 투명도/호버/테마/글자 크기 변경이 즉시 반영
 - [ ] 닫기 버튼으로 숨긴 뒤 다시 표시해도 투명도 유지
+- [ ] Claude Code 세션 하나 끝낸 뒤 `activity.jsonl`에 `"event":"prompt"` 와 `"event":"stop"` 줄이 둘 다 있음
+- [ ] `make install` 후 첫 Jira 갱신 때 키체인 프롬프트가 뜨면 **항상 허용** 선택 (허용만 누르면 매 갱신마다 다시 뜸)

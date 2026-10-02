@@ -32,7 +32,7 @@ public enum ActivityLog {
         guard let obj = try? JSONSerialization.jsonObject(with: data),
               let dict = obj as? [String: Any],
               let event = dict["hook_event_name"] as? String else { return nil }
-        let cwd = dict["cwd"] as? String ?? ""
+        guard let cwd = dict["cwd"] as? String, !cwd.isEmpty else { return nil }
         if !excludingCwdPrefix.isEmpty, cwd.hasPrefix(excludingCwdPrefix) { return nil }
 
         let kind: String

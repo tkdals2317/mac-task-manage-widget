@@ -62,6 +62,8 @@ final class ActivityLogTests: XCTestCase {
         // prompt 가 null, cwd 없음, 깨진 JSON — 전부 nil, 크래시 없음
         XCTAssertNil(ActivityLog.record(fromHookInput: hook(#"{"hook_event_name":"UserPromptSubmit","prompt":null}"#), excludingCwdPrefix: "", now: now))
         XCTAssertNil(ActivityLog.record(fromHookInput: hook(#"{"hook_event_name":"Stop","last_assistant_message":123}"#), excludingCwdPrefix: "", now: now))
+        XCTAssertNil(ActivityLog.record(fromHookInput: hook(#"{"hook_event_name":"UserPromptSubmit","prompt":"hi"}"#), excludingCwdPrefix: "", now: now))
+        XCTAssertNil(ActivityLog.record(fromHookInput: hook(#"{"hook_event_name":"UserPromptSubmit","prompt":"hi","cwd":""}"#), excludingCwdPrefix: "", now: now))
         XCTAssertNil(ActivityLog.record(fromHookInput: hook("not json"), excludingCwdPrefix: "", now: now))
         XCTAssertNil(ActivityLog.record(fromHookInput: hook("[1,2]"), excludingCwdPrefix: "", now: now))
     }

@@ -53,7 +53,8 @@ public struct ClaudeRunner {
 
     func runLocated(prompt: String, home: URL, workingDirectory: URL) throws -> String {
         guard let exe = Self.locate(configured: configuredPath, home: home) else { throw SummaryError.claudeNotFound }
-        var args = ["-p", "--output-format", "text"]
+        // 도구·MCP 없이 텍스트만, 세션 디스크 저장 없음 (요약은 프롬프트 안의 자료만으로 쓴다).
+        var args = ["-p", "--output-format", "text", "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
         if !model.isEmpty { args += ["--model", model] }
 
         var env = baseEnvironment
@@ -66,7 +67,10 @@ public struct ClaudeRunner {
         let r = ProcessRunner.run(executable: exe, arguments: args, stdin: prompt,
                                   currentDirectory: workingDirectory, environment: env, timeout: timeout)
         if r.timedOut { throw SummaryError.timeout }
-        guard r.status == 0 else { throw SummaryError.claudeFailed(r.status, String(r.stderr.suffix(2000))) }
+        guard r.status == 0 else {
+            let detail = r.stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? r.stdout : r.stderr
+            throw SummaryError.claudeFailed(r.status, String(detail.suffix(2000)))
+        }
         let out = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !out.isEmpty else { throw SummaryError.emptyOutput }
         return out

@@ -65,18 +65,45 @@ final class Scheduler {
     }
 
     private func fire() async {
-        await generateIfMissing()
+        await catchUpMissed()
         reschedule()
     }
 
-    /// 지금이 오늘 예정 시각 이후인데 오늘 파일이 없으면 즉시 생성 (앱 시작, 깨어남, 시각 변경 시).
+    /// 앱 시작, 깨어남, 시각 변경 시: 놓친 날의 요약을 채운다 (아래 catchUpMissed).
     func catchUp() {
+        Task { await self.catchUpMissed() }
+    }
+
+    /// 최근 7일 + (예정 시각이 지났으면) 오늘 중 요약 파일이 없는 날을 오래된 날부터 하나씩 생성.
+    private func catchUpMissed() async {
         let s = Settings.shared
-        var c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-        c.hour = s.summaryHour
-        c.minute = s.summaryMinute
-        guard let scheduled = Calendar.current.date(from: c), Date() >= scheduled else { return }
-        Task { await generateIfMissing() }
+        let service = state.summaryService
+        for day in Schedule.catchUpDays(now: Date(), hour: s.summaryHour, minute: s.summaryMinute) {
+            // 다른 생성이 진행 중이면 중단. 다음 트리거(타이머, 깨어남, 설정 변경)가 이어서 처리한다.
+            guard !state.summaryGenerating else { return }
+            guard service.existing(for: day) == nil else { continue }
+
+            if Calendar.current.isDateInToday(day) {
+                await generateIfMissing()
+                continue
+            }
+
+            // 과거 날은 입력이 있을 때만 생성. "기록 없음" 파일은 남기지 않는다.
+            let input = await Task.detached { service.collect(for: day) }.value
+            if SummaryPrompt.isEmpty(input) { continue }
+            guard !state.summaryGenerating else { return }  // collect 를 기다리는 사이 다른 생성이 시작됐을 수 있다
+            let ok = await state.generateSummary(for: day, force: false)
+            let key = DayKey.string(from: day)
+            if Settings.shared.summaryNotify {
+                if ok {
+                    notify("\(key) 요약 완료", body: "")
+                } else if let e = state.summaryError {
+                    notify("요약 실패", body: "\(key): \(e)")
+                }
+            }
+            // 실패 원인(claude 없음, 시간 초과 등)은 대개 다음 날짜에도 같다. 알림이 쌓이지 않게 여기서 멈추고 다음 트리거에 재시도.
+            if !ok { return }
+        }
     }
 
     private func generateIfMissing() async {

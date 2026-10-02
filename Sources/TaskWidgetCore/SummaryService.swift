@@ -40,8 +40,12 @@ public final class SummaryService {
         let all = ActivityLog.records(on: day, from: dataDir.appendingPathComponent("activity.jsonl"), calendar: calendar)
 
         var commits: [String: [String]] = [:]
+        var seen = Set<String>()  // 저장소 루트와 하위 폴더가 둘 다 cwd 로 잡혀도 같은 커밋은 한 번만
         for cwd in Set(all.map(\.cwd)).filter({ !$0.isEmpty }).sorted() {
-            let lines = GitActivity.commits(in: cwd, on: day, calendar: calendar)
+            let lines = GitActivity.commits(in: cwd, on: day, calendar: calendar).filter {
+                guard let hash = $0.split(separator: " ").first else { return false }
+                return seen.insert(String(hash)).inserted
+            }
             if !lines.isEmpty {
                 commits[(cwd as NSString).lastPathComponent, default: []] += lines
             }
