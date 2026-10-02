@@ -18,6 +18,8 @@ public enum ProcessRunner {
                            environment: [String: String]? = nil,
                            timeout: TimeInterval) -> ProcessResult {
         _ = ignoreSigpipe
+        // timeout 은 run 전체(쓰기·종료 대기·출력 수거)를 묶는다. I/O 전에 마감 시각을 하나 정한다.
+        let deadline = DispatchTime.now() + timeout
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
         p.arguments = arguments
@@ -47,10 +49,15 @@ public enum ProcessRunner {
         group.enter()
         DispatchQueue.global().async { err.data = errPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
 
-        if let s = stdin { try? inPipe.fileHandleForWriting.write(contentsOf: Data(s.utf8)) }
-        try? inPipe.fileHandleForWriting.close()
+        // stdin 을 안 읽는 자식이면 write 가 영원히 막힌다. 호출 스레드에서 쓰면 timeout 이 시작도 못 하므로 백그라운드로.
+        // 자식이 죽으면 write 가 EPIPE 로 풀린다(SIGPIPE 는 무시 중).
+        let input = stdin.map { Data($0.utf8) }
+        DispatchQueue.global().async {
+            if let input { try? inPipe.fileHandleForWriting.write(contentsOf: input) }
+            try? inPipe.fileHandleForWriting.close()
+        }
 
-        let timedOut = done.wait(timeout: .now() + timeout) == .timedOut
+        let timedOut = done.wait(timeout: deadline) == .timedOut
         if timedOut {
             p.terminate()
             if done.wait(timeout: .now() + 2) == .timedOut {
@@ -59,7 +66,11 @@ public enum ProcessRunner {
                 _ = done.wait(timeout: .now() + 2)
             }
         }
-        _ = group.wait(timeout: timedOut ? .now() + 2 : .distantFuture)
+        // 자식이 정상 종료해도 손자가 파이프를 쥐고 있으면 EOF 가 안 온다. 영원히 기다리지 않는다.
+        if group.wait(timeout: max(deadline, .now()) + 2) == .timedOut {
+            // 리더 스레드가 아직 DataBox 에 쓸 수 있으니 읽지 않는다(data race).
+            return ProcessResult(status: -1, stdout: "", stderr: "", timedOut: true)
+        }
 
         // 아직 살아 있으면 terminationStatus 접근이 NSInvalidArgumentException. -1 로 보고.
         let status: Int32 = p.isRunning ? -1 : p.terminationStatus

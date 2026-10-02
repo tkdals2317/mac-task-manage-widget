@@ -32,6 +32,14 @@ final class ProcessRunnerTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(start), 6, "SIGKILL 폴백으로 수 초 내 반환")
     }
 
+    func testTimeoutWithChildThatNeverReadsStdin() {
+        let big = String(repeating: "x", count: 200_000)
+        let start = Date()
+        let r = ProcessRunner.run(executable: "/bin/sleep", arguments: ["30"], stdin: big, timeout: 0.3)
+        XCTAssertTrue(r.timedOut)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3, "stdin 을 안 읽는 자식도 timeout 으로 묶인다")
+    }
+
     func testNonZeroExitAndStderr() {
         let r = ProcessRunner.run(executable: "/bin/sh", arguments: ["-c", "echo err 1>&2; exit 3"], timeout: 5)
         XCTAssertEqual(r.status, 3)
