@@ -310,7 +310,7 @@ description: 현재 세션에서 한 일을 정리해 TaskWidget 업무 일지�
 1. `worklog = Worklog.entries(on: day)`. `coveredProjects = Set(worklog.map(\.project))`.
 2. `activity = ActivityLog.records(on: day)`. `project = cwd 마지막 경로 요소`. `coveredProjects`에 포함된 프로젝트의 레코드는 버린다(일지가 있으면 raw 불필요).
 3. 남은 activity 텍스트 캡: `prompt` 400자, `stop` 1,200자. 전체 합 80,000자 초과 시 오래된 것부터 제거.
-4. `GitActivity`: worklog와 activity에서 나온 고유 `cwd`(worklog는 cwd가 없으므로 activity의 cwd 중 프로젝트명이 같은 것, 없으면 생략) 각각에 대해 `git -C <cwd> rev-parse --is-inside-work-tree` 성공 시 `git log --since=<day 00:00> --until=<day 23:59:59> --format=%h %s` 최대 30줄. 각 10초 타임아웃. 실패는 무시.
+4. `GitActivity`: 2번에서 버리기 전의 activity 전체에서 고유 `cwd`를 모은다(worklog는 cwd가 없으므로 이 집합으로 커밋을 찾는다. 일지만 있고 activity가 없는 프로젝트는 커밋 생략). 각 `cwd`에 대해 `git -C <cwd> rev-parse --is-inside-work-tree` 성공 시 `git log --since=<day 00:00> --until=<day 23:59:59> --format=%h %s` 최대 30줄. 각 10초 타임아웃. 실패는 무시.
 5. worklog 0건, activity 0건, 커밋 0건이면 claude 호출 없이 `# {date} 업무 요약\n\n오늘 기록 없음` 저장.
 
 통계(worklog 섹션 수, activity 유지/제거 수, 프로젝트 목록, 커밋 수)는 로그 파일에.
