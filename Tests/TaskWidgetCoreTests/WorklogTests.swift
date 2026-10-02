@@ -32,6 +32,41 @@ final class WorklogTests: XCTestCase {
         XCTAssertEqual(e[0].body, "- a\n- b")
     }
 
+    func testMalformedHeadersAreBodyNotEntries() {
+        // 각각 단독으로는 항목을 만들지 않는다 (`## · x` 는 예전 구현에서 trap)
+        for bad in ["## · x", "## 메모 · x", "## 09:40 · ", "## 9:40 · x", "## 09:40 · \t", "## 09:40 ·x"] {
+            XCTAssertEqual(Worklog.parse(bad), [], bad)
+        }
+        // 열린 항목이 있으면 그 본문으로 들어간다
+        let md = "## 09:40 · proj\n- a\n## · x\n## 메모 · x\n## 9:40 · y\n## 10:00 · \n- b"
+        let e = Worklog.parse(md)
+        XCTAssertEqual(e.count, 1)
+        XCTAssertEqual(e[0].project, "proj")
+        XCTAssertEqual(e[0].body, "- a\n## · x\n## 메모 · x\n## 9:40 · y\n## 10:00 · \n- b")
+    }
+
+    func testProjectKeepsLaterSeparator() {
+        let e = Worklog.parse("## 09:40 · a · b\n- x")
+        XCTAssertEqual(e.map(\.project), ["a · b"])
+    }
+
+    func testInvalidUTF8StillReturnsEntry() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("worklog-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let day = DayKey.date(from: "2026-10-02", calendar: seoul)!
+        var data = Data("## 09:40 · proj\n- a".utf8)
+        data.append(0xFF)
+        data.append(Data("b\n".utf8))
+        try data.write(to: Worklog.fileURL(for: day, dir: dir, calendar: seoul))
+
+        let e = Worklog.entries(on: day, dir: dir, calendar: seoul)
+        XCTAssertEqual(e.count, 1)
+        XCTAssertEqual(e[0].project, "proj")
+        XCTAssertEqual(e[0].body, "- a\u{FFFD}b")
+        XCTAssertNotNil(Worklog.raw(on: day, dir: dir, calendar: seoul))
+    }
+
     func testFileURLAndMissing() {
         let dir = URL(fileURLWithPath: "/tmp/wl")
         let day = DayKey.date(from: "2026-10-02", calendar: seoul)!
