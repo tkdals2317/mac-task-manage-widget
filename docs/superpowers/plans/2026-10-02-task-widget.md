@@ -1049,7 +1049,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `JiraIssue`
-- Produces: `JiraError { unauthorized, badQuery(String), http(Int), network(String) }` + `.userMessage`, `JiraClient(baseURL:email:token:session:)`, `JiraClient.defaultJQL`, `JiraClient.effectiveJQL(custom:) -> String`, `fetchMyOpenIssues(jql:) async throws -> [JiraIssue]`, `whoAmI() async throws -> String`, `JiraClient.decodeSearch(_ data: Data) throws -> [JiraIssue]`, `JiraClient.sortedForDisplay(_:) -> [JiraIssue]`, `JiraClient.Group { status, issues }`, `JiraClient.grouped(_:) -> [Group]`
+- Produces: `JiraError { unauthorized, badQuery(String), http(Int), network(String) }` + `.userMessage`, `JiraClient(baseURL:email:token:session:)`, `JiraClient.defaultJQL`, `JiraClient.effectiveJQL(custom:) -> String`, `JiraClient.Page { issues, truncated }`, `fetchMyOpenIssues(jql:) async throws -> Page`, `whoAmI() async throws -> String`, `JiraClient.decodePage(_:) throws -> Page`, `JiraClient.decodeSearch(_ data: Data) throws -> [JiraIssue]`, `JiraClient.sortedForDisplay(_:) -> [JiraIssue]`, `JiraClient.Group { status, issues }`, `JiraClient.grouped(_:) -> [Group]`
 
 - [ ] **Step 1: fixture 작성** — `Tests/TaskWidgetCoreTests/Fixtures/jira-search.json`
 
@@ -1140,6 +1140,14 @@ final class JiraClientTests: XCTestCase {
         XCTAssertEqual(groups[0].issues.count, 2)
     }
 
+    func testDecodePageTruncatedFlag() throws {
+        XCTAssertFalse(try JiraClient.decodePage(try fixture()).truncated, "isLast: true")
+        let more = Data(#"{"isLast":false,"issues":[]}"#.utf8)
+        XCTAssertTrue(try JiraClient.decodePage(more).truncated)
+        let noFlag = Data(#"{"issues":[]}"#.utf8)
+        XCTAssertFalse(try JiraClient.decodePage(noFlag).truncated, "isLast 없으면 잘리지 않은 것으로")
+    }
+
     func testEffectiveJQL() {
         XCTAssertEqual(JiraClient.effectiveJQL(custom: ""), JiraClient.defaultJQL)
         XCTAssertEqual(JiraClient.effectiveJQL(custom: "   \n"), JiraClient.defaultJQL)
@@ -1203,15 +1211,23 @@ public struct JiraClient {
 
     // MARK: - Network
 
-    public func fetchMyOpenIssues(jql: String) async throws -> [JiraIssue] {
+    public struct Page: Equatable {
+        public let issues: [JiraIssue]
+        /// 서버에 더 있는데 100건에서 잘렸는지 (isLast == false)
+        public let truncated: Bool
+    }
+
+    public func fetchMyOpenIssues(jql: String) async throws -> Page {
         var comps = URLComponents(url: baseURL.appendingPathComponent("rest/api/3/search/jql"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             URLQueryItem(name: "jql", value: jql),
             URLQueryItem(name: "fields", value: "summary,status,priority,updated"),
             URLQueryItem(name: "maxResults", value: "100"),
         ]
+        // URLComponents 는 '+' 를 인코딩하지 않아 서버가 공백으로 읽는다. JQL 의 "C++" 같은 값 보호.
+        comps.percentEncodedQuery = comps.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         let data = try await get(comps.url!)
-        return try Self.decodeSearch(data)
+        return try Self.decodePage(data)
     }
 
     public func whoAmI() async throws -> String {
@@ -1248,7 +1264,7 @@ public struct JiraClient {
 
     // MARK: - Decoding
 
-    struct SearchResponse: Decodable { let issues: [Issue] }
+    struct SearchResponse: Decodable { let issues: [Issue]; let isLast: Bool? }
     struct Issue: Decodable { let key: String; let fields: Fields }
     struct Fields: Decodable {
         let summary: String
@@ -1267,9 +1283,9 @@ public struct JiraClient {
         return f
     }()
 
-    public static func decodeSearch(_ data: Data) throws -> [JiraIssue] {
+    public static func decodePage(_ data: Data) throws -> Page {
         let r = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return r.issues.map { i in
+        let issues = r.issues.map { i in
             JiraIssue(id: i.key,
                       summary: i.fields.summary,
                       status: i.fields.status.name,
@@ -1277,6 +1293,11 @@ public struct JiraClient {
                       priority: i.fields.priority?.name,
                       updated: jiraDate.date(from: i.fields.updated) ?? .distantPast)
         }
+        return Page(issues: issues, truncated: r.isLast == false)
+    }
+
+    public static func decodeSearch(_ data: Data) throws -> [JiraIssue] {
+        try decodePage(data).issues
     }
 
     // MARK: - Display order
@@ -1320,7 +1341,7 @@ public struct JiraClient {
 - [ ] **Step 5: 테스트 통과 확인**
 
 Run: `swift test --filter JiraClientTests 2>&1 | tail -3`
-Expected: `Executed 6 tests, with 0 failures`
+Expected: `Executed 7 tests, with 0 failures`
 
 - [ ] **Step 6: 커밋**
 
@@ -1373,6 +1394,13 @@ final class ProcessRunnerTests: XCTestCase {
         XCTAssertTrue(r.timedOut)
     }
 
+    func testTimeoutKillsChildThatIgnoresSIGTERM() {
+        let start = Date()
+        let r = ProcessRunner.run(executable: "/bin/sh", arguments: ["-c", "trap '' TERM; sleep 30"], timeout: 0.3)
+        XCTAssertTrue(r.timedOut)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 6, "SIGKILL 폴백으로 수 초 내 반환")
+    }
+
     func testNonZeroExitAndStderr() {
         let r = ProcessRunner.run(executable: "/bin/sh", arguments: ["-c", "echo err 1>&2; exit 3"], timeout: 5)
         XCTAssertEqual(r.status, 3)
@@ -1405,7 +1433,7 @@ public struct ProcessResult {
 
 public enum ProcessRunner {
     /// 자식이 stdin 을 닫은 뒤 write 하면 SIGPIPE 로 프로세스가 죽는다. 한 번만 무시 설정.
-    private static let ignoreSigpipe: Void = { signal(SIGPIPE, SIG_IGN) }()
+    private static let ignoreSigpipe: Void = { _ = signal(SIGPIPE, SIG_IGN) }()
 
     public static func run(executable: String,
                            arguments: [String],
@@ -1435,12 +1463,13 @@ public enum ProcessRunner {
         }
 
         // 읽기를 먼저 시작해야 큰 stdin 쓰기와 자식 stdout 쓰기가 서로 막히지 않는다.
-        var outData = Data(), errData = Data()
+        // @Sendable 클로저 안에서 캡처한 var 를 바꾸면 컴파일 에러라 참조 타입 박스를 쓴다.
+        let out = DataBox(), err = DataBox()
         let group = DispatchGroup()
         group.enter()
-        DispatchQueue.global().async { outData = outPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+        DispatchQueue.global().async { out.data = outPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
         group.enter()
-        DispatchQueue.global().async { errData = errPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
+        DispatchQueue.global().async { err.data = errPipe.fileHandleForReading.readDataToEndOfFile(); group.leave() }
 
         if let s = stdin { try? inPipe.fileHandleForWriting.write(contentsOf: Data(s.utf8)) }
         try? inPipe.fileHandleForWriting.close()
@@ -1448,22 +1477,32 @@ public enum ProcessRunner {
         let timedOut = done.wait(timeout: .now() + timeout) == .timedOut
         if timedOut {
             p.terminate()
-            _ = done.wait(timeout: .now() + 2)
+            if done.wait(timeout: .now() + 2) == .timedOut {
+                // SIGTERM 을 무시하는 자식 → SIGKILL
+                kill(p.processIdentifier, SIGKILL)
+                _ = done.wait(timeout: .now() + 2)
+            }
         }
-        group.wait()
+        _ = group.wait(timeout: timedOut ? .now() + 2 : .distantFuture)
 
-        return ProcessResult(status: p.terminationStatus,
-                             stdout: String(decoding: outData, as: UTF8.self),
-                             stderr: String(decoding: errData, as: UTF8.self),
+        // 아직 살아 있으면 terminationStatus 접근이 NSInvalidArgumentException. -1 로 보고.
+        let status: Int32 = p.isRunning ? -1 : p.terminationStatus
+        return ProcessResult(status: status,
+                             stdout: String(decoding: out.data, as: UTF8.self),
+                             stderr: String(decoding: err.data, as: UTF8.self),
                              timedOut: timedOut)
     }
+}
+
+private final class DataBox {
+    var data = Data()
 }
 ```
 
 - [ ] **Step 4: ProcessRunner 테스트 통과 확인**
 
 Run: `swift test --filter ProcessRunnerTests 2>&1 | tail -3`
-Expected: `Executed 6 tests, with 0 failures`
+Expected: `Executed 7 tests, with 0 failures`
 
 - [ ] **Step 5: GitActivity 실패 테스트 작성**
 
@@ -1979,7 +2018,8 @@ public enum Worklog {
             out.append(WorklogEntry(time: time, project: project, body: body))
         }
 
-        for line in markdown.components(separatedBy: .newlines) {
+        let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+        for line in normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
             if line.hasPrefix("## "), let sep = line.range(of: " · ") {
                 flush()
                 time = String(line[line.index(line.startIndex, offsetBy: 3)..<sep.lowerBound]).trimmingCharacters(in: .whitespaces)
@@ -2116,14 +2156,22 @@ public struct SummaryInput: Equatable {
     public var worklogProjects: Set<String>
     public var activity: [ActivityRecord]
     public var commits: [String: [String]]   // project -> "<hash> <subject>" lines
+    /// 로그용 통계. 프롬프트에는 안 들어간다.
+    public var worklogSectionCount: Int
+    public var activityDropped: Int
+    public var projects: [String]
 
     public init(dayKey: String, worklogRaw: String?, worklogProjects: Set<String>,
-                activity: [ActivityRecord], commits: [String: [String]]) {
+                activity: [ActivityRecord], commits: [String: [String]],
+                worklogSectionCount: Int = 0, activityDropped: Int = 0, projects: [String] = []) {
         self.dayKey = dayKey
         self.worklogRaw = worklogRaw
         self.worklogProjects = worklogProjects
         self.activity = activity
         self.commits = commits
+        self.worklogSectionCount = worklogSectionCount
+        self.activityDropped = activityDropped
+        self.projects = projects
     }
 }
 
@@ -2232,7 +2280,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `ProcessRunner`, `ActivityLog.records`, `Worklog.raw/entries`, `GitActivity.commits`, `SummaryPrompt`, `Summary`, `DayKey`
-- Produces: `SummaryError { claudeNotFound, timeout, claudeFailed(Int32, String), emptyOutput, busy }` + `.userMessage`, `ClaudeRunner(configuredPath:model:timeout:)`, `ClaudeRunner.locate(configured:home:) -> String?`, `ClaudeRunner.run(prompt:workingDirectory:) throws -> String`, `SummaryService(dataDir:calendar:runner:)`, `SummaryService.Runner = (String) throws -> String`, `summaryURL(for:)`, `existing(for:) -> Summary?`, `collect(for:) -> SummaryInput`, `generate(for:force:) throws -> Summary`, `SummaryService.noRecordMarkdown(dayKey:)`
+- Produces: `SummaryError { claudeNotFound, timeout, claudeFailed(Int32, String), emptyOutput, busy }` + `.userMessage`, `ClaudeRunner(configuredPath:model:timeout:baseEnvironment:)`, `ClaudeRunner.locate(configured:home:) -> String?`, `ClaudeRunner.run(prompt:workingDirectory:) throws -> String`, `SummaryService(dataDir:calendar:runner:)`, `SummaryService.Runner = (String) throws -> String`, `summaryURL(for:)`, `existing(for:) -> Summary?`, `collect(for:) -> SummaryInput`, `generate(for:force:) throws -> Summary`, `SummaryService.noRecordMarkdown(dayKey:)`
 
 - [ ] **Step 1: ClaudeRunner 실패 테스트 작성**
 
@@ -2291,11 +2339,11 @@ final class ClaudeRunnerTests: XCTestCase {
 
     func testRunRemovesNestingEnv() throws {
         let fake = dir.appendingPathComponent("claude")
-        try makeExecutable(fake, script: "#!/bin/sh\necho \"CLAUDECODE=${CLAUDECODE:-unset}\"\n")
-        setenv("CLAUDECODE", "1", 1)
-        defer { unsetenv("CLAUDECODE") }
-        let out = try ClaudeRunner(configuredPath: fake.path).run(prompt: "x", workingDirectory: dir)
-        XCTAssertEqual(out, "CLAUDECODE=unset")
+        try makeExecutable(fake, script: "#!/bin/sh\necho \"CLAUDECODE=${CLAUDECODE:-unset} ENTRY=${CLAUDE_CODE_ENTRYPOINT:-unset}\"\n")
+        let runner = ClaudeRunner(configuredPath: fake.path,
+                                  baseEnvironment: ["CLAUDECODE": "1", "CLAUDE_CODE_ENTRYPOINT": "cli", "PATH": "/usr/bin:/bin"])
+        let out = try runner.run(prompt: "x", workingDirectory: dir)
+        XCTAssertEqual(out, "CLAUDECODE=unset ENTRY=unset")
     }
 
     func testRunFailures() throws {
@@ -2364,11 +2412,15 @@ public struct ClaudeRunner {
     public var configuredPath: String
     public var model: String
     public var timeout: TimeInterval
+    /// 자식 프로세스 환경의 바탕. 테스트에서 주입.
+    public var baseEnvironment: [String: String]
 
-    public init(configuredPath: String = "", model: String = "", timeout: TimeInterval = 180) {
+    public init(configuredPath: String = "", model: String = "", timeout: TimeInterval = 180,
+                baseEnvironment: [String: String] = ProcessInfo.processInfo.environment) {
         self.configuredPath = configuredPath
         self.model = model
         self.timeout = timeout
+        self.baseEnvironment = baseEnvironment
     }
 
     /// 설정 경로 → ~/.local/bin → /opt/homebrew/bin → /usr/local/bin 순. 실행 가능한 첫 번째.
@@ -2392,7 +2444,7 @@ public struct ClaudeRunner {
         var args = ["-p", "--output-format", "text"]
         if !model.isEmpty { args += ["--model", model] }
 
-        var env = ProcessInfo.processInfo.environment
+        var env = baseEnvironment
         env.removeValue(forKey: "CLAUDECODE")
         env.removeValue(forKey: "CLAUDE_CODE_ENTRYPOINT")
         let homePath = FileManager.default.homeDirectoryForCurrentUser.path
@@ -2465,7 +2517,9 @@ final class SummaryServiceTests: XCTestCase {
         XCTAssertEqual(s.markdown, "# 2026-10-02 업무 요약\n## mrs-cms\n- N+1 제거")
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("summaries/2026-10-02.md").path))
         let log = try String(contentsOf: dir.appendingPathComponent("logs/summary-2026-10-02.log"), encoding: .utf8)
-        XCTAssertTrue(log.contains("activity=2"))
+        XCTAssertTrue(log.contains("activity_kept=2"))
+        XCTAssertTrue(log.contains("activity_dropped=0"))
+        XCTAssertTrue(log.contains("projects=mrs-cms"))
         XCTAssertTrue(log.contains("ok"))
     }
 
@@ -2482,6 +2536,8 @@ final class SummaryServiceTests: XCTestCase {
         XCTAssertTrue(received.contains("- 일지"))
         XCTAssertFalse(received.contains("RAW-SHOULD-DROP"))
         XCTAssertTrue(received.contains("RAW-KEEP"))
+        let log = try String(contentsOf: dir.appendingPathComponent("logs/summary-2026-10-02.log"), encoding: .utf8)
+        XCTAssertTrue(log.contains("worklog_sections=1 activity_kept=1 activity_dropped=1 projects=mrs-cms,other"))
     }
 
     func testExistingReturnedWithoutRunnerUnlessForce() throws {
@@ -2557,7 +2613,8 @@ public final class SummaryService {
         let key = DayKey.string(from: day, calendar: calendar)
         let worklogDir = dataDir.appendingPathComponent("worklog", isDirectory: true)
         let raw = Worklog.raw(on: day, dir: worklogDir, calendar: calendar)
-        let covered = Set(Worklog.entries(on: day, dir: worklogDir, calendar: calendar).map(\.project))
+        let entries = Worklog.entries(on: day, dir: worklogDir, calendar: calendar)
+        let covered = Set(entries.map(\.project))
 
         let all = ActivityLog.records(on: day, from: dataDir.appendingPathComponent("activity.jsonl"), calendar: calendar)
 
@@ -2570,7 +2627,9 @@ public final class SummaryService {
         }
 
         let activity = SummaryPrompt.filterActivity(all, coveredProjects: covered)
-        return SummaryInput(dayKey: key, worklogRaw: raw, worklogProjects: covered, activity: activity, commits: commits)
+        let projects = Set(all.map(\.project)).union(covered).sorted()
+        return SummaryInput(dayKey: key, worklogRaw: raw, worklogProjects: covered, activity: activity, commits: commits,
+                            worklogSectionCount: entries.count, activityDropped: all.count - activity.count, projects: projects)
     }
 
     @discardableResult
@@ -2581,7 +2640,7 @@ public final class SummaryService {
 
         let input = collect(for: day)
         let key = input.dayKey
-        var log = "[\(key)] worklog=\(input.worklogProjects.count) activity=\(input.activity.count) commits=\(input.commits.values.map(\.count).reduce(0, +))\n"
+        var log = "[\(key)] worklog_sections=\(input.worklogSectionCount) activity_kept=\(input.activity.count) activity_dropped=\(input.activityDropped) projects=\(input.projects.joined(separator: ",")) commits=\(input.commits.values.map(\.count).reduce(0, +))\n"
 
         let markdown: String
         if SummaryPrompt.isEmpty(input) {
@@ -3007,7 +3066,8 @@ if CommandLine.arguments.contains("--hook") {
 }
 
 let app = NSApplication.shared
-let delegate = AppDelegate()
+// main.swift 최상위 코드는 Swift 5 모드에서 MainActor 가 아니다. @MainActor 클래스 생성은 명시적으로 격리.
+let delegate = MainActor.assumeIsolated { AppDelegate() }
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()
@@ -3130,6 +3190,7 @@ import AppKit
 import SwiftUI
 import TaskWidgetCore
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var panel: FloatingPanel!
@@ -3443,9 +3504,7 @@ struct DuePopover: View {
             DatePicker("", selection: $date, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .labelsHidden()
-            Button("확인") { pick(date) }
-                .keyboardShortcut(.defaultAction)
-                .controlSize(.small)
+                .onChange(of: date) { _, d in pick(d) }   // 달력 클릭 즉시 저장 (스펙 6.1)
         }
         .padding(12)
         .frame(width: 260)
@@ -3622,7 +3681,7 @@ struct TasksView: View {
 Run: `swift build 2>&1 | grep -E "error" ; make run`
 Expected:
 - 입력창에 "배포 문서 작성" + Enter → 행 추가, 입력창 비워짐. 공백만 입력 → 추가 안 됨.
-- 행 우측 📅 클릭 → 팝오버. "내일" 클릭 → 배지 `D-1`. 다시 열어 "마감 없음" → 📅 로 복귀. 그래픽 달력에서 어제 날짜 선택 후 "확인" → 빨간 `D+1`. 오늘 → 주황 `오늘`.
+- 행 우측 📅 클릭 → 팝오버. "내일" 클릭 → 배지 `D-1`. 다시 열어 "마감 없음" → 📅 로 복귀. 그래픽 달력에서 어제 날짜 클릭 → 즉시 빨간 `D+1`. 오늘 → 주황 `오늘`.
 - 마감 있는 항목이 위, 없는 항목이 아래로 정렬.
 - 체크박스 클릭 → "완료 1" 접힘 섹션으로 이동. 펼치면 취소선 행. "비우기" → 사라짐.
 - 행 hover 시 × 표시, 클릭 → 삭제.
@@ -3649,7 +3708,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `JiraClient`, `JiraError.userMessage`, `JiraIssue`, `Keychain.get`, `Settings.shared`, `Notification.Name.openSettings`, `SectionHeader`
-- Produces: `AppState.jiraIssues`, `jiraError`, `jiraUpdatedAt`, `jiraLoading`, `jiraConfigured`, `refreshJira() async`, `JiraSection`, `JiraRow`
+- Produces: `AppState.jiraIssues`, `jiraError`, `jiraUpdatedAt`, `jiraLoading`, `jiraConfigured`, `jiraTruncated`, `refreshJira() async`, `JiraSection`, `JiraRow`
 
 - [ ] **Step 1: AppState에 Jira 상태/동작 추가**
 
@@ -3660,6 +3719,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
     @Published var jiraUpdatedAt: Date?
     @Published var jiraLoading = false
     @Published var jiraConfigured = false
+    @Published var jiraTruncated = false
 ```
 
 메서드 (클래스 본문 끝):
@@ -3676,8 +3736,9 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
         defer { jiraLoading = false }
         let client = JiraClient(baseURL: url, email: s.jiraEmail, token: token)
         do {
-            let issues = try await client.fetchMyOpenIssues(jql: JiraClient.effectiveJQL(custom: s.jiraJQL))
-            jiraIssues = JiraClient.sortedForDisplay(issues)
+            let page = try await client.fetchMyOpenIssues(jql: JiraClient.effectiveJQL(custom: s.jiraJQL))
+            jiraIssues = JiraClient.sortedForDisplay(page.issues)
+            jiraTruncated = page.truncated
             jiraUpdatedAt = Date()
             jiraError = nil
         } catch let e as JiraError {
@@ -3722,7 +3783,7 @@ struct JiraSection: View {
                 if state.jiraIssues.isEmpty && state.jiraError == nil && state.jiraUpdatedAt != nil {
                     Text("미완료 이슈 없음").font(.system(size: 11.5 * scale)).foregroundStyle(.tertiary).padding(.vertical, 8)
                 }
-                if state.jiraIssues.count >= 100 {
+                if state.jiraTruncated {
                     Text("100건까지만 표시").font(.system(size: 10 * scale)).foregroundStyle(.secondary).padding(.top, 4)
                 }
                 footer
@@ -3731,7 +3792,10 @@ struct JiraSection: View {
         .task(id: refreshMinutes) {
             await state.refreshJira()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(max(1, refreshMinutes) * 60))
+                // 취소되면 sleep 이 throw → 추가 요청 없이 종료
+                guard (try? await Task.sleep(for: .seconds(max(1, refreshMinutes) * 60))) != nil else { break }
+                // 패널이 orderOut 으로 숨겨져도 뷰는 살아 있으므로 보일 때만 호출 (스펙 6.2)
+                guard NSApp.windows.contains(where: { $0 is FloatingPanel && $0.isVisible }) else { continue }
                 await state.refreshJira()
             }
         }
@@ -4438,10 +4502,16 @@ final class Scheduler {
 
     private func generateIfMissing() async {
         let today = Date()
-        guard state.summaryService.existing(for: today) == nil else { return }
+        // 타이머 + 깨어남 + 설정 변경이 겹쳐도 한 번만. 이미 생성 중이면 조용히 빠진다.
+        guard !state.summaryGenerating,
+              state.summaryService.existing(for: today) == nil else { return }
         let ok = await state.generateSummary(for: today, force: false)
         if Settings.shared.summaryNotify {
-            notify(ok ? "오늘 요약 완료" : "요약 실패", body: ok ? "" : (state.summaryError ?? ""))
+            if ok {
+                notify("오늘 요약 완료", body: "")
+            } else if let e = state.summaryError {
+                notify("요약 실패", body: e)
+            }
         }
         if Calendar.current.isDate(state.summaryDay, inSameDayAs: today) {
             state.loadSummary(for: today)
@@ -4523,9 +4593,9 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Files:**
 - Create: `README.md`
 
-- [ ] **Step 1: README.md 작성**
+- [ ] **Step 1: README.md 작성** (아래 내용 그대로. 바깥 4-backtick 은 계획서 펜스)
 
-```markdown
+````markdown
 # TaskWidget
 
 macOS 메뉴바 상주 플로팅 위젯. 할 일(마감일) + 내 Jira 미완료 이슈 + Claude Code 세션 기반 하루 업무 요약.
@@ -4568,7 +4638,7 @@ make run     # build/TaskWidget.app 실행
 앱을 옮기면 `~/.claude/settings.json` 의 훅 경로가 깨진다. 설정 > Claude 연동에서 "재설치".
 
 설계: `docs/superpowers/specs/2026-10-02-task-widget-design.md`
-```
+````
 
 - [ ] **Step 2: 전체 테스트 + 릴리스 빌드**
 
