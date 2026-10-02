@@ -5,8 +5,8 @@ macOS 메뉴바 상주 플로팅 위젯. 할 일(마감일) + 내 Jira 미완료
 ## 설치
 
 ```bash
-make install            # /Applications/TaskWidget.app
-open /Applications/TaskWidget.app
+make install            # /Applications/TaskWidget.app (쓰기 불가면 ~/Applications)
+open ~/Applications/TaskWidget.app   # 또는 /Applications
 ```
 
 처음 한 번:
