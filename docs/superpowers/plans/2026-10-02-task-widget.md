@@ -3445,7 +3445,7 @@ struct SectionHeader<Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.fontScale) private var scale
 
-    init(title: String, count: Int, collapsed: Binding<Bool>, @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }) {
+    init(title: String, count: Int, collapsed: Binding<Bool>, @ViewBuilder trailing: @escaping () -> Trailing) {
         self.title = title
         self.count = count
         self._collapsed = collapsed
@@ -3472,6 +3472,13 @@ struct SectionHeader<Trailing: View>: View {
         .foregroundStyle(.secondary)
         .padding(.top, 10)
         .padding(.bottom, 4)
+    }
+}
+
+/// trailing 없이 쓰는 호출용. 제네릭 기본 인자는 Swift 가 추론 못 하므로 extension 으로.
+extension SectionHeader where Trailing == EmptyView {
+    init(title: String, count: Int, collapsed: Binding<Bool>) {
+        self.init(title: title, count: count, collapsed: collapsed) { EmptyView() }
     }
 }
 ```
