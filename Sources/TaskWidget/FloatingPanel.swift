@@ -55,12 +55,18 @@ final class FloatingPanel: NSPanel, NSWindowDelegate {
     }
 
     func toggle() {
-        if isVisible { hovering = false; orderOut(nil) } else { makeKeyAndOrderFront(nil) }
+        if isVisible { orderOut(nil) } else { makeKeyAndOrderFront(nil) }
+    }
+
+    /// 어떤 경로로 숨겨지든 hover 상태와 alpha 를 함께 되돌려, 다시 보일 때 불투명으로 나오지 않게 한다.
+    override func orderOut(_ sender: Any?) {
+        hovering = false
+        applyAppearance()
+        super.orderOut(sender)
     }
 
     /// 닫기 버튼 = 숨기기. 앱은 메뉴바에 계속 산다.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        hovering = false
         orderOut(nil)
         return false
     }

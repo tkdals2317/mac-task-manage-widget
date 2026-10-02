@@ -164,8 +164,13 @@ struct SettingsView: View {
     }
 
     private func saveToken() {
+        let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else {
+            tokenStatus = "토큰 비어 있음"
+            return
+        }
         do {
-            try Keychain.set(token, account: jiraEmail)
+            try Keychain.set(t, account: jiraEmail)
             token = ""
             tokenStatus = "저장됨"
             Task { await state.refreshJira() }
