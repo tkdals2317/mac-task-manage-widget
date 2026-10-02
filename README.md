@@ -18,7 +18,7 @@ open ~/Applications/TaskWidget.app   # 또는 /Applications
 
 ## 사용
 
-- 할 일: 입력 후 Enter. 📅/배지 클릭으로 마감 설정. 지난 마감 빨강, 오늘 주황.
+- 할 일: 입력 후 Enter. 📅/배지 클릭으로 마감 설정. 지난 마감 빨강, 오늘 주황. 제목 더블클릭 → 바로 수정 (Enter 저장, Esc 취소).
 - Jira: 내게 할당된 미완료 이슈. 클릭하면 브라우저. 설정에서 JQL 교체 가능.
 - 요약: 매일 설정 시각(기본 18:00)에 자동 생성. Claude Code 세션에서 `/worklog` 로 일지를 남기면 그게 1급 입력, 훅이 모은 대화 기록은 보완.
 - 요약은 `claude -p` 로 생성 (Claude Code CLI 구독 사용).
@@ -48,6 +48,7 @@ make run     # build/TaskWidget.app 실행
 - [ ] 메뉴바 아이콘만 있고 Dock 없음. 좌클릭 토글, 우클릭 메뉴 4개
 - [ ] 패널이 Finder/브라우저/터미널 위에 떠 있음. 전체화면 앱 위에서도 보임 (allSpaces on)
 - [ ] 할 일 추가/완료/삭제/마감/비우기, 재실행 후 유지
+- [ ] 할 일 제목 더블클릭 → 인라인 편집, Enter 저장 / Esc 취소 / 다른 곳 클릭 시 저장, 공백만 입력하면 원래 제목 유지
 - [ ] Jira 목록, 클릭 시 브라우저, ↻, 토큰 오류 메시지, JQL 커스텀
 - [ ] 설정 각 항목 즉시 반영 (투명도, 호버, 테마, 글자 크기, 항상 위, Spaces)
 - [ ] 훅 설치 후 Claude Code 세션 → activity.jsonl 증가. 요약 생성용 claude -p 세션은 기록 안 됨 (cwd = 데이터 폴더)

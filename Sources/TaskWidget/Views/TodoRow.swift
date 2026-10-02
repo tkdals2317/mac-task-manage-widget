@@ -7,6 +7,9 @@ struct TodoRow: View {
     @Environment(\.fontScale) private var scale
     @State private var hovering = false
     @State private var showDue = false
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var titleFocused: Bool
 
     var body: some View {
         let badge = DueBadge.badge(due: todo.dueDate, today: Date())
@@ -18,11 +21,24 @@ struct TodoRow: View {
             }
             .buttonStyle(.plain)
 
-            Text(todo.title)
-                .font(.system(size: 12.5 * scale))
-                .strikethrough(todo.done)
-                .foregroundStyle(todo.done ? Color.secondary : Color.primary)
-                .lineLimit(1)
+            if editing {
+                TextField("", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5 * scale))
+                    .focused($titleFocused)
+                    .onSubmit { commitEdit() }
+                    .onExitCommand { cancelEdit() }
+                    .onChange(of: titleFocused) { _, focused in if !focused && editing { commitEdit() } }
+            } else {
+                Text(todo.title)
+                    .font(.system(size: 12.5 * scale))
+                    .strikethrough(todo.done)
+                    .foregroundStyle(todo.done ? Color.secondary : Color.primary)
+                    .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { beginEdit() }
+                    .help("더블클릭하면 수정")
+            }
 
             Spacer(minLength: 4)
 
@@ -61,6 +77,23 @@ struct TodoRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         Divider()
+    }
+
+    private func beginEdit() {
+        draft = todo.title
+        editing = true
+        DispatchQueue.main.async { titleFocused = true }
+    }
+
+    private func commitEdit() {
+        guard editing else { return }
+        editing = false
+        state.rename(todo, draft)
+    }
+
+    private func cancelEdit() {
+        editing = false
+        draft = todo.title
     }
 
     private func badgeColor(_ style: DueStyle) -> Color {

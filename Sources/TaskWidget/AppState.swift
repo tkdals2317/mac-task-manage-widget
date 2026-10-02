@@ -53,6 +53,12 @@ final class AppState: ObservableObject {
         update(todo.id) { $0.dueDate = dayKey }
     }
 
+    /// 제목 수정. 공백만이면 무시.
+    func rename(_ todo: Todo, _ raw: String) {
+        guard let title = Todo.normalizedTitle(raw), title != todo.title else { return }
+        update(todo.id) { $0.title = title }
+    }
+
     func delete(_ todo: Todo) {
         todos.removeAll { $0.id == todo.id }
         persistTodos()
