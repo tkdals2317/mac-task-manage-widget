@@ -1,0 +1,5 @@
+{"cwd":"/Users/x/projects/mrs-cms","event":"prompt","session":"s1","text":"PDF 다운로드 느린 거 봐줘","ts":"2026-10-02T09:12:33+09:00"}
+{"cwd":"/Users/x/projects/mrs-cms","event":"stop","session":"s1","text":"N+1 쿼리 제거함. 응답 2.1s → 0.4s","ts":"2026-10-02T09:40:10+09:00"}
+{"cwd":"/Users/x/projects/task-manager","event":"prompt","session":"s2","text":"위젯 설계","ts":"2026-10-02T00:30:00+09:00"}
+{this is not json}
+{"cwd":"/Users/x/projects/mrs-cms","event":"prompt","session":"s0","text":"어제 작업","ts":"2026-10-01T18:00:00+09:00"}
