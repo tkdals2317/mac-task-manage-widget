@@ -15,10 +15,16 @@ struct TasksView: View {
                 SectionHeader(title: "내 할 일", count: state.openTodos.count, collapsed: $todoCollapsed)
                 if !todoCollapsed { todoSection }
 
-                SectionHeader(title: "Jira", count: 0, collapsed: $jiraCollapsed)
-                if !jiraCollapsed {
-                    Text("Jira (Task 15)").font(.system(size: 12 * scale)).foregroundStyle(.secondary).padding(.vertical, 8)
+                SectionHeader(title: "Jira", count: state.jiraIssues.count, collapsed: $jiraCollapsed) {
+                    Button {
+                        Task { await state.refreshJira() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 10 * scale))
+                    }
+                    .buttonStyle(.plain)
+                    .help("새로고침")
                 }
+                if !jiraCollapsed { JiraSection() }
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
