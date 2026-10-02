@@ -46,7 +46,6 @@ struct TodoRow: View {
             .popover(isPresented: $showDue) {
                 DuePopover(due: todo.dueDate) { key in
                     state.setDue(todo, key)
-                    showDue = false
                 }
             }
 
