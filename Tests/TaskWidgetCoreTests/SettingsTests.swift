@@ -31,6 +31,8 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(s.claudeModel, "")
         XCTAssertEqual(s.claudePath, "")
         XCTAssertEqual(s.lastTab, "tasks")
+        XCTAssertFalse(s.panelCollapsed)
+        XCTAssertEqual(s.panelExpandedHeight, 520)
     }
 
     func testSetAndGet() {

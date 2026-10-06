@@ -2,8 +2,32 @@ import SwiftUI
 import ServiceManagement
 import TaskWidgetCore
 
+private enum Pane: String, CaseIterable, Identifiable {
+    case appearance, window, jira, summary, claude
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .appearance: return "외관"
+        case .window: return "창 · 일반"
+        case .jira: return "Jira"
+        case .summary: return "요약"
+        case .claude: return "Claude 연동"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .appearance: return "paintpalette"
+        case .window: return "macwindow"
+        case .jira: return "ticket"
+        case .summary: return "doc.text"
+        case .claude: return "sparkles"
+        }
+    }
+}
+
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var state: AppState
 
     @AppStorage(SettingsKey.opacity) private var opacity = 1.0
@@ -22,8 +46,10 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.claudeModel) private var claudeModel = ""
     @AppStorage(SettingsKey.claudePath) private var claudePath = ""
 
+    @State private var pane: Pane = .appearance
     @State private var token = ""
     @State private var tokenStatus = ""
+    @State private var hasToken = false
     @State private var loginAtStart = false
     @State private var hookStatus: HookStatus = .notInstalled
     @State private var skillInstalled = false
@@ -36,110 +62,178 @@ struct SettingsView: View {
     private var isBundled: Bool { Bundle.main.bundleIdentifier != nil }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section("외관") {
-                    Slider(value: $opacity, in: 0.6...1.0, step: 0.05) {
-                        Text("투명도 \(Int((opacity * 100).rounded()))%")
-                    }
-                    Toggle("마우스 올리면 불투명", isOn: $hoverOpaque)
-                    Picker("테마", selection: $theme) {
-                        Text("시스템").tag("system")
-                        Text("라이트").tag("light")
-                        Text("다크").tag("dark")
-                    }
-                    Picker("글자 크기", selection: $fontScale) {
-                        Text("작게").tag(0.9)
-                        Text("보통").tag(1.0)
-                        Text("크게").tag(1.15)
-                    }
-                }
-
-                Section("창") {
-                    Toggle("항상 위", isOn: $alwaysOnTop)
-                    Toggle("모든 Spaces에 표시", isOn: $allSpaces)
-                }
-
-                Section("일반") {
-                    Toggle("로그인 시 실행", isOn: $loginAtStart)
-                        .disabled(!isBundled)
-                        .onChange(of: loginAtStart) { _, on in setLogin(on) }
-                    if !isBundled {
-                        Text("앱 번들로 실행했을 때만 가능 (make install)").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Jira") {
-                    TextField("URL", text: $jiraBaseURL)
-                    TextField("이메일", text: $jiraEmail)
+        NavigationSplitView {
+            List(Pane.allCases, selection: $pane) { p in
+                Label {
                     HStack {
-                        SecureField("API 토큰 (저장 후 비워짐)", text: $token)
-                        Button("저장") { saveToken() }
-                            .disabled(token.isEmpty || jiraEmail.isEmpty)
-                    }
-                    HStack {
-                        Button("연결 테스트") { testJira() }
-                        Text(tokenStatus).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Picker("갱신 주기", selection: $jiraRefreshMinutes) {
-                        Text("1분").tag(1)
-                        Text("5분").tag(5)
-                        Text("15분").tag(15)
-                    }
-                    TextField("JQL (비우면 기본값)", text: $jiraJQL)
-                }
-
-                Section("요약") {
-                    HStack {
-                        Text("생성 시각")
-                        Spacer()
-                        Picker("", selection: $summaryHour) {
-                            ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+                        Text(p.title)
+                        if p == .jira {
+                            Spacer()
+                            Circle().fill(hasToken ? Color.green : Color.secondary.opacity(0.4))
+                                .frame(width: 7, height: 7)
+                                .help(hasToken ? "토큰 저장됨" : "토큰 없음")
                         }
-                        .labelsHidden().frame(width: 70)
-                        Text(":")
-                        Picker("", selection: $summaryMinute) {
-                            ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
-                        }
-                        .labelsHidden().frame(width: 70)
                     }
-                    Toggle("완료 알림", isOn: $summaryNotify)
-                    TextField("모델 (비우면 CLI 기본)", text: $claudeModel)
-                    TextField("claude 경로 (비우면 자동 탐색)", text: $claudePath)
+                } icon: {
+                    Image(systemName: p.icon)
                 }
-
-                Section("Claude 연동") {
-                    HStack {
-                        Text("활동 훅")
-                        Spacer()
-                        Text("\(hookLabel) · 오늘 \(todayActivityCount)건").foregroundStyle(.secondary)
-                        Button(hookButton) { toggleHook() }
-                    }
-                    HStack {
-                        Text("/worklog 스킬")
-                        Spacer()
-                        Text(skillInstalled ? "설치됨" : "미설치").foregroundStyle(.secondary)
-                        Button(skillInstalled ? "제거" : "설치") { toggleSkill() }
-                    }
-                    if !integrationError.isEmpty {
-                        Text(integrationError).foregroundStyle(.red).font(.caption)
-                    }
-                    HStack {
-                        Button("데이터 폴더 열기") { NSWorkspace.shared.open(Paths.dataDir) }
-                        Button("요약 폴더 열기") { NSWorkspace.shared.open(Paths.summariesDir) }
-                    }
-                }
+                .tag(p)
             }
-            .formStyle(.grouped)
-
-            HStack {
-                Spacer()
-                Button("닫기") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding(10)
+            .navigationSplitViewColumnWidth(170)
+        } detail: {
+            Form { detail }
+                .formStyle(.grouped)
+                .navigationTitle(pane.title)
         }
-        .frame(width: 460, height: 600)
+        .frame(minWidth: 620, minHeight: 440)
         .onAppear(perform: refreshStatus)
+        .onChange(of: jiraEmail) { _, _ in refreshStatus() }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch pane {
+        case .appearance: appearancePane
+        case .window: windowPane
+        case .jira: jiraPane
+        case .summary: summaryPane
+        case .claude: claudePane
+        }
+    }
+
+    // MARK: - Panes
+
+    @ViewBuilder
+    private var appearancePane: some View {
+        Section {
+            LabeledContent("투명도") {
+                HStack {
+                    Slider(value: $opacity, in: 0.6...1.0, step: 0.05)
+                    Text("\(Int((opacity * 100).rounded()))%")
+                        .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+                }
+            }
+            Toggle("마우스 올리면 불투명", isOn: $hoverOpaque)
+        }
+        Section {
+            Picker("테마", selection: $theme) {
+                Text("시스템").tag("system")
+                Text("라이트").tag("light")
+                Text("다크").tag("dark")
+            }
+            .pickerStyle(.segmented)
+            Picker("글자 크기", selection: $fontScale) {
+                Text("작게").tag(0.9)
+                Text("보통").tag(1.0)
+                Text("크게").tag(1.15)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    @ViewBuilder
+    private var windowPane: some View {
+        Section("창") {
+            Toggle("항상 위", isOn: $alwaysOnTop)
+            Toggle("모든 Spaces에 표시", isOn: $allSpaces)
+        }
+        Section("일반") {
+            Toggle("로그인 시 실행", isOn: $loginAtStart)
+                .disabled(!isBundled)
+                .onChange(of: loginAtStart) { _, on in setLogin(on) }
+            if !isBundled {
+                Text("앱 번들로 실행했을 때만 가능 (make install)").font(.caption).foregroundStyle(.secondary)
+            }
+            if !integrationError.isEmpty {
+                Text(integrationError).foregroundStyle(.red).font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var jiraPane: some View {
+        Section("계정") {
+            TextField("URL", text: $jiraBaseURL)
+            TextField("이메일", text: $jiraEmail)
+            HStack {
+                SecureField(hasToken ? "API 토큰 (저장됨 · 바꾸려면 입력)" : "API 토큰", text: $token)
+                Button("저장") { saveToken() }
+                    .disabled(token.isEmpty || jiraEmail.isEmpty)
+            }
+            HStack {
+                Button("연결 테스트") { testJira() }
+                Text(tokenStatus).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        Section {
+            Picker("갱신 주기", selection: $jiraRefreshMinutes) {
+                Text("1분").tag(1)
+                Text("5분").tag(5)
+                Text("15분").tag(15)
+            }
+            .pickerStyle(.segmented)
+            TextField("JQL", text: $jiraJQL, prompt: Text(JiraClient.defaultJQL), axis: .vertical)
+                .lineLimit(2...4)
+                .font(.system(.body, design: .monospaced))
+        } header: {
+            Text("동기화")
+        } footer: {
+            HStack {
+                Text(jiraJQL.isEmpty ? "비워 두면 위 기본값으로 조회합니다." : "기본값: \(JiraClient.defaultJQL)")
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                Spacer()
+                if !jiraJQL.isEmpty {
+                    Button("기본값으로") { jiraJQL = "" }.controlSize(.small)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var summaryPane: some View {
+        Section {
+            HStack {
+                Text("생성 시각")
+                Spacer()
+                Picker("", selection: $summaryHour) {
+                    ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+                }
+                .labelsHidden().frame(width: 70)
+                Text(":")
+                Picker("", selection: $summaryMinute) {
+                    ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+                }
+                .labelsHidden().frame(width: 70)
+            }
+            Toggle("완료 알림", isOn: $summaryNotify)
+        }
+        Section("Claude CLI") {
+            TextField("모델", text: $claudeModel, prompt: Text("비우면 CLI 기본"))
+            TextField("claude 경로", text: $claudePath, prompt: Text("비우면 자동 탐색"))
+        }
+    }
+
+    @ViewBuilder
+    private var claudePane: some View {
+        Section {
+            LabeledContent("활동 훅") {
+                Text("\(hookLabel) · 오늘 \(todayActivityCount)건").foregroundStyle(.secondary)
+                Button(hookButton) { toggleHook() }
+            }
+            LabeledContent("/worklog 스킬") {
+                Text(skillInstalled ? "설치됨" : "미설치").foregroundStyle(.secondary)
+                Button(skillInstalled ? "제거" : "설치") { toggleSkill() }
+            }
+            if !integrationError.isEmpty {
+                Text(integrationError).foregroundStyle(.red).font(.caption)
+            }
+        }
+        Section {
+            HStack {
+                Button("데이터 폴더 열기") { NSWorkspace.shared.open(Paths.dataDir) }
+                Button("요약 폴더 열기") { NSWorkspace.shared.open(Paths.summariesDir) }
+            }
+        }
     }
 
     // MARK: - Actions
@@ -148,6 +242,7 @@ struct SettingsView: View {
         hookStatus = integration.hookStatus()
         skillInstalled = integration.skillInstalled()
         todayActivityCount = ActivityLog.records(on: Date(), from: Paths.activityFile).count
+        hasToken = !jiraEmail.isEmpty && Keychain.get(account: jiraEmail) != nil
         if isBundled { loginAtStart = SMAppService.mainApp.status == .enabled }
     }
 
@@ -173,6 +268,7 @@ struct SettingsView: View {
             try Keychain.set(t, account: jiraEmail)
             token = ""
             tokenStatus = "저장됨"
+            hasToken = true
             Task { await state.refreshJira() }
         } catch {
             tokenStatus = "저장 실패: \(error)"

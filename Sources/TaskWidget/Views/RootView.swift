@@ -5,7 +5,7 @@ struct RootView: View {
     @EnvironmentObject var state: AppState
     @AppStorage(SettingsKey.lastTab) private var tab = "tasks"
     @AppStorage(SettingsKey.fontScale) private var fontScale = 1.0
-    @State private var showSettings = false
+    @AppStorage(SettingsKey.panelCollapsed) private var collapsed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,8 +17,14 @@ struct RootView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 Button {
-                    NSApp.activate(ignoringOtherApps: true)
-                    showSettings = true
+                    NotificationCenter.default.post(name: .togglePanelCollapse, object: nil)
+                } label: {
+                    Image(systemName: collapsed ? "chevron.down" : "chevron.up")
+                }
+                .buttonStyle(.plain)
+                .help(collapsed ? "펼치기" : "접기")
+                Button {
+                    NotificationCenter.default.post(name: .openSettings, object: nil)
                 } label: {
                     Image(systemName: "gearshape")
                 }
@@ -29,21 +35,18 @@ struct RootView: View {
             .padding(.trailing, 10)
             .padding(.top, 8)
             .padding(.bottom, 6)
-            Divider()
-            Group {
-                if tab == "summary" {
-                    SummaryView()
-                } else {
-                    TasksView()
+            if !collapsed {
+                Divider()
+                Group {
+                    if tab == "summary" {
+                        SummaryView()
+                    } else {
+                        TasksView()
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .environment(\.fontScale, fontScale)
-        .sheet(isPresented: $showSettings) { SettingsView() }
-        .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
-            NSApp.activate(ignoringOtherApps: true)
-            showSettings = true
-        }
     }
 }

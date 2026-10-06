@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel!
     private let state = AppState()
     private var defaultsObserver: Any?
+    private var settingsObserver: Any?
+    private var collapseObserver: Any?
+    private var settingsWindow: NSWindow?
     private var scheduler: Scheduler!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -30,13 +33,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.panel.applyAppearance() }
         }
 
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .openSettings, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.showSettingsWindow() }
+        }
+
+        collapseObserver = NotificationCenter.default.addObserver(
+            forName: .togglePanelCollapse, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                let c = !Settings.shared.panelCollapsed
+                Settings.shared.panelCollapsed = c
+                self?.panel.setCollapsed(c)
+            }
+        }
+
         scheduler = Scheduler(state: state)
         scheduler.start()
 
         panel.makeKeyAndOrderFront(nil)
     }
 
-    /// LSUIElement 앱이라 메뉴바에 안 보이지만, ⌘V/⌘C/⌘X/⌘A/⌘Z 는 메인 메뉴의 Edit 항목을 통해서만 동작한다.
+    /// ⌘V/⌘C/⌘X/⌘A/⌘Z 는 메인 메뉴의 Edit 항목을 통해서만 동작한다.
     private func installMainMenu() {
         let main = NSMenu()
 
@@ -59,6 +78,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(editItem)
 
         NSApp.mainMenu = main
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if panel.isMiniaturized { panel.deminiaturize(nil) }
+        panel.makeKeyAndOrderFront(nil)
+        return true
     }
 
     @objc private func statusClicked() {
@@ -99,8 +124,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await state.generateSummary(for: Date(), force: true) }
     }
 
-    @objc private func openSettings() {
-        panel.makeKeyAndOrderFront(nil)
-        NotificationCenter.default.post(name: .openSettings, object: nil)
+    @objc private func openSettings() { showSettingsWindow() }
+
+    /// 패널에 붙은 시트는 key 가 못 돼 컨트롤이 비활성 색(회색 토글)으로 그려진다. 독립 창으로 띄운다.
+    private func showSettingsWindow() {
+        let window = settingsWindow ?? {
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 480),
+                             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                             backing: .buffered, defer: false)
+            w.title = "TaskWidget 설정"
+            w.titlebarAppearsTransparent = true
+            w.toolbarStyle = .unified
+            w.isReleasedWhenClosed = false
+            w.center()
+            settingsWindow = w
+            return w
+        }()
+        // 열 때마다 새로 그려 훅/스킬/토큰 상태를 다시 읽는다.
+        window.contentViewController = NSHostingController(rootView: SettingsView().environmentObject(state))
+        // 패널이 '항상 위'면 일반 레벨 창은 그 밑에 깔린다.
+        window.level = Settings.shared.alwaysOnTop ? .floating : .normal
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 }
