@@ -25,71 +25,86 @@ func star(_ c: CGPoint, _ R: CGFloat, _ r: CGFloat) -> CGPath {
     return p
 }
 
-func drawStar(_ g: CGContext, _ c: CGPoint, _ R: CGFloat, _ r: CGFloat, _ s: CGFloat) {
-    let path = star(c, R, r)
-    g.saveGState()  // glow
-    g.setShadow(offset: .zero, blur: 30 * s, color: rgb(0xFDBA74, 0.45))
-    g.setFillColor(rgb(0xFDBA74, 0.45)); g.addPath(path); g.fillPath()
-    g.restoreGState()
+/// 4각 반짝이. inner/outer = 중심/끝 색(nil outer면 단색), glow = 글로우 색
+func sparkle(_ g: CGContext, _ c: CGPoint, _ R: CGFloat, _ s: CGFloat, small: Bool, inner: CGColor, outer: CGColor, glow: CGColor) {
+    let path = star(c, R, R * 0.2)
+    if !small {
+        g.saveGState()
+        g.setShadow(offset: .zero, blur: 30 * s, color: glow)
+        g.setFillColor(glow); g.addPath(path); g.fillPath()
+        g.restoreGState()
+    }
     g.saveGState()
     g.addPath(path); g.clip()
-    g.drawRadialGradient(grad([(0, rgb(0xFDBA74)), (1, rgb(0xF97316))]), startCenter: c, startRadius: 0,
+    g.drawRadialGradient(grad([(0, inner), (1, outer)]), startCenter: c, startRadius: 0,
                          endCenter: c, endRadius: R, options: [.drawsAfterEndLocation])
+    g.restoreGState()
+}
+
+func checkbox(_ g: CGContext, _ box: CGRect, done: Bool, fill: UInt32, mark: UInt32, empty: UInt32) {
+    let w = box.width, cy = box.midY
+    if done {
+        g.setFillColor(rgb(fill)); g.addPath(rr(box, w * 0.26)); g.fillPath()
+        g.setStrokeColor(rgb(mark)); g.setLineWidth(w * 0.167); g.setLineCap(.round); g.setLineJoin(.round)
+        g.move(to: CGPoint(x: box.minX + w * 0.238, y: cy + w * 0.024))
+        g.addLine(to: CGPoint(x: box.minX + w * 0.43, y: cy + w * 0.214))
+        g.addLine(to: CGPoint(x: box.minX + w * 0.76, y: cy - w * 0.19))
+        g.strokePath()
+    } else {
+        g.setStrokeColor(rgb(empty)); g.setLineWidth(w * 0.095)
+        g.addPath(rr(box.insetBy(dx: w * 0.048, dy: w * 0.048), w * 0.21)); g.strokePath()
+    }
+}
+func bar(_ g: CGContext, _ x: CGFloat, _ cy: CGFloat, _ w: CGFloat, _ h: CGFloat, _ col: CGColor) {
+    g.setFillColor(col); g.addPath(rr(CGRect(x: x, y: cy - h / 2, width: w, height: h), h / 2)); g.fillPath()
+}
+/// 중심 (cx,cy) 기준 회전된 좌표계 안에서 그리기 (deg: 화면상 시계방향 +)
+func rotated(_ g: CGContext, _ cx: CGFloat, _ cy: CGFloat, _ deg: CGFloat, _ body: () -> Void) {
+    g.saveGState()
+    g.translateBy(x: cx, y: cy); g.rotate(by: deg * .pi / 180)
+    body()
+    g.restoreGState()
+}
+func shadowed(_ g: CGContext, _ s: CGFloat, small: Bool, dy: CGFloat, blur: CGFloat, _ col: CGColor, _ body: () -> Void) {
+    g.saveGState()
+    if !small { g.setShadow(offset: CGSize(width: 0, height: -dy * s), blur: blur * s, color: col) }
+    body()
     g.restoreGState()
 }
 
 func draw(_ g: CGContext, px: Int) {
     let s = CGFloat(px) / 1024
     let small = px <= 32
-    g.translateBy(x: 0, y: CGFloat(px)); g.scaleBy(x: s, y: -s)  // top-left origin, 1024 canvas
-    // shadow offsets are in device space (y up) and unscaled by CTM
+    g.translateBy(x: 0, y: CGFloat(px)); g.scaleBy(x: s, y: -s)
     let body = rr(CGRect(x: 100, y: 100, width: 824, height: 824), 185)
+    let top = CGPoint(x: 0, y: 100), bot = CGPoint(x: 0, y: 924)
 
-    g.saveGState()
-    g.setShadow(offset: CGSize(width: 0, height: -12 * s), blur: 28 * s, color: rgb(0x000000, 0.30))
-    g.setFillColor(rgb(0x4F46E5)); g.addPath(body); g.fillPath()
-    g.restoreGState()
-
+    shadowed(g, s, small: small, dy: 12, blur: 28, rgb(0, 0.30)) {
+        g.setFillColor(rgb(0x1F2937)); g.addPath(body); g.fillPath()
+    }
     g.saveGState()
     g.addPath(body); g.clip()
-    g.drawLinearGradient(grad([(0, rgb(0x4F46E5)), (0.55, rgb(0x7C3AED)), (1, rgb(0xA855F7))]),
-                         start: CGPoint(x: 100, y: 100), end: CGPoint(x: 924, y: 924), options: [])
-    g.drawLinearGradient(grad([(0, rgb(0xFFFFFF, 0.14)), (1, rgb(0xFFFFFF, 0))]),
-                         start: CGPoint(x: 0, y: 100), end: CGPoint(x: 0, y: 100 + 824 * 0.45), options: [])
+    g.drawLinearGradient(grad([(0, rgb(0x1F2937)), (1, rgb(0x111827))]), start: top, end: bot, options: [])
+    g.drawLinearGradient(grad([(0, rgb(0xFFFFFF, 0.10)), (1, rgb(0xFFFFFF, 0))]), start: top,
+                         end: CGPoint(x: 0, y: 100 + 824 * 0.4), options: [])
     g.restoreGState()
 
-    // card
-    g.saveGState()
-    g.translateBy(x: 500, y: 540); g.rotate(by: -6 * .pi / 180); g.translateBy(x: -260, y: -280)
-    let card = rr(CGRect(x: 0, y: 0, width: 520, height: 560), 64)
-    g.saveGState()
-    if !small { g.setShadow(offset: CGSize(width: 0, height: -18 * s), blur: 40 * s, color: rgb(0x000000, 0.28)) }
-    g.setFillColor(rgb(0xFFFFFF)); g.addPath(card); g.fillPath()
-    g.restoreGState()
-    g.saveGState()
-    g.addPath(card); g.clip()
-    g.drawLinearGradient(grad([(0, rgb(0xFFFFFF)), (1, rgb(0xF3F4F6))]), start: .zero, end: CGPoint(x: 0, y: 560), options: [])
-    g.restoreGState()
-
-    let widths: [CGFloat] = [260, 200, 240]
-    for (i, cy) in [CGFloat(130), 270, 410].enumerated() {
-        let box = CGRect(x: 70, y: cy - 42, width: 84, height: 84)
-        let done = i < 2
-        if done {
-            g.setFillColor(rgb(0x22C55E)); g.addPath(rr(box, 22)); g.fillPath()
-            g.setStrokeColor(rgb(0xFFFFFF)); g.setLineWidth(14); g.setLineCap(.round); g.setLineJoin(.round)
-            g.move(to: CGPoint(x: 90, y: cy + 2)); g.addLine(to: CGPoint(x: 106, y: cy + 18)); g.addLine(to: CGPoint(x: 134, y: cy - 16))
-            g.strokePath()
-        } else {
-            g.setStrokeColor(rgb(0xD1D5DB)); g.setLineWidth(8); g.addPath(rr(box.insetBy(dx: 4, dy: 4), 18)); g.strokePath()
-        }
-        g.setFillColor(rgb(done ? 0xE5E7EB : 0xCBD5E1))
-        g.addPath(rr(CGRect(x: 190, y: cy - 15, width: widths[i], height: 30), 15)); g.fillPath()
+    let win = CGRect(x: 212, y: 300, width: 600, height: 520)
+    shadowed(g, s, small: small, dy: 18, blur: 40, rgb(0, 0.45)) {
+        g.setFillColor(rgb(0xFFFFFF, 0.92)); g.addPath(rr(win, 48)); g.fillPath()
     }
-    g.restoreGState()
-
-    drawStar(g, CGPoint(x: 760, y: 250), 92, 18, s)
-    if !small { drawStar(g, CGPoint(x: 842, y: 360), 38, 8, s) }
+    g.setStrokeColor(rgb(0xFFFFFF, 0.40)); g.setLineWidth(3); g.addPath(rr(win, 48)); g.strokePath()
+    for (i, col) in ([0xFF5F57, 0xFEBC2E, 0x28C840] as [UInt32]).enumerated() {
+        g.setFillColor(rgb(col))
+        g.fillEllipse(in: CGRect(x: win.minX + 40 + CGFloat(i) * 46, y: win.minY + 34, width: 30, height: 30))
+    }
+    let widths: [CGFloat] = [380, 300, 340]
+    for (i, cy) in [CGFloat(480), 600, 720].enumerated() {
+        let done = i < 2
+        checkbox(g, CGRect(x: 262, y: cy - 36, width: 72, height: 72), done: done, fill: 0x22C55E, mark: 0xFFFFFF, empty: 0xD1D5DB)
+        bar(g, 372, cy, widths[i], 28, rgb(done ? 0xD7DEE8 : 0xCBD5E1))
+    }
+    sparkle(g, CGPoint(x: 812, y: 300), 80, s, small: small, inner: rgb(0xFDBA74), outer: rgb(0xF97316), glow: rgb(0xF97316, 0.55))
 }
 
 func render(_ px: Int) -> CGImage {
