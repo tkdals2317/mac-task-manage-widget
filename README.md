@@ -44,6 +44,8 @@ make test    # swift test (Core 단위 테스트)
 make run     # build/TaskWidget.app 실행
 ```
 
+앱 아이콘: `swift scripts/make-icon.swift` 로 다시 생성 (Resources/AppIcon.icns)
+
 앱을 옮기면 `~/.claude/settings.json` 의 훅 경로가 깨진다. 설정 > Claude 연동에서 "재설치".
 
 설계: `docs/superpowers/specs/2026-10-02-task-widget-design.md`

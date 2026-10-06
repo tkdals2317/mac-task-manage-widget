@@ -20,6 +20,7 @@ app:
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp $(BIN_DIR)/TaskWidget $(APP)/Contents/MacOS/TaskWidget
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
+	cp Resources/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
 	codesign --force --timestamp=none --sign "$(SIGN_ID)" $(APP)
 	@echo "signed with: $(SIGN_ID)"
 

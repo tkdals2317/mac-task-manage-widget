@@ -6,6 +6,8 @@
 	<string>TaskWidget</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.lsm0506.TaskWidget</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleName</key>
 	<string>TaskWidget</string>
 	<key>CFBundlePackageType</key>
