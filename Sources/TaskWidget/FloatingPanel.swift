@@ -65,7 +65,7 @@ final class FloatingPanel: NSPanel, NSWindowDelegate {
         }
     }
 
-    static let collapsedHeight: CGFloat = 80   // titlebar + tab header; tune so only the header row shows
+    static let collapsedHeight: CGFloat = 64   // titlebar + tab header; tune so only the header row shows
 
     /// 접기: 탭 바만 남기고 높이를 줄인다. 위쪽 가장자리는 고정.
     func setCollapsed(_ collapsed: Bool, animate: Bool = true) {

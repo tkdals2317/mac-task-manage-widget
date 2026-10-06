@@ -47,6 +47,7 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.fontScale, fontScale)
     }
 }
