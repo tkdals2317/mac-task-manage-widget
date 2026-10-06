@@ -81,9 +81,24 @@ final class AppState: ObservableObject {
 
     // MARK: - Jira
 
+    private var cachedToken: (account: String, token: String)?
+
+    /// 키체인 접근은 ACL 프롬프트로 무기한 블록될 수 있어 메인 스레드 밖에서만 한다.
+    func jiraToken(for account: String) async -> String? {
+        if let c = cachedToken, c.account == account { return c.token }
+        let t = await Task.detached { Keychain.get(account: account) }.value
+        if let t { cachedToken = (account, t) }
+        return t
+    }
+
+    func setJiraToken(_ token: String, account: String) async throws {
+        try await Task.detached { try Keychain.set(token, account: account) }.value
+        cachedToken = (account, token)
+    }
+
     func refreshJira() async {
         let s = Settings.shared
-        let token = s.jiraEmail.isEmpty ? nil : Keychain.get(account: s.jiraEmail)
+        let token = s.jiraEmail.isEmpty ? nil : await jiraToken(for: s.jiraEmail)
         jiraConfigured = token != nil
         guard let token, let url = URL(string: s.jiraBaseURL) else { return }
         guard !jiraLoading else { return }
@@ -99,6 +114,7 @@ final class AppState: ObservableObject {
         } catch let e as JiraError {
             // JiraClient 는 취소(URLError.cancelled)도 .network 로 감싸 던지므로 태스크 취소 여부로 거른다
             if Task.isCancelled { return }
+            if case .unauthorized = e { cachedToken = nil }
             jiraError = e.userMessage
         } catch {
             // 갱신 주기 변경/뷰 사라짐으로 .task 가 취소된 경우는 오류가 아님

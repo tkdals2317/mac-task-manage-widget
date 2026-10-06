@@ -242,7 +242,11 @@ struct SettingsView: View {
         hookStatus = integration.hookStatus()
         skillInstalled = integration.skillInstalled()
         todayActivityCount = ActivityLog.records(on: Date(), from: Paths.activityFile).count
-        hasToken = !jiraEmail.isEmpty && Keychain.get(account: jiraEmail) != nil
+        let email = jiraEmail
+        Task {
+            let t = email.isEmpty ? nil : await state.jiraToken(for: email)
+            hasToken = t != nil
+        }
         if isBundled { loginAtStart = SMAppService.mainApp.status == .enabled }
     }
 
@@ -264,24 +268,30 @@ struct SettingsView: View {
             tokenStatus = "토큰 비어 있음"
             return
         }
-        do {
-            try Keychain.set(t, account: jiraEmail)
-            token = ""
-            tokenStatus = "저장됨"
-            hasToken = true
-            Task { await state.refreshJira() }
-        } catch {
-            tokenStatus = "저장 실패: \(error)"
+        Task {
+            do {
+                try await state.setJiraToken(t, account: jiraEmail)
+                token = ""
+                tokenStatus = "저장됨"
+                hasToken = true
+                await state.refreshJira()
+            } catch {
+                tokenStatus = "저장 실패: \(error)"
+            }
         }
     }
 
     private func testJira() {
-        guard let url = URL(string: jiraBaseURL), let t = Keychain.get(account: jiraEmail) else {
+        guard let url = URL(string: jiraBaseURL) else {
             tokenStatus = "토큰 없음"
             return
         }
         tokenStatus = "확인 중…"
         Task {
+            guard let t = await state.jiraToken(for: jiraEmail) else {
+                tokenStatus = "토큰 없음"
+                return
+            }
             do {
                 tokenStatus = "OK: " + (try await JiraClient(baseURL: url, email: jiraEmail, token: t).whoAmI())
             } catch let e as JiraError {
