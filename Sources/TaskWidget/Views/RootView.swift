@@ -23,13 +23,6 @@ struct RootView: View {
                 }
                 .buttonStyle(.plain)
                 .help(collapsed ? "펼치기" : "접기")
-                Button {
-                    NotificationCenter.default.post(name: .openSettings, object: nil)
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.plain)
-                .help("설정")
             }
             .padding(.leading, 26)   // 닫기 버튼 자리
             .padding(.trailing, 10)
@@ -45,6 +38,21 @@ struct RootView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Divider()
+                HStack {
+                    Spacer()
+                    Button {
+                        NotificationCenter.default.post(name: .openSettings, object: nil)
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 13 * fontScale))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("설정")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
