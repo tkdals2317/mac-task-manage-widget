@@ -53,14 +53,15 @@ final class SummaryPromptTests: XCTestCase {
             commits: ["task-manager": ["abc1234 docs: 스펙"], "mrs-cms": []]
         )
         let p = SummaryPrompt.build(input, calendar: seoul)
-        XCTAssertTrue(p.contains("날짜: 2026-10-02"))
+        XCTAssertTrue(p.hasPrefix("2026-10-02 개발자 업무 요약"))
         XCTAssertTrue(p.contains("=== 1) 업무 일지 ===\n## 09:40 · mrs-cms"))
         XCTAssertTrue(p.contains("=== 2) 대화 기록: task-manager (/Users/x/projects/task-manager) ==="))
         XCTAssertTrue(p.contains("] user: 위젯 설계"))
         XCTAssertTrue(p.contains("] assistant: 스펙 작성함"))
         XCTAssertTrue(p.contains("=== 3) 커밋: task-manager ===\nabc1234 docs: 스펙"))
         XCTAssertFalse(p.contains("커밋: mrs-cms"), "빈 커밋 목록은 섹션 생략")
-        XCTAssertTrue(p.contains("도구를 사용하지 말고"))
+        XCTAssertTrue(p.contains("도구 사용 금지"))
+        XCTAssertFalse(p.contains("## 미완료"), "미완료/내일 섹션 없음")
     }
 
     func testBuildEmptySectionsSayNone() {
@@ -74,7 +75,7 @@ final class SummaryPromptTests: XCTestCase {
     func testCustomInstructions() {
         let input = SummaryInput(dayKey: "2026-10-02", worklogRaw: "# w", worklogProjects: [], activity: [], commits: [:])
         XCTAssertEqual(SummaryPrompt.build(input, calendar: seoul), SummaryPrompt.build(input, instructions: SummaryPrompt.defaultInstructions, calendar: seoul))
-        XCTAssertTrue(SummaryPrompt.build(input, calendar: seoul).contains("날짜: 2026-10-02"))
+        XCTAssertTrue(SummaryPrompt.build(input, calendar: seoul).contains("# 2026-10-02 업무 요약"))
 
         let p = SummaryPrompt.build(input, instructions: "CUSTOM {날짜} / {날짜}", calendar: seoul)
         XCTAssertTrue(p.hasPrefix("CUSTOM 2026-10-02 / 2026-10-02\n\n=== 1) 업무 일지 ===\n# w"))
