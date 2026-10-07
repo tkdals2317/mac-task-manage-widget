@@ -60,4 +60,15 @@ final class DueBadgeTests: XCTestCase {
         let sorted = DueBadge.sorted([a, b, c, d, e]).map(\.title)
         XCTAssertEqual(sorted, ["e", "d", "c", "b", "a"])
     }
+
+    func testUrgentCount() {
+        func n(_ ts: [Todo]) -> Int { DueBadge.urgentCount(todos: ts, now: today, calendar: cal) }
+        XCTAssertEqual(n([]), 0)
+        XCTAssertEqual(n([Todo(title: "a")]), 0)
+        XCTAssertEqual(n([Todo(title: "a", dueDate: "2026-10-02")]), 1)
+        XCTAssertEqual(n([Todo(title: "a", dueDate: "2026-10-01"), Todo(title: "b", dueDate: "2026-10-02")]), 2)
+        var done = Todo(title: "d", dueDate: "2026-10-01"); done.done = true
+        XCTAssertEqual(n([done]), 0)
+        XCTAssertEqual(n([Todo(title: "f", dueDate: "2026-10-03")]), 0)
+    }
 }

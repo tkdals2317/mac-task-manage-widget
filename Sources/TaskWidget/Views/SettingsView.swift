@@ -40,6 +40,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.fontScale) private var fontScale = 1.0
     @AppStorage(SettingsKey.alwaysOnTop) private var alwaysOnTop = true
     @AppStorage(SettingsKey.allSpaces) private var allSpaces = true
+    @AppStorage(SettingsKey.globalHotKeyEnabled) private var globalHotKey = true
     @AppStorage(SettingsKey.jiraBaseURL) private var jiraBaseURL = Settings.defaultJiraBaseURL
     @AppStorage(SettingsKey.jiraEmail) private var jiraEmail = ""
     @AppStorage(SettingsKey.jiraRefreshMinutes) private var jiraRefreshMinutes = 5
@@ -159,6 +160,7 @@ struct SettingsView: View {
         Section("창") {
             Toggle("항상 위", isOn: $alwaysOnTop)
             Toggle("모든 Spaces에 표시", isOn: $allSpaces)
+            Toggle("전역 단축키 ⌃⌥Space 로 패널 열기/닫기", isOn: $globalHotKey)
         }
         Section("탭") {
             let ids = allTabs.map(\.id)

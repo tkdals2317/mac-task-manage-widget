@@ -19,6 +19,8 @@ final class AppState: ObservableObject {
     @Published var updateStatus: UpdateStatus?
     @Published var updateError: String?
     @Published var updating = false
+    /// ⌘N: TasksView 가 보이면 새 할 일 입력칸에 포커스를 주고 내린다.
+    @Published var focusNewTodo = false
     @Published var checkingUpdates = false
     let buildInfo = BuildInfo(infoDictionary: Bundle.main.infoDictionary ?? [:])
     private var updateErrorFromCheck = false

@@ -24,6 +24,7 @@ public enum SettingsKey {
     public static let jiraVersionFilter = "jiraVersionFilter"
     public static let jiraGroupByVersion = "jiraGroupByVersion"
     public static let sortTodosByTag = "sortTodosByTag"
+    public static let globalHotKeyEnabled = "globalHotKeyEnabled"
 }
 
 public final class Settings {
@@ -64,6 +65,10 @@ public final class Settings {
     public var allSpaces: Bool {
         get { bool(SettingsKey.allSpaces, true) }
         set { d.set(newValue, forKey: SettingsKey.allSpaces) }
+    }
+    public var globalHotKeyEnabled: Bool {
+        get { bool(SettingsKey.globalHotKeyEnabled, true) }
+        set { d.set(newValue, forKey: SettingsKey.globalHotKeyEnabled) }
     }
     public var jiraBaseURL: String {
         get { string(SettingsKey.jiraBaseURL, Self.defaultJiraBaseURL) }

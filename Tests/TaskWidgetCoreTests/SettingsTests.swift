@@ -21,6 +21,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(s.fontScale, 1.0)
         XCTAssertTrue(s.alwaysOnTop)
         XCTAssertTrue(s.allSpaces)
+        XCTAssertTrue(s.globalHotKeyEnabled)
         XCTAssertEqual(s.jiraBaseURL, "https://midasitweb-jira.atlassian.net")
         XCTAssertEqual(s.jiraEmail, "")
         XCTAssertEqual(s.jiraRefreshMinutes, 5)

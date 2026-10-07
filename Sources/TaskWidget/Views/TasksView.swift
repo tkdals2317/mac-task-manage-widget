@@ -10,6 +10,7 @@ struct TasksView: View {
     @Environment(\.fontScale) private var scale
     @State private var newTitle = ""
     @State private var doneExpanded = false
+    @FocusState private var addFocused: Bool
 
     var body: some View {
         let open = state.openTodos(byTag: sortByTag)
@@ -33,6 +34,15 @@ struct TasksView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
         }
+        .onAppear(perform: consumeFocusRequest)
+        .onChange(of: state.focusNewTodo) { _, _ in consumeFocusRequest() }
+    }
+
+    private func consumeFocusRequest() {
+        guard state.focusNewTodo else { return }
+        state.focusNewTodo = false
+        todoCollapsed = false
+        addFocused = true
     }
 
     private func todoSection(_ open: [Todo]) -> some View {
@@ -40,6 +50,7 @@ struct TasksView: View {
             TextField("할 일 추가…", text: $newTitle)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12 * scale))
+                .focused($addFocused)
                 .onSubmit {
                     state.addTodo(newTitle)
                     newTitle = ""
