@@ -6,6 +6,7 @@ public struct SummaryInput: Equatable {
     public var worklogProjects: Set<String>
     public var activity: [ActivityRecord]
     public var commits: [String: [String]]   // project -> "<hash> <subject>" lines
+    public var jiraKeys: [String: [String]]  // project -> 정렬된 Jira 키
     /// 로그용 통계. 프롬프트에는 안 들어간다.
     public var worklogSectionCount: Int
     public var activityDropped: Int
@@ -13,7 +14,8 @@ public struct SummaryInput: Equatable {
 
     public init(dayKey: String, worklogRaw: String?, worklogProjects: Set<String>,
                 activity: [ActivityRecord], commits: [String: [String]],
-                worklogSectionCount: Int = 0, activityDropped: Int = 0, projects: [String] = []) {
+                worklogSectionCount: Int = 0, activityDropped: Int = 0, projects: [String] = [],
+                jiraKeys: [String: [String]] = [:]) {
         self.dayKey = dayKey
         self.worklogRaw = worklogRaw
         self.worklogProjects = worklogProjects
@@ -22,6 +24,7 @@ public struct SummaryInput: Equatable {
         self.worklogSectionCount = worklogSectionCount
         self.activityDropped = activityDropped
         self.projects = projects
+        self.jiraKeys = jiraKeys
     }
 }
 
@@ -52,6 +55,19 @@ public enum SummaryPrompt {
         return worklogEmpty && i.activity.isEmpty && i.commits.values.allSatisfy { $0.isEmpty }
     }
 
+    /// 알려진 프로젝트 접두사의 키만 (UTF-8, SHA-256 같은 건 무시). 중복 제거, 정렬.
+    public static func jiraKeys(in texts: [String], prefixes: Set<String>) -> [String] {
+        let alt = prefixes.map(NSRegularExpression.escapedPattern(for:)).sorted().joined(separator: "|")
+        guard !prefixes.isEmpty, let re = try? NSRegularExpression(pattern: "\\b(?:\(alt))-\\d+\\b") else { return [] }
+        var keys = Set<String>()
+        for t in texts {
+            for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)) {
+                keys.insert((t as NSString).substring(with: m.range))
+            }
+        }
+        return keys.sorted()
+    }
+
     static func hhmm(_ d: Date, _ calendar: Calendar) -> String {
         let c = calendar.dateComponents([.hour, .minute], from: d)
         return String(format: "%02d:%02d", c.hour!, c.minute!)
@@ -66,6 +82,7 @@ public enum SummaryPrompt {
         - 끝낸 일의 결과만 짧게. 한 줄 = 한 항목, 동사로 끝내는 개조식 ("~ 수정", "~ 추가").
         - 과정·시행착오·조사·잡담·질문 응답, 미완료·다음 할 일은 쓰지 않음.
         - 비슷한 항목은 하나로 합침. 프로젝트당 최대 5개.
+        - 데이터에 Jira 키(예: NMRS-123)가 있으면 관련 항목 끝에 (NMRS-123) 처럼 붙임.
         - 머리말·맺음말 없이 아래 형식만 출력.
 
         # {날짜} 업무 요약
@@ -101,6 +118,23 @@ public enum SummaryPrompt {
         for project in commits.keys.sorted() {
             s += "\n\n=== 3) 커밋: \(project) ===\n" + commits[project]!.joined(separator: "\n")
         }
+        let keys = i.jiraKeys.filter { !$0.value.isEmpty }
+        if !keys.isEmpty {
+            s += "\n\n=== 4) Jira 키 ===\n" + keys.keys.sorted().map { "\($0): " + keys[$0]!.joined(separator: ", ") }.joined(separator: "\n")
+        }
         return s + "\n"
     }
+
+    /// 주간 지시문. 고정(사용자 편집 불가). `{주}` 는 호출 쪽에서 치환.
+    public static let weeklyInstructions = """
+        {주} 개발자 주간 업무 요약을 한국어 Markdown으로 쓰세요. 도구 사용 금지, 아래 일간 요약만 근거로.
+        - 여러 날에 걸친 같은 작업은 하나로 합쳐 결과만 씀. 날짜별로 나열하지 않음.
+        - 한 줄 = 한 항목, 동사로 끝내는 개조식. 프로젝트당 최대 7개.
+        - Jira 키가 있으면 항목 끝에 그대로 유지.
+        - 과정·미완료·다음 할 일·머리말·맺음말 없음.
+
+        # {주} 주간 업무 요약
+        ## {프로젝트명}
+        - 한 일
+        """
 }

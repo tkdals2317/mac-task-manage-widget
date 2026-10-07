@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     @Published var summaryDay = Date()
     @Published var summaryGenerating = false
     @Published var summaryError: String?
+    @Published var weeklySummary: Summary?
     @Published var tagConfig: TagConfig
     @Published var updateStatus: UpdateStatus?
     @Published var updateError: String?
@@ -25,11 +26,14 @@ final class AppState: ObservableObject {
     let todoStore: TodoStore
     let tagStore = TagStore()
 
+    /// Jira 탭을 안 열어도 18시 자동 요약이 키를 알도록 마지막으로 본 프로젝트 접두사를 저장해 둔다.
+    nonisolated static let jiraPrefixesKey = "jiraProjectPrefixes"
+
     /// runner 는 호출 시점의 설정(모델, 경로)을 읽는다.
     let summaryService = SummaryService(instructions: {
         let s = Settings.shared.summaryInstructions
         return s.isEmpty ? nil : s
-    }) { prompt in
+    }, jiraProjectKeys: { Set(UserDefaults.standard.stringArray(forKey: jiraPrefixesKey) ?? []) }) { prompt in
         let s = Settings.shared
         return try ClaudeRunner(configuredPath: s.claudePath, model: s.claudeModel).run(prompt: prompt)
     }
@@ -287,6 +291,8 @@ final class AppState: ObservableObject {
             let page = try await client.fetchMyOpenIssues(jql: JiraClient.effectiveJQL(custom: s.jiraJQL))
             jiraIssues = JiraClient.sortedForDisplay(page.issues)
             jiraTruncated = page.truncated
+            let prefixes = Set(page.issues.compactMap { $0.id.split(separator: "-").first.map(String.init) })
+            if !prefixes.isEmpty { UserDefaults.standard.set(prefixes.sorted(), forKey: Self.jiraPrefixesKey) }
             jiraUpdatedAt = Date()
             jiraError = nil
         } catch let e as JiraError {
@@ -320,6 +326,30 @@ final class AppState: ObservableObject {
         do {
             let s = try await Task.detached { try service.generate(for: day, force: force) }.value
             if Calendar.current.isDate(day, inSameDayAs: summaryDay) { summary = s }
+            return true
+        } catch let e as SummaryError {
+            summaryError = e.userMessage
+        } catch {
+            summaryError = error.localizedDescription
+        }
+        return false
+    }
+
+    // MARK: - Weekly summary
+
+    func loadWeekly(for day: Date) {
+        weeklySummary = summaryService.existingWeekly(for: day)
+    }
+
+    @discardableResult
+    func generateWeekly(for day: Date, force: Bool) async -> Bool {
+        guard !summaryGenerating else { return false }
+        summaryGenerating = true
+        summaryError = nil
+        defer { summaryGenerating = false }
+        let service = summaryService
+        do {
+            weeklySummary = try await Task.detached { try service.generateWeekly(weekContaining: day, force: force) }.value
             return true
         } catch let e as SummaryError {
             summaryError = e.userMessage

@@ -6,6 +6,7 @@ public enum SummaryError: Error, Equatable {
     case claudeFailed(Int32, String)
     case emptyOutput
     case busy
+    case noDailySummaries
 
     public var userMessage: String {
         switch self {
@@ -16,6 +17,7 @@ public enum SummaryError: Error, Equatable {
             return "claude 실패 (exit \(code)): \(last)"
         case .emptyOutput: return "claude 출력이 비어 있음"
         case .busy: return "이미 생성 중"
+        case .noDailySummaries: return "이번 주 일간 요약 없음"
         }
     }
 }

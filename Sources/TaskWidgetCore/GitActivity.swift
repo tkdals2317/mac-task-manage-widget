@@ -26,4 +26,11 @@ public enum GitActivity {
         guard r.status == 0 else { return [] }
         return r.stdout.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
     }
+
+    /// cwd 의 현재 브랜치 이름. 저장소가 아니거나 detached 면 nil.
+    public static func branch(in cwd: String, timeout: TimeInterval = 10) -> String? {
+        let r = ProcessRunner.run(executable: "/usr/bin/git", arguments: ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], timeout: timeout)
+        let b = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return r.status == 0 && !b.isEmpty && b != "HEAD" ? b : nil
+    }
 }

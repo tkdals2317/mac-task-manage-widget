@@ -84,4 +84,20 @@ final class SummaryPromptTests: XCTestCase {
 
         XCTAssertEqual(SummaryPrompt.build(input, instructions: " \n ", calendar: seoul), SummaryPrompt.build(input, calendar: seoul))
     }
+
+    func testJiraKeysKnownPrefixOnly() {
+        let keys = SummaryPrompt.jiraKeys(in: ["UTF-8 SHA-256 NMRS-12 fix", "feature/NMRS-12-foo", "ABC-7 NMRS-3", "xNMRS-9"], prefixes: ["NMRS", "ABC"])
+        XCTAssertEqual(keys, ["ABC-7", "NMRS-12", "NMRS-3"])
+        XCTAssertEqual(SummaryPrompt.jiraKeys(in: ["NMRS-1"], prefixes: []), [])
+    }
+
+    func testBuildJiraSection() {
+        var input = SummaryInput(dayKey: "2026-10-02", worklogRaw: "# w", worklogProjects: [], activity: [], commits: [:])
+        XCTAssertFalse(SummaryPrompt.build(input, calendar: seoul).contains("=== 4)"))
+        input.jiraKeys = ["mrs-cms": ["NMRS-1", "NMRS-2"], "empty": []]
+        let p = SummaryPrompt.build(input, calendar: seoul)
+        XCTAssertTrue(p.contains("=== 4) Jira 키 ===\nmrs-cms: NMRS-1, NMRS-2"))
+        XCTAssertFalse(p.contains("empty:"))
+        XCTAssertTrue(p.contains("Jira 키(예: NMRS-123)"))
+    }
 }
