@@ -174,29 +174,35 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var tagsPane: some View {
-        Section {
-            List {
-                ForEach(state.tags) { tag in
-                    TagEditRow(tag: tag, focusOnAppear: tag.id == newTagId)
+        ForEach(Array(state.tagConfig.groups.enumerated()), id: \.element.id) { idx, group in
+            Section {
+                List {
+                    ForEach(group.tags) { tag in
+                        TagEditRow(tag: tag, focusOnAppear: tag.id == newTagId)
+                    }
+                    .onMove { state.moveTags(in: group.id, from: $0, to: $1) }
                 }
-                .onMove { state.moveTags(from: $0, to: $1) }
+                .frame(minHeight: CGFloat(max(group.tags.count, 1)) * 34 + 8)
+                Button("＋ 태그") {
+                    newTagId = state.addTag(toGroup: group.id, name: "새 태그", colorHex: TagColor.gray.hex).id
+                }
+            } header: {
+                TagGroupHeader(group: group, isFirst: idx == 0, isLast: idx == state.tagConfig.groups.count - 1)
             }
-            .frame(minHeight: CGFloat(max(state.tags.count, 1)) * 34 + 8)
-            Button("＋ 태그 추가") { newTagId = state.addTag(name: "새 태그", color: .gray).id }
-        } header: {
-            Text("태그 목록")
-        } footer: {
-            Text("드래그해서 순서를 바꿉니다. 위쪽 태그가 먼저 정렬됩니다.").font(.caption).foregroundStyle(.secondary)
         }
         Section {
+            Button("＋ 그룹 추가") { state.addGroup() }
             Toggle("태그 순서로 정렬", isOn: $sortByTag)
             Button("기본값으로 되돌리기") { confirmReset = true }
+        } footer: {
+            Text("태그를 드래그해 그룹 안에서 순서를 바꿉니다. '정렬 기준' 그룹의 위쪽 태그가 먼저 정렬됩니다.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .alert("태그를 기본값으로 되돌릴까요?", isPresented: $confirmReset) {
             Button("되돌리기", role: .destructive) { state.resetTags() }
             Button("취소", role: .cancel) {}
         } message: {
-            Text("태그 목록이 초기화되고, 사라진 태그는 할 일에서 제거됩니다.")
+            Text("그룹과 태그가 초기화되고, 사라진 태그는 할 일에서 제거됩니다.")
         }
     }
 
@@ -389,6 +395,103 @@ struct SettingsView: View {
     }
 }
 
+private struct TagGroupHeader: View {
+    let group: TagGroup
+    let isFirst: Bool
+    let isLast: Bool
+    @EnvironmentObject var state: AppState
+    @State private var draft = ""
+    @State private var confirmDelete = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let isSort = state.tagConfig.sortGroup?.id == group.id
+        HStack(spacing: 8) {
+            TextField("그룹 이름", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(commit)
+                .onChange(of: focused) { _, f in if !f { commit() } }
+            Picker("", selection: Binding(
+                get: { group.selection },
+                set: { state.setSelection(group.id, $0) }
+            )) {
+                Text("하나만").tag(TagSelection.single)
+                Text("여러 개").tag(TagSelection.multiple)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            Button { state.setSortGroup(group.id) } label: {
+                Label("정렬 기준", systemImage: isSort ? "largecircle.fill.circle" : "circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isSort ? Color.accentColor : Color.secondary)
+            Menu {
+                Button("위로 이동") { state.moveGroup(group.id, by: -1) }.disabled(isFirst)
+                Button("아래로 이동") { state.moveGroup(group.id, by: 1) }.disabled(isLast)
+                Divider()
+                Button("삭제", role: .destructive) { confirmDelete = true }
+            } label: { Image(systemName: "ellipsis.circle") }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .onAppear { draft = group.name }
+        .onChange(of: group.name) { _, n in draft = n }
+        .alert("\"\(group.name)\" 그룹을 삭제할까요?", isPresented: $confirmDelete) {
+            Button("삭제", role: .destructive) { state.deleteGroup(group.id) }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("그룹과 태그 \(group.tags.count)개가 삭제되고 할 일에서 빠집니다.")
+        }
+    }
+
+    private func commit() {
+        guard let name = Todo.normalizedTitle(draft) else { draft = group.name; return }
+        if name != group.name { state.renameGroup(group.id, name) }
+        draft = name
+    }
+}
+
+private struct TagColorDot: View {
+    let tag: Tag
+    @EnvironmentObject var state: AppState
+    @State private var show = false
+
+    var body: some View {
+        Button { show = true } label: {
+            Circle().fill(Color(hex: tag.colorHex)).frame(width: 12, height: 12)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $show) {
+            HStack(spacing: 6) {
+                ForEach(TagColor.allCases, id: \.self) { c in
+                    Button { set(c.hex) } label: {
+                        Circle().fill(Color(hex: c.hex)).frame(width: 16, height: 16)
+                            .overlay(Circle().stroke(Color.primary, lineWidth: c.hex == tag.colorHex.uppercased() ? 2 : 0).padding(-2))
+                    }
+                    .buttonStyle(.plain)
+                }
+                ColorPicker("", selection: Binding(
+                    get: { Color(hex: tag.colorHex) },
+                    set: { if let h = $0.hexString { set(h) } }
+                ), supportsOpacity: false)
+                .labelsHidden()
+            }
+            .padding(10)
+        }
+    }
+
+    private func set(_ hex: String) {
+        var t = tag
+        t.colorHex = hex
+        state.updateTag(t)
+    }
+}
+
 private struct TagEditRow: View {
     let tag: Tag
     let focusOnAppear: Bool
@@ -398,19 +501,7 @@ private struct TagEditRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Menu {
-                ForEach(TagColor.allCases, id: \.self) { c in
-                    Button { var t = tag; t.color = c; state.updateTag(t) } label: {
-                        Label(c.rawValue, systemImage: c == tag.color ? "checkmark.circle.fill" : "circle.fill")
-                            .foregroundStyle(c.color)
-                    }
-                }
-            } label: {
-                Circle().fill(tag.color.color).frame(width: 12, height: 12)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            TagColorDot(tag: tag)
 
             TextField("", text: $draft)
                 .textFieldStyle(.roundedBorder)

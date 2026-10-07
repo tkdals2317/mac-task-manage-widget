@@ -15,7 +15,7 @@ final class AppState: ObservableObject {
     @Published var summaryDay = Date()
     @Published var summaryGenerating = false
     @Published var summaryError: String?
-    @Published var tags: [Tag]
+    @Published var tagConfig: TagConfig
     let todoStore: TodoStore
     let tagStore = TagStore()
 
@@ -28,14 +28,15 @@ final class AppState: ObservableObject {
     init(todoStore: TodoStore = TodoStore()) {
         self.todoStore = todoStore
         self.todos = todoStore.load()
-        self.tags = tagStore.load()
+        self.tagConfig = tagStore.load()
+        enforceSingleSelect()
     }
 
     // MARK: - Todos
 
     /// byTag 는 호출하는 뷰가 @AppStorage 로 읽어 넘긴다 (토글 시 다시 그려지도록).
     func openTodos(byTag: Bool) -> [Todo] {
-        TagSort.sorted(todos.filter { !$0.done }, tags: tags, byTag: byTag)
+        TagSort.sorted(todos.filter { !$0.done }, config: tagConfig, byTag: byTag)
     }
 
     var doneTodos: [Todo] {
@@ -78,50 +79,103 @@ final class AppState: ObservableObject {
     // MARK: - Tags
 
     func toggleTag(_ tagId: String, on todo: Todo) {
-        update(todo.id) {
-            if let i = $0.tagIds.firstIndex(of: tagId) { $0.tagIds.remove(at: i) } else { $0.tagIds.append(tagId) }
-        }
+        let cfg = tagConfig
+        update(todo.id) { $0.tagIds = cfg.toggled(tagId, in: $0.tagIds) }
     }
 
     @discardableResult
-    func addTag(name: String, color: TagColor) -> Tag {
-        let t = Tag(name: name, color: color)
-        tags.append(t)
-        persistTags()
+    func addTag(toGroup groupId: String, name: String, colorHex: String) -> Tag {
+        let t = Tag(name: name, colorHex: colorHex)
+        editGroup(groupId) { $0.tags.append(t) }
         return t
     }
 
     func updateTag(_ tag: Tag) {
-        guard let i = tags.firstIndex(where: { $0.id == tag.id }) else { return }
-        tags[i] = tag
+        guard let gi = tagConfig.groups.firstIndex(where: { $0.tags.contains { $0.id == tag.id } }),
+              let ti = tagConfig.groups[gi].tags.firstIndex(where: { $0.id == tag.id }) else { return }
+        tagConfig.groups[gi].tags[ti] = tag
         persistTags()
     }
 
-    func moveTags(from: IndexSet, to: Int) {
-        tags.move(fromOffsets: from, toOffset: to)
-        persistTags()
+    func moveTags(in groupId: String, from: IndexSet, to: Int) {
+        editGroup(groupId) { $0.tags.move(fromOffsets: from, toOffset: to) }
     }
 
     func deleteTag(_ id: String) {
-        tags.removeAll { $0.id == id }
+        for gi in tagConfig.groups.indices { tagConfig.groups[gi].tags.removeAll { $0.id == id } }
         persistTags()
         stripUnknownTagIds()
+    }
+
+    @discardableResult
+    func addGroup() -> TagGroup {
+        let g = TagGroup(name: "새 그룹", selection: .multiple)
+        tagConfig.groups.append(g)
+        persistTags()
+        return g
+    }
+
+    func renameGroup(_ id: String, _ name: String) {
+        editGroup(id) { $0.name = name }
+    }
+
+    func moveGroup(_ id: String, by delta: Int) {
+        guard let i = tagConfig.groups.firstIndex(where: { $0.id == id }) else { return }
+        let j = i + delta
+        guard tagConfig.groups.indices.contains(j) else { return }
+        tagConfig.groups.swapAt(i, j)
+        persistTags()
+    }
+
+    func deleteGroup(_ id: String) {
+        tagConfig.groups.removeAll { $0.id == id }
+        if tagConfig.sortGroupId == id { tagConfig.sortGroupId = tagConfig.groups.first?.id }
+        persistTags()
+        stripUnknownTagIds()
+    }
+
+    func setSelection(_ id: String, _ mode: TagSelection) {
+        editGroup(id) { $0.selection = mode }
+        if mode == .single { enforceSingleSelect() }
+    }
+
+    func setSortGroup(_ id: String) {
+        tagConfig.sortGroupId = id
+        persistTags()
     }
 
     func resetTags() {
-        tags = TagDefaults.all
+        tagConfig = TagDefaults.config
         persistTags()
         stripUnknownTagIds()
     }
 
+    private func editGroup(_ id: String, _ change: (inout TagGroup) -> Void) {
+        guard let i = tagConfig.groups.firstIndex(where: { $0.id == id }) else { return }
+        change(&tagConfig.groups[i])
+        persistTags()
+    }
+
     private func stripUnknownTagIds() {
-        let known = Set(tags.map(\.id))
+        let known = Set(tagConfig.allTags.map(\.id))
         for i in todos.indices { todos[i].tagIds.removeAll { !known.contains($0) } }
         persistTodos()
     }
 
+    /// 하나만 그룹에서 2개 이상 가진 할 일은 태그 순서상 첫 번째만 남긴다. 모르는 id 는 건드리지 않는다.
+    private func enforceSingleSelect() {
+        let known = Set(tagConfig.allTags.map(\.id))
+        var changed = false
+        for i in todos.indices {
+            let ids = todos[i].tagIds
+            let fixed = tagConfig.normalized(ids) + ids.filter { !known.contains($0) }
+            if Set(fixed) != Set(ids) { todos[i].tagIds = fixed; changed = true }
+        }
+        if changed { persistTodos() }
+    }
+
     private func persistTags() {
-        do { try tagStore.save(tags) } catch { NSLog("tags save failed: \(error)") }
+        do { try tagStore.save(tagConfig) } catch { NSLog("tags save failed: \(error)") }
     }
 
     private func update(_ id: UUID, _ change: (inout Todo) -> Void) {

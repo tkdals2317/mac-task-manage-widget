@@ -80,11 +80,15 @@ struct TodoRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu {
-            ForEach(state.tags) { tag in
-                Toggle(tag.name, isOn: Binding(
-                    get: { todo.tagIds.contains(tag.id) },
-                    set: { _ in state.toggleTag(tag.id, on: todo) }
-                ))
+            ForEach(state.tagConfig.groups) { group in
+                Menu(group.name) {
+                    ForEach(group.tags) { tag in
+                        Toggle(tag.name, isOn: Binding(
+                            get: { todo.tagIds.contains(tag.id) },
+                            set: { _ in state.toggleTag(tag.id, on: todo) }
+                        ))
+                    }
+                }
             }
         }
         Divider()
@@ -92,7 +96,7 @@ struct TodoRow: View {
 
     @ViewBuilder
     private var tagsArea: some View {
-        let shown = TagSort.ordered(todo.tagIds, tags: state.tags)
+        let shown = TagSort.ordered(todo.tagIds, config: state.tagConfig)
         if shown.isEmpty && !hovering && !showTags {
             EmptyView()
         } else {
