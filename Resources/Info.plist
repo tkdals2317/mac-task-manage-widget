@@ -9,7 +9,9 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleName</key>
-	<string>TaskWidget</string>
+	<string>ATM</string>
+	<key>CFBundleDisplayName</key>
+	<string>ATM</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

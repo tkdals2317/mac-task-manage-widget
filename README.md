@@ -1,13 +1,15 @@
-# TaskWidget
+# ATM (Ats Task Manager)
 
 macOS 메뉴바 상주 플로팅 위젯. 할 일(마감일) + 내 Jira 미완료 이슈 + Claude Code 세션 기반 하루 업무 요약.
 
 ## 설치
 
 ```bash
-make install            # /Applications/TaskWidget.app (쓰기 불가면 ~/Applications)
-open ~/Applications/TaskWidget.app   # 또는 /Applications
+make install            # /Applications/ATM.app (쓰기 불가면 ~/Applications)
+open ~/Applications/ATM.app   # 또는 /Applications
 ```
+
+이전 이름(TaskWidget.app)에서 업그레이드하면 설정 > Claude 연동에서 활동 훅을 **재설치**(경로 변경)하고, 로그인 시 실행을 껐다 켠다.
 
 Dock 아이콘이 표시되며, Dock 아이콘 클릭 = 패널 다시 보이기.
 
@@ -41,7 +43,7 @@ Dock 아이콘이 표시되며, Dock 아이콘 클릭 = 패널 다시 보이기.
 ```bash
 make build   # swift build
 make test    # swift test (Core 단위 테스트)
-make run     # build/TaskWidget.app 실행
+make run     # build/ATM.app 실행
 ```
 
 앱 아이콘: `swift scripts/make-icon.swift` 로 다시 생성 (Resources/AppIcon.icns)
@@ -67,7 +69,7 @@ make run     # build/TaskWidget.app 실행
 - [ ] 훅 설치 후 Claude Code 세션 → activity.jsonl 증가. 요약 생성용 claude -p 세션은 기록 안 됨 (cwd = 데이터 폴더)
 - [ ] `/worklog` 스킬 → worklog 파일 append → 요약 탭 즉시 표시
 - [ ] 예정 시각 자동 생성 + 알림. 재실행/깨우기 catch-up. 수동 "다시 생성"
-- [ ] 첫 실행 시 알림 권한 요청 (이미 요청됐을 수 있음 → 시스템 설정 > 알림 > TaskWidget 확인)
+- [ ] 첫 실행 시 알림 권한 요청 (이미 요청됐을 수 있음 → 시스템 설정 > 알림 > ATM 확인)
 - [ ] 생성 시각을 과거로 바꾸고 오늘 파일이 없으면 ~3초 후 즉시 생성
 - [ ] 오늘 파일이 있으면 시각을 바꿔도 재생성 안 함
 - [ ] 최근 날짜의 summaries 파일 하나 지우고(그날 activity 있음) 재실행 → 그날 요약 자동 생성

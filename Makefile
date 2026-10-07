@@ -1,4 +1,4 @@
-APP := build/TaskWidget.app
+APP := build/ATM.app
 BIN_DIR := $(shell swift build -c release --show-bin-path)
 # /Applications 쓰기 불가(비관리자 계정)면 ~/Applications. make install INSTALL_DIR=... 로 지정 가능.
 INSTALL_DIR ?= $(if $(shell test -w /Applications && echo y),/Applications,$(HOME)/Applications)
@@ -26,10 +26,10 @@ app:
 
 install: app
 	-pkill -x TaskWidget
-	rm -rf "$(INSTALL_DIR)/TaskWidget.app"
+	rm -rf "$(INSTALL_DIR)/TaskWidget.app" "$(INSTALL_DIR)/ATM.app"
 	mkdir -p "$(INSTALL_DIR)"
 	cp -R $(APP) "$(INSTALL_DIR)/"
-	@echo "installed to $(INSTALL_DIR)/TaskWidget.app"
+	@echo "installed to $(INSTALL_DIR)/ATM.app"
 
 run: app
 	open $(APP)

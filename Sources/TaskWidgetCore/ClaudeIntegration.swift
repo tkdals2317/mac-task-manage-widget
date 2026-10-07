@@ -145,7 +145,7 @@ public struct ClaudeIntegration {
     public static let skillMarkdown = """
     ---
     name: worklog
-    description: 현재 세션에서 한 일을 정리해 TaskWidget 업무 일지에 기록한다. "/worklog", "오늘 한 거 기록해", "업무 일지 남겨", "worklog" 요청 시 사용.
+    description: 현재 세션에서 한 일을 정리해 ATM 업무 일지에 기록한다. "/worklog", "오늘 한 거 기록해", "업무 일지 남겨", "worklog" 요청 시 사용.
     ---
 
     현재 세션에서 지금까지 한 일을 정리해 아래 파일 끝에 append 한다.
