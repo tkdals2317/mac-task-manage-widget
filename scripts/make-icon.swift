@@ -72,39 +72,100 @@ func shadowed(_ g: CGContext, _ s: CGFloat, small: Bool, dy: CGFloat, blur: CGFl
     g.restoreGState()
 }
 
+func rounded(_ size: CGFloat, _ w: NSFont.Weight) -> CTFont {
+    let f = NSFont.systemFont(ofSize: size, weight: w)
+    return (NSFont(descriptor: f.fontDescriptor.withDesign(.rounded) ?? f.fontDescriptor, size: size) ?? f) as CTFont
+}
+func makeLine(_ str: String, _ font: CTFont, _ color: CGColor, _ kern: CGFloat) -> CTLine {
+    let a: [CFString: Any] = [kCTFontAttributeName: font, kCTForegroundColorAttributeName: color, kCTKernAttributeName: kern]
+    return CTLineCreateWithAttributedString(CFAttributedStringCreate(nil, str as CFString, a as CFDictionary))
+}
+/// 글리프 경계 상자의 (hx, vy) 비율 지점(vy 0=위)이 p에 오도록 그린다. y-아래 좌표계 전제.
+func drawText(_ g: CGContext, _ str: String, _ font: CTFont, _ color: CGColor, kern: CGFloat = 0,
+              at p: CGPoint, hx: CGFloat = 0.5, vy: CGFloat = 0.5) {
+    let line = makeLine(str, font, color, kern)
+    let b = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+    g.saveGState()
+    g.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+    g.textPosition = CGPoint(x: p.x - (b.minX + hx * b.width), y: p.y + b.maxY - vy * b.height)
+    CTLineDraw(line, g)
+    g.restoreGState()
+}
+func textWidth(_ str: String, _ font: CTFont) -> CGFloat {
+    CTLineGetBoundsWithOptions(makeLine(str, font, rgb(0), 0), .useGlyphPathBounds).width
+}
+
+/// 위/아래 가장자리가 지그재그(찢김)인 영수증 경로
+func receipt(_ x0: CGFloat, _ x1: CGFloat, _ top: CGFloat, _ bot: CGFloat, tornTop: Bool, tornBot: Bool, tw: CGFloat, th: CGFloat) -> CGPath {
+    let n = 2 * max(1, Int((x1 - x0) / tw / 2 + 0.5)), step = (x1 - x0) / CGFloat(n)
+    let p = CGMutablePath()
+    if tornTop {
+        p.move(to: CGPoint(x: x0, y: top + th))
+        for i in 1...n { p.addLine(to: CGPoint(x: x0 + CGFloat(i) * step, y: top + (i % 2 == 0 ? th : 0))) }
+    } else { p.move(to: CGPoint(x: x0, y: top)); p.addLine(to: CGPoint(x: x1, y: top)) }
+    if tornBot {
+        for i in stride(from: n, through: 0, by: -1) { p.addLine(to: CGPoint(x: x0 + CGFloat(i) * step, y: bot - (i % 2 == 0 ? th : 0))) }
+    } else { p.addLine(to: CGPoint(x: x1, y: bot)); p.addLine(to: CGPoint(x: x0, y: bot)) }
+    p.closeSubpath()
+    return p
+}
+func check(_ g: CGContext, _ c: CGPoint, _ w: CGFloat, _ lw: CGFloat, _ col: CGColor) {
+    g.setStrokeColor(col); g.setLineWidth(lw); g.setLineCap(.round); g.setLineJoin(.round)
+    g.move(to: CGPoint(x: c.x - 0.45 * w, y: c.y + 0.02 * w))
+    g.addLine(to: CGPoint(x: c.x - 0.12 * w, y: c.y + 0.34 * w))
+    g.addLine(to: CGPoint(x: c.x + 0.5 * w, y: c.y - 0.36 * w))
+    g.strokePath()
+}
+func dashed(_ g: CGContext, _ x0: CGFloat, _ x1: CGFloat, _ y: CGFloat, _ col: CGColor) {
+    g.saveGState()
+    g.setStrokeColor(col); g.setLineWidth(4); g.setLineDash(phase: 0, lengths: [14, 10])
+    g.move(to: CGPoint(x: x0, y: y)); g.addLine(to: CGPoint(x: x1, y: y)); g.strokePath()
+    g.restoreGState()
+}
+func fillGrad(_ g: CGContext, _ path: CGPath, _ stops: [(CGFloat, CGColor)], _ a: CGPoint, _ b: CGPoint) {
+    g.saveGState(); g.addPath(path); g.clip()
+    g.drawLinearGradient(grad(stops), start: a, end: b, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    g.restoreGState()
+}
+func orangeSparkle(_ g: CGContext, _ c: CGPoint, _ R: CGFloat, _ s: CGFloat, _ small: Bool) {
+    sparkle(g, c, R, s, small: small, inner: rgb(0xFDBA74), outer: rgb(0xF97316), glow: rgb(0xF97316, 0.55))
+}
+
+/// 컨셉 B: 업무 영수증 (살짝 기울어진 영수증 + 체크 항목 + 주황 반짝이)
+func content(_ g: CGContext, _ s: CGFloat, _ small: Bool) {
+    rotated(g, 512, 512, -4) {
+        let rp = receipt(-220, 220, -350, 350, tornTop: true, tornBot: true, tw: 28, th: 16)
+        shadowed(g, s, small: small, dy: 16, blur: 36, rgb(0, 0.40)) { g.setFillColor(rgb(0xFFFFFF)); g.addPath(rp); g.fillPath() }
+        drawText(g, "ATM", rounded(70, .heavy), rgb(0x111827), at: CGPoint(x: 0, y: -255))
+        if !small { dashed(g, -180, 180, -190, rgb(0xD1D5DB)) }
+        for (i, cy) in [CGFloat(-120), -30, 60].enumerated() {
+            if i < 2 { check(g, CGPoint(x: -146, y: cy), 44, 12, rgb(0x22C55E)) }
+            else { g.setStrokeColor(rgb(0xD1D5DB)); g.setLineWidth(8); g.strokeEllipse(in: CGRect(x: -166, y: cy - 20, width: 40, height: 40)) }
+            bar(g, -100, cy, i == 1 ? 210 : 270, 18, rgb(0xCBD5E1))
+        }
+        if !small { dashed(g, -180, 180, 130, rgb(0xD1D5DB)) }
+        bar(g, -180, 200, 264, 22, rgb(0x111827))
+        bar(g, 110, 200, 70, 22, rgb(0x9CA3AF))
+        if !small {
+            g.setFillColor(rgb(0xCBD5E1))
+            for i in 0..<15 { g.fill(CGRect(x: -150 + CGFloat(i) * 20, y: 255, width: i % 3 == 0 ? 4 : 8, height: 55)) }
+        }
+    }
+    orangeSparkle(g, CGPoint(x: 700, y: 230), 80, s, small)  // 스쿼클 안쪽, 영수증 우상단 모서리와 겹침
+}
+
 func draw(_ g: CGContext, px: Int) {
     let s = CGFloat(px) / 1024
     let small = px <= 32
     g.translateBy(x: 0, y: CGFloat(px)); g.scaleBy(x: s, y: -s)
     let body = rr(CGRect(x: 100, y: 100, width: 824, height: 824), 185)
-    let top = CGPoint(x: 0, y: 100), bot = CGPoint(x: 0, y: 924)
-
-    shadowed(g, s, small: small, dy: 12, blur: 28, rgb(0, 0.30)) {
-        g.setFillColor(rgb(0x1F2937)); g.addPath(body); g.fillPath()
-    }
+    let stops = [(CGFloat(0), rgb(0x4338CA)), (1, rgb(0x7C3AED))]
+    shadowed(g, s, small: small, dy: 12, blur: 28, rgb(0, 0.30)) { g.setFillColor(stops[0].1); g.addPath(body); g.fillPath() }
     g.saveGState()
     g.addPath(body); g.clip()
-    g.drawLinearGradient(grad([(0, rgb(0x1F2937)), (1, rgb(0x111827))]), start: top, end: bot, options: [])
-    g.drawLinearGradient(grad([(0, rgb(0xFFFFFF, 0.10)), (1, rgb(0xFFFFFF, 0))]), start: top,
-                         end: CGPoint(x: 0, y: 100 + 824 * 0.4), options: [])
+    g.drawLinearGradient(grad(stops), start: CGPoint(x: 100, y: 100), end: CGPoint(x: 924, y: 924), options: [])
+    content(g, s, small)
     g.restoreGState()
-
-    let win = CGRect(x: 212, y: 300, width: 600, height: 520)
-    shadowed(g, s, small: small, dy: 18, blur: 40, rgb(0, 0.45)) {
-        g.setFillColor(rgb(0xFFFFFF, 0.92)); g.addPath(rr(win, 48)); g.fillPath()
-    }
-    g.setStrokeColor(rgb(0xFFFFFF, 0.40)); g.setLineWidth(3); g.addPath(rr(win, 48)); g.strokePath()
-    for (i, col) in ([0xFF5F57, 0xFEBC2E, 0x28C840] as [UInt32]).enumerated() {
-        g.setFillColor(rgb(col))
-        g.fillEllipse(in: CGRect(x: win.minX + 40 + CGFloat(i) * 46, y: win.minY + 34, width: 30, height: 30))
-    }
-    let widths: [CGFloat] = [380, 300, 340]
-    for (i, cy) in [CGFloat(480), 600, 720].enumerated() {
-        let done = i < 2
-        checkbox(g, CGRect(x: 262, y: cy - 36, width: 72, height: 72), done: done, fill: 0x22C55E, mark: 0xFFFFFF, empty: 0xD1D5DB)
-        bar(g, 372, cy, widths[i], 28, rgb(done ? 0xD7DEE8 : 0xCBD5E1))
-    }
-    sparkle(g, CGPoint(x: 812, y: 300), 80, s, small: small, inner: rgb(0xFDBA74), outer: rgb(0xF97316), glow: rgb(0xF97316, 0.55))
 }
 
 func render(_ px: Int) -> CGImage {
