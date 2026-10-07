@@ -68,6 +68,7 @@ struct SettingsView: View {
     @State private var claudeSearched = false
     @State private var claudeSearching = false
     @State private var todayActivityCount = 0
+    @State private var accountCopied = false
 
     init(initialPane: String? = nil) {
         _pane = State(initialValue: Pane(rawValue: initialPane ?? "") ?? .appearance)
@@ -379,6 +380,23 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+        Section("개발자 후원") {
+            let a = Links.supportAccount
+            LabeledContent("\(Links.supportBank) \(a.prefix(4))-\(a.dropFirst(4).prefix(3))-\(a.dropFirst(7))") {
+                Button(accountCopied ? "복사됨" : "복사") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("\(Links.supportBank) \(a)", forType: .string)
+                    accountCopied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(2))
+                        accountCopied = false
+                    }
+                }
+            }
+            .monospacedDigit()
+            Text("ATM이 도움이 됐다면 커피 한 잔 후원해 주세요 ☕")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
