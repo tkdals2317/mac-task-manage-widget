@@ -14,10 +14,14 @@ struct JiraSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if !state.jiraConfigured {
-                Button("설정에서 Jira 토큰 입력") {
-                    NotificationCenter.default.post(name: .openSettings, object: nil)
+                HStack(spacing: 8) {
+                    Button("설정에서 Jira 토큰 입력") {
+                        NotificationCenter.default.post(name: .openSettings, object: nil)
+                    }
+                    Link("토큰 발급 ↗", destination: Links.jiraToken)
                 }
                 .controlSize(.small)
+                .font(.system(size: 11 * scale))
                 .padding(.vertical, 8)
             } else {
                 let filtered = JiraVersions.filter(state.jiraIssues, filter)

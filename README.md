@@ -2,27 +2,90 @@
 
 macOS 메뉴바 상주 플로팅 위젯. 할 일(마감일) + 내 Jira 미완료 이슈 + Claude Code 세션 기반 하루 업무 요약.
 
-## 설치
+## 설치 (팀원용)
+
+### 준비물
+
+- macOS 14 이상
+- Xcode 명령줄 도구 (이미 있으면 생략)
 
 ```bash
-make install            # ~/Applications/ATM.app
+xcode-select --install
+```
+
+```bash
+swift --version
+```
+
+- 저장소 접근 권한: 비공개 GitHub 저장소라 관리자에게 초대를 요청한다.
+- 요약 기능을 쓰려면 Claude Code CLI 로그인 상태여야 한다.
+
+```bash
+claude --version
+```
+
+### 설치
+
+1. 저장소를 받는다.
+
+```bash
+git clone https://github.com/tkdals2317/mac-task-manage-widget.git
+```
+
+```bash
+cd mac-task-manage-widget
+```
+
+2. (권장) 서명 인증서를 만든다. 재설치할 때마다 키체인 허용 창이 다시 뜨는 걸 줄여준다. 인증서를 만들 때 로그인 암호를 물을 수 있다.
+
+```bash
+make cert
+```
+
+3. 설치하고 실행한다.
+
+```bash
+make install
+```
+
+```bash
 open ~/Applications/ATM.app
 ```
 
-이전 이름(TaskWidget.app)에서 업그레이드하면 설정 > Claude 연동에서 활동 훅을 **재설치**(경로 변경)하고, 로그인 시 실행을 껐다 켠다.
+### 처음 설정
 
-Dock 아이콘이 표시되며, Dock 아이콘 클릭 = 패널 다시 보이기.
+메뉴바/Dock 아이콘 → 패널 맨 아래 ⚙(설정).
 
-처음 한 번:
+1. **Jira**: 이메일 입력, "토큰 발급 ↗"로 API 토큰을 만들어 붙여넣고 저장 → 연결 테스트. 키체인 창이 뜨면 **항상 허용**.
+2. **Claude 연동**: "활동 훅 설치", "/worklog 스킬 설치". 훅은 새 Claude Code 세션부터 기록한다.
+3. **창·일반**: "로그인 시 실행" 켜기.
+4. **요약**: 생성 시각 확인 (기본 18:00).
 
-1. 메뉴바 체크리스트 아이콘 → 패널 맨 아래 오른쪽 ⚙(설정)
-2. **Jira**: 이메일 + API 토큰 입력 → 저장 → 연결 테스트
-3. **Claude 연동**: "활동 훅 설치", "/worklog 스킬 설치"
-4. **일반**: 로그인 시 실행
+### 업데이트
 
-### 고정 서명 (키체인 프롬프트 반복 방지)
+```bash
+git pull
+```
 
-재빌드마다 서명이 바뀌어 키체인이 다시 물어보는 문제를 막으려면, 로그인 키체인에 "TaskWidget Dev" 코드 서명 인증서를 두면 된다. `make app` 이 자동으로 그 인증서로 서명한다. 인증서가 없으면 ad-hoc 서명.
+```bash
+make install
+```
+
+서명 인증서 없이 설치했다면 업데이트 후 키체인 창이 한 번 더 뜬다. 이때도 **항상 허용**.
+
+### 문제 해결
+
+- 패널이 안 보임: 메뉴바 아이콘 클릭 (Dock 아이콘 클릭도 가능).
+- Jira 401: 토큰을 다시 발급해 저장.
+- 요약이 "기록 없음": 활동 훅이 설치됐는지, 훅 설치 이후의 새 세션인지 확인.
+- 키체인 창이 반복해서 뜸: `make cert` 후 `make install`.
+- 삭제: 먼저 설정 > Claude 연동에서 훅·스킬을 제거한 뒤, 앱(`~/Applications/ATM.app`)을 휴지통으로, 데이터 폴더 `~/Library/Application Support/TaskWidget/` 를 삭제.
+
+### 참고
+
+- 이전 이름(TaskWidget.app)에서 업그레이드하면 설정 > Claude 연동에서 활동 훅을 **재설치**(경로 변경)하고, 로그인 시 실행을 껐다 켠다.
+- Dock 아이콘 클릭 = 패널 다시 보이기.
+- `make app` 은 로그인 키체인의 "TaskWidget Dev" 인증서로 자동 서명한다. 없으면 ad-hoc 서명.
 
 ## 사용
 

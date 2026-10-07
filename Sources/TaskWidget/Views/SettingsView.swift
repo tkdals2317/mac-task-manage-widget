@@ -220,7 +220,10 @@ struct SettingsView: View {
                 SecureField(hasToken ? "API 토큰 (저장됨 · 바꾸려면 입력)" : "API 토큰", text: $token)
                 Button("저장") { saveToken() }
                     .disabled(token.isEmpty || jiraEmail.isEmpty)
+                Link("토큰 발급 ↗", destination: Links.jiraToken)
             }
+            Text("Atlassian 계정 > 보안 > API 토큰에서 'API 토큰 만들기' 후 복사해 붙여넣으세요.")
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("연결 테스트") { testJira() }
                 Text(tokenStatus).foregroundStyle(.secondary).lineLimit(1)
