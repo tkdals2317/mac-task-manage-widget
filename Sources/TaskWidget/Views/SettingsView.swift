@@ -222,18 +222,17 @@ struct SettingsView: View {
     private var jiraPane: some View {
         Section("계정") {
             TextField("URL", text: $jiraBaseURL)
-            TextField("이메일", text: $jiraEmail)
+            TextField("이메일", text: $jiraEmail, prompt: Text("name@midasin.com"))
             HStack {
                 SecureField(hasToken ? "API 토큰 (저장됨 · 바꾸려면 입력)" : "API 토큰", text: $token)
-                Button("저장") { saveToken() }
-                    .disabled(token.isEmpty || jiraEmail.isEmpty)
+                Button("저장") { saveToken() }   // 비활성화하지 않고 누르면 빠진 걸 알려준다
                 Link("토큰 발급 ↗", destination: Links.jiraToken)
             }
             Text("Atlassian 계정 > 보안 > API 토큰에서 'API 토큰 만들기' 후 복사해 붙여넣으세요.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("연결 테스트") { testJira() }
-                Text(tokenStatus).foregroundStyle(.secondary).lineLimit(1)
+                Text(tokenStatus).foregroundStyle(.secondary).lineLimit(2)
             }
         }
         Section {
@@ -421,8 +420,13 @@ struct SettingsView: View {
 
     private func saveToken() {
         let t = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if jiraEmail.trimmingCharacters(in: .whitespaces).isEmpty {
+            tokenStatus = "이메일을 먼저 입력하세요"
+            return
+        }
         guard !t.isEmpty else {
-            tokenStatus = "토큰 비어 있음"
+            // 비밀번호 칸은 한글 입력 소스에서 타이핑이 안 들어간다. 붙여넣기는 된다.
+            tokenStatus = "토큰이 비어 있음 — ⌘V로 붙여넣으세요"
             return
         }
         Task {
