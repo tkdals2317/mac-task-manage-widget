@@ -16,8 +16,7 @@ struct RootView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
-            .padding(.leading, 26)   // 닫기 버튼 자리
-            .padding(.trailing, 10)
+            .padding(.horizontal, 10)   // 아래 목록과 같은 좌우 여백
             .padding(.top, 8)
             .padding(.bottom, 6)
             Divider()
