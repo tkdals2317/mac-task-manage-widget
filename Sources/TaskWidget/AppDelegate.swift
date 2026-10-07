@@ -177,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 켜진 탭 중 n번째로 전환. 범위 밖이면 무시.
     @objc private func selectTab(_ sender: NSMenuItem) {
-        let enabled = TabConfig.enabled(from: UserDefaults.standard.string(forKey: SettingsKey.enabledTabs) ?? "tasks,summary", all: allTabs.map(\.id))
+        let enabled = TabConfig.enabled(from: Settings.shared.enabledTabs, all: allTabs.map(\.id))
         guard enabled.indices.contains(sender.tag) else { return }
         showPanel()
         UserDefaults.standard.set(enabled[sender.tag], forKey: SettingsKey.lastTab)
