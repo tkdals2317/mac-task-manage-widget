@@ -33,15 +33,17 @@ public struct JiraIssue: Codable, Identifiable, Equatable {
     public var statusCategory: String  // new | indeterminate | done | (unknown)
     public var priority: String?
     public var updated: Date
+    public var fixVersions: [String]
 
     public init(id: String, summary: String, status: String, statusCategory: String,
-                priority: String?, updated: Date) {
+                priority: String?, updated: Date, fixVersions: [String] = []) {
         self.id = id
         self.summary = summary
         self.status = status
         self.statusCategory = statusCategory
         self.priority = priority
         self.updated = updated
+        self.fixVersions = fixVersions
     }
 }
 

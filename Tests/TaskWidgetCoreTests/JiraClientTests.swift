@@ -17,6 +17,15 @@ final class JiraClientTests: XCTestCase {
         XCTAssertEqual(issues.first { $0.id == "NMRS-20001" }!.statusCategory, "weird")
     }
 
+    func testDecodeFixVersions() throws {
+        let issues = try JiraClient.decodeSearch(try fixture())
+        func v(_ k: String) -> [String] { issues.first { $0.id == k }!.fixVersions }
+        XCTAssertEqual(v("NMRS-20414"), ["15.3.0"])
+        XCTAssertEqual(v("NMRS-20388"), ["15.2.1", "15.3.0"])
+        XCTAssertEqual(v("NMRS-20450"), [], "필드 없음")
+        XCTAssertEqual(v("NMRS-20001"), [], "null")
+    }
+
     func testDecodeUpdatedDate() throws {
         let issues = try JiraClient.decodeSearch(try fixture())
         let i = issues.first { $0.id == "NMRS-20414" }!

@@ -6,6 +6,10 @@ struct JiraSection: View {
     @Environment(\.fontScale) private var scale
     @AppStorage(SettingsKey.jiraBaseURL) private var jiraBaseURL = Settings.defaultJiraBaseURL
     @AppStorage(SettingsKey.jiraRefreshMinutes) private var refreshMinutes = 5
+    @AppStorage(SettingsKey.jiraVersionFilter) private var versionFilter = ""
+    @AppStorage(SettingsKey.jiraGroupByVersion) private var groupByVersion = false
+
+    private var filter: VersionFilter { VersionFilter(storage: versionFilter) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -16,17 +20,24 @@ struct JiraSection: View {
                 .controlSize(.small)
                 .padding(.vertical, 8)
             } else {
-                ForEach(JiraClient.grouped(state.jiraIssues), id: \.status) { group in
-                    Text("\(group.status) · \(group.issues.count)")
-                        .font(.system(size: 10.5 * scale, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 8)
-                        .padding(.bottom, 2)
-                    ForEach(group.issues) { issue in
-                        JiraRow(issue: issue, baseURL: jiraBaseURL)
+                let filtered = JiraVersions.filter(state.jiraIssues, filter)
+                let mode: JiraRow.Trailing = filter != .all ? .none : (groupByVersion ? .status : .version)
+                if groupByVersion {
+                    ForEach(Array(JiraVersions.grouped(filtered).enumerated()), id: \.offset) { _, group in
+                        groupHeader("\(group.title ?? "버전 없음") · \(group.issues.count)",
+                                    color: group.title == nil ? .secondary : .purple)
+                        ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, trailing: mode == .version ? .status : mode) }
+                    }
+                } else {
+                    ForEach(JiraClient.grouped(filtered), id: \.status) { group in
+                        groupHeader("\(group.status) · \(group.issues.count)", color: .secondary)
+                        ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, trailing: mode) }
                     }
                 }
-                if state.jiraIssues.isEmpty && state.jiraError == nil && state.jiraUpdatedAt != nil {
+                if filtered.isEmpty && filter != .all && state.jiraError == nil && state.jiraUpdatedAt != nil {
+                    Text("이 버전의 미완료 이슈 없음").font(.system(size: 11.5 * scale)).foregroundStyle(.secondary).padding(.vertical, 8)
+                }
+                if state.jiraIssues.isEmpty && filter == .all && state.jiraError == nil && state.jiraUpdatedAt != nil {
                     Text("미완료 이슈 없음").font(.system(size: 11.5 * scale)).foregroundStyle(.tertiary).padding(.vertical, 8)
                 }
                 if state.jiraTruncated {
@@ -45,6 +56,14 @@ struct JiraSection: View {
                 await state.refreshJira()
             }
         }
+    }
+
+    private func groupHeader(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10.5 * scale, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
     }
 
     private var footer: some View {
@@ -70,6 +89,8 @@ struct JiraSection: View {
 struct JiraRow: View {
     let issue: JiraIssue
     let baseURL: String
+    var trailing: Trailing = .none
+    enum Trailing { case none, version, status }
     @Environment(\.fontScale) private var scale
 
     var body: some View {
@@ -87,6 +108,20 @@ struct JiraRow: View {
                     .font(.system(size: 12 * scale))
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                switch trailing {
+                case .version:
+                    if let tag = JiraVersions.tag(for: issue) {
+                        Text(tag)
+                            .font(.system(size: 11 * scale))
+                            .foregroundStyle(.purple)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Capsule().fill(Color.purple.opacity(0.18)))
+                    }
+                case .status:
+                    Text(issue.status).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                case .none:
+                    EmptyView()
+                }
             }
             .padding(.vertical, 5)
             .contentShape(Rectangle())
@@ -102,5 +137,68 @@ struct JiraRow: View {
         case "Medium": return .orange
         default: return .gray
         }
+    }
+}
+
+/// Jira 헤더의 버전 필터/묶기 메뉴 pill.
+struct JiraVersionMenu: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.fontScale) private var scale
+    @AppStorage(SettingsKey.jiraVersionFilter) private var stored = ""
+    @AppStorage(SettingsKey.jiraGroupByVersion) private var groupBy = false
+
+    private var filter: VersionFilter { VersionFilter(storage: stored) }
+
+    var body: some View {
+        if state.jiraConfigured {
+            HStack(spacing: 3) {
+                Menu { menuItems } label: { pill }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                if filter != .all {
+                    Button { stored = "" } label: {
+                        Image(systemName: "xmark").font(.system(size: 9 * scale, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .help("필터 해제")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var menuItems: some View {
+        let c = JiraVersions.counts(state.jiraIssues)
+        item("전체 (\(state.jiraIssues.count))", on: filter == .all, to: .all)
+        ForEach(c.versions, id: \.name) { v in
+            item("\(v.name) (\(v.count))", on: filter == .named(v.name), to: .named(v.name))
+        }
+        item("버전 없음 (\(c.noneCount))", on: filter == .none, to: .none)
+        Divider()
+        Toggle("버전별로 묶기", isOn: $groupBy)
+    }
+
+    private func item(_ title: String, on: Bool, to f: VersionFilter) -> some View {
+        Toggle(title, isOn: Binding(get: { on }, set: { _ in stored = f.storage }))
+    }
+
+    private var pill: some View {
+        let selected = filter != .all
+        let label: String
+        switch filter {
+        case .all: label = groupBy ? "버전별" : "버전 전체"
+        case .none: label = "버전 없음"
+        case .named(let n): label = n
+        }
+        return HStack(spacing: 3) {
+            if filter == .all && groupBy { Image(systemName: "rectangle.split.1x2") }
+            Text(label)
+            if !selected { Image(systemName: "chevron.down").font(.system(size: 8 * scale)) }
+        }
+        .font(.system(size: 11 * scale))
+        .foregroundStyle(selected ? Color.purple : Color.secondary)
+        .padding(.horizontal, 7).padding(.vertical, 1)
+        .background(Capsule().fill(selected ? Color.purple.opacity(0.18) : .clear))
+        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.5), lineWidth: selected ? 0 : 0.5))
     }
 }

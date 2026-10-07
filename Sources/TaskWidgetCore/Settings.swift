@@ -20,6 +20,8 @@ public enum SettingsKey {
     public static let enabledTabs = "enabledTabs"
     public static let todoSectionCollapsed = "todoSectionCollapsed"
     public static let jiraSectionCollapsed = "jiraSectionCollapsed"
+    public static let jiraVersionFilter = "jiraVersionFilter"
+    public static let jiraGroupByVersion = "jiraGroupByVersion"
 }
 
 public final class Settings {
@@ -100,6 +102,14 @@ public final class Settings {
     public var lastTab: String {
         get { string(SettingsKey.lastTab, "tasks") }
         set { d.set(newValue, forKey: SettingsKey.lastTab) }
+    }
+    public var jiraVersionFilter: String {
+        get { string(SettingsKey.jiraVersionFilter, "") }
+        set { d.set(newValue, forKey: SettingsKey.jiraVersionFilter) }
+    }
+    public var jiraGroupByVersion: Bool {
+        get { bool(SettingsKey.jiraGroupByVersion, false) }
+        set { d.set(newValue, forKey: SettingsKey.jiraGroupByVersion) }
     }
     public var enabledTabs: String {
         get { string(SettingsKey.enabledTabs, "tasks,summary") }

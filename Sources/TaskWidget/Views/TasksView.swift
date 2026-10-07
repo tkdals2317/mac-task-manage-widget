@@ -5,6 +5,7 @@ struct TasksView: View {
     @EnvironmentObject var state: AppState
     @AppStorage(SettingsKey.todoSectionCollapsed) private var todoCollapsed = false
     @AppStorage(SettingsKey.jiraSectionCollapsed) private var jiraCollapsed = false
+    @AppStorage(SettingsKey.jiraVersionFilter) private var versionFilter = ""
     @Environment(\.fontScale) private var scale
     @State private var newTitle = ""
     @State private var doneExpanded = false
@@ -15,7 +16,8 @@ struct TasksView: View {
                 SectionHeader(title: "내 할 일", count: state.openTodos.count, collapsed: $todoCollapsed)
                 if !todoCollapsed { todoSection }
 
-                SectionHeader(title: "Jira", count: state.jiraIssues.count, collapsed: $jiraCollapsed) {
+                SectionHeader(title: "Jira", count: JiraVersions.filter(state.jiraIssues, VersionFilter(storage: versionFilter)).count, collapsed: $jiraCollapsed) {
+                    JiraVersionMenu()
                     Button {
                         Task { await state.refreshJira() }
                     } label: {

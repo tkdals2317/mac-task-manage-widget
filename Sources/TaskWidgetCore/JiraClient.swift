@@ -48,7 +48,7 @@ public struct JiraClient {
         var comps = URLComponents(url: baseURL.appendingPathComponent("rest/api/3/search/jql"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [
             URLQueryItem(name: "jql", value: jql),
-            URLQueryItem(name: "fields", value: "summary,status,priority,updated"),
+            URLQueryItem(name: "fields", value: "summary,status,priority,updated,fixVersions"),
             URLQueryItem(name: "maxResults", value: "100"),
         ]
         // URLComponents 는 '+' 를 인코딩하지 않아 서버가 공백으로 읽는다. JQL 의 "C++" 같은 값 보호.
@@ -98,7 +98,9 @@ public struct JiraClient {
         let status: Status
         let priority: Priority?
         let updated: String
+        let fixVersions: [Version]?
     }
+    struct Version: Decodable { let name: String }
     struct Status: Decodable { let name: String; let statusCategory: Category }
     struct Category: Decodable { let key: String }
     struct Priority: Decodable { let name: String }
@@ -118,7 +120,8 @@ public struct JiraClient {
                       status: i.fields.status.name,
                       statusCategory: i.fields.status.statusCategory.key,
                       priority: i.fields.priority?.name,
-                      updated: jiraDate.date(from: i.fields.updated) ?? .distantPast)
+                      updated: jiraDate.date(from: i.fields.updated) ?? .distantPast,
+                      fixVersions: (i.fields.fixVersions ?? []).map(\.name))
         }
         return Page(issues: issues, truncated: r.isLast == false)
     }
