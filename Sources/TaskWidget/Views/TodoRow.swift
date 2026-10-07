@@ -7,6 +7,7 @@ struct TodoRow: View {
     @Environment(\.fontScale) private var scale
     @State private var hovering = false
     @State private var showDue = false
+    @State private var showTags = false
     @State private var editing = false
     @State private var draft = ""
     @FocusState private var titleFocused: Bool
@@ -42,6 +43,8 @@ struct TodoRow: View {
 
             Spacer(minLength: 4)
 
+            tagsArea.opacity(todo.done ? 0.5 : 1)
+
             Button { showDue = true } label: {
                 if badge.style == .none {
                     Image(systemName: "calendar")
@@ -76,7 +79,39 @@ struct TodoRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .contextMenu {
+            ForEach(state.tags) { tag in
+                Toggle(tag.name, isOn: Binding(
+                    get: { todo.tagIds.contains(tag.id) },
+                    set: { _ in state.toggleTag(tag.id, on: todo) }
+                ))
+            }
+        }
         Divider()
+    }
+
+    @ViewBuilder
+    private var tagsArea: some View {
+        let shown = TagSort.ordered(todo.tagIds, tags: state.tags)
+        if shown.isEmpty && !hovering && !showTags {
+            EmptyView()
+        } else {
+            Button { showTags = true } label: {
+                HStack(spacing: 3) {
+                    if shown.isEmpty {
+                        Text("＋태그").font(.system(size: 11 * scale)).foregroundStyle(.tertiary)
+                    } else {
+                        ForEach(shown.prefix(2)) { TagCapsule(tag: $0) }
+                        if shown.count > 2 {
+                            Text("+\(shown.count - 2)").font(.system(size: 11 * scale)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showTags) { TagPopover(todo: todo).environmentObject(state) }
+        }
     }
 
     private func beginEdit() {

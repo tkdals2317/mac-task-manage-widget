@@ -3,13 +3,14 @@ import ServiceManagement
 import TaskWidgetCore
 
 private enum Pane: String, CaseIterable, Identifiable {
-    case appearance, window, jira, summary, claude
+    case appearance, window, tags, jira, summary, claude
     var id: Self { self }
 
     var title: String {
         switch self {
         case .appearance: return "외관"
         case .window: return "창 · 일반"
+        case .tags: return "태그"
         case .jira: return "Jira"
         case .summary: return "요약"
         case .claude: return "Claude 연동"
@@ -20,6 +21,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         switch self {
         case .appearance: return "paintpalette"
         case .window: return "macwindow"
+        case .tags: return "tag"
         case .jira: return "ticket"
         case .summary: return "doc.text"
         case .claude: return "sparkles"
@@ -46,6 +48,9 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.claudeModel) private var claudeModel = ""
     @AppStorage(SettingsKey.claudePath) private var claudePath = ""
     @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
+    @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
+    @State private var confirmReset = false
+    @State private var newTagId: String?
 
     @State private var pane: Pane = .appearance
     @State private var token = ""
@@ -96,6 +101,7 @@ struct SettingsView: View {
         switch pane {
         case .appearance: appearancePane
         case .window: windowPane
+        case .tags: tagsPane
         case .jira: jiraPane
         case .summary: summaryPane
         case .claude: claudePane
@@ -163,6 +169,34 @@ struct SettingsView: View {
             if !integrationError.isEmpty {
                 Text(integrationError).foregroundStyle(.red).font(.caption)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var tagsPane: some View {
+        Section {
+            List {
+                ForEach(state.tags) { tag in
+                    TagEditRow(tag: tag, focusOnAppear: tag.id == newTagId)
+                }
+                .onMove { state.moveTags(from: $0, to: $1) }
+            }
+            .frame(minHeight: CGFloat(max(state.tags.count, 1)) * 34 + 8)
+            Button("＋ 태그 추가") { newTagId = state.addTag(name: "새 태그", color: .gray).id }
+        } header: {
+            Text("태그 목록")
+        } footer: {
+            Text("드래그해서 순서를 바꿉니다. 위쪽 태그가 먼저 정렬됩니다.").font(.caption).foregroundStyle(.secondary)
+        }
+        Section {
+            Toggle("태그 순서로 정렬", isOn: $sortByTag)
+            Button("기본값으로 되돌리기") { confirmReset = true }
+        }
+        .alert("태그를 기본값으로 되돌릴까요?", isPresented: $confirmReset) {
+            Button("되돌리기", role: .destructive) { state.resetTags() }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("태그 목록이 초기화되고, 사라진 태그는 할 일에서 제거됩니다.")
         }
     }
 
@@ -352,5 +386,52 @@ struct SettingsView: View {
             integrationError = "스킬 변경 실패: \(error)"
         }
         refreshStatus()
+    }
+}
+
+private struct TagEditRow: View {
+    let tag: Tag
+    let focusOnAppear: Bool
+    @EnvironmentObject var state: AppState
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(TagColor.allCases, id: \.self) { c in
+                    Button { var t = tag; t.color = c; state.updateTag(t) } label: {
+                        Label(c.rawValue, systemImage: c == tag.color ? "checkmark.circle.fill" : "circle.fill")
+                            .foregroundStyle(c.color)
+                    }
+                }
+            } label: {
+                Circle().fill(tag.color.color).frame(width: 12, height: 12)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            TextField("", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(commit)
+                .onChange(of: focused) { _, f in if !f { commit() } }
+
+            Button { state.deleteTag(tag.id) } label: { Image(systemName: "trash") }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear {
+            draft = tag.name
+            if focusOnAppear { DispatchQueue.main.async { focused = true } }
+        }
+        .onChange(of: tag.name) { _, n in draft = n }
+    }
+
+    private func commit() {
+        guard let name = Todo.normalizedTitle(draft) else { draft = tag.name; return }
+        if name != tag.name { var t = tag; t.name = name; state.updateTag(t) }
+        draft = name
     }
 }

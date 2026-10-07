@@ -15,7 +15,9 @@ final class AppState: ObservableObject {
     @Published var summaryDay = Date()
     @Published var summaryGenerating = false
     @Published var summaryError: String?
+    @Published var tags: [Tag]
     let todoStore: TodoStore
+    let tagStore = TagStore()
 
     /// runner 는 호출 시점의 설정(모델, 경로)을 읽는다.
     let summaryService = SummaryService { prompt in
@@ -26,11 +28,15 @@ final class AppState: ObservableObject {
     init(todoStore: TodoStore = TodoStore()) {
         self.todoStore = todoStore
         self.todos = todoStore.load()
+        self.tags = tagStore.load()
     }
 
     // MARK: - Todos
 
-    var openTodos: [Todo] { DueBadge.sorted(todos.filter { !$0.done }) }
+    /// byTag 는 호출하는 뷰가 @AppStorage 로 읽어 넘긴다 (토글 시 다시 그려지도록).
+    func openTodos(byTag: Bool) -> [Todo] {
+        TagSort.sorted(todos.filter { !$0.done }, tags: tags, byTag: byTag)
+    }
 
     var doneTodos: [Todo] {
         todos.filter(\.done).sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
@@ -67,6 +73,55 @@ final class AppState: ObservableObject {
     func clearDone() {
         todos.removeAll(where: \.done)
         persistTodos()
+    }
+
+    // MARK: - Tags
+
+    func toggleTag(_ tagId: String, on todo: Todo) {
+        update(todo.id) {
+            if let i = $0.tagIds.firstIndex(of: tagId) { $0.tagIds.remove(at: i) } else { $0.tagIds.append(tagId) }
+        }
+    }
+
+    @discardableResult
+    func addTag(name: String, color: TagColor) -> Tag {
+        let t = Tag(name: name, color: color)
+        tags.append(t)
+        persistTags()
+        return t
+    }
+
+    func updateTag(_ tag: Tag) {
+        guard let i = tags.firstIndex(where: { $0.id == tag.id }) else { return }
+        tags[i] = tag
+        persistTags()
+    }
+
+    func moveTags(from: IndexSet, to: Int) {
+        tags.move(fromOffsets: from, toOffset: to)
+        persistTags()
+    }
+
+    func deleteTag(_ id: String) {
+        tags.removeAll { $0.id == id }
+        persistTags()
+        stripUnknownTagIds()
+    }
+
+    func resetTags() {
+        tags = TagDefaults.all
+        persistTags()
+        stripUnknownTagIds()
+    }
+
+    private func stripUnknownTagIds() {
+        let known = Set(tags.map(\.id))
+        for i in todos.indices { todos[i].tagIds.removeAll { !known.contains($0) } }
+        persistTodos()
+    }
+
+    private func persistTags() {
+        do { try tagStore.save(tags) } catch { NSLog("tags save failed: \(error)") }
     }
 
     private func update(_ id: UUID, _ change: (inout Todo) -> Void) {

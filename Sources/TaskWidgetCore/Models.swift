@@ -8,15 +8,28 @@ public struct Todo: Codable, Identifiable, Equatable {
     public var completedAt: Date?
     /// "yyyy-MM-dd" 로컬 날짜. 시각 없음.
     public var dueDate: String?
+    public var tagIds: [String]
 
     public init(id: UUID = UUID(), title: String, done: Bool = false, createdAt: Date = Date(),
-                completedAt: Date? = nil, dueDate: String? = nil) {
+                completedAt: Date? = nil, dueDate: String? = nil, tagIds: [String] = []) {
         self.id = id
         self.title = title
         self.done = done
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.dueDate = dueDate
+        self.tagIds = tagIds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        done = try c.decode(Bool.self, forKey: .done)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
+        dueDate = try c.decodeIfPresent(String.self, forKey: .dueDate)
+        tagIds = try c.decodeIfPresent([String].self, forKey: .tagIds) ?? []
     }
 
     /// 앞뒤 공백 제거. 비면 nil.

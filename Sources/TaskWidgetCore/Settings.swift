@@ -22,6 +22,7 @@ public enum SettingsKey {
     public static let jiraSectionCollapsed = "jiraSectionCollapsed"
     public static let jiraVersionFilter = "jiraVersionFilter"
     public static let jiraGroupByVersion = "jiraGroupByVersion"
+    public static let sortTodosByTag = "sortTodosByTag"
 }
 
 public final class Settings {
@@ -110,6 +111,10 @@ public final class Settings {
     public var jiraGroupByVersion: Bool {
         get { bool(SettingsKey.jiraGroupByVersion, false) }
         set { d.set(newValue, forKey: SettingsKey.jiraGroupByVersion) }
+    }
+    public var sortTodosByTag: Bool {
+        get { bool(SettingsKey.sortTodosByTag, true) }
+        set { d.set(newValue, forKey: SettingsKey.sortTodosByTag) }
     }
     public var enabledTabs: String {
         get { string(SettingsKey.enabledTabs, "tasks,summary") }

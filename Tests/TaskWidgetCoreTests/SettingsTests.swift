@@ -34,6 +34,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(s.enabledTabs, "tasks,summary")
         XCTAssertEqual(s.jiraVersionFilter, "")
         XCTAssertFalse(s.jiraGroupByVersion)
+        XCTAssertTrue(s.sortTodosByTag)
     }
 
     func testSetAndGet() {

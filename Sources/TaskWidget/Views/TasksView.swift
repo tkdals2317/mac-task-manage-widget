@@ -6,15 +6,17 @@ struct TasksView: View {
     @AppStorage(SettingsKey.todoSectionCollapsed) private var todoCollapsed = false
     @AppStorage(SettingsKey.jiraSectionCollapsed) private var jiraCollapsed = false
     @AppStorage(SettingsKey.jiraVersionFilter) private var versionFilter = ""
+    @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
     @Environment(\.fontScale) private var scale
     @State private var newTitle = ""
     @State private var doneExpanded = false
 
     var body: some View {
+        let open = state.openTodos(byTag: sortByTag)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                SectionHeader(title: "내 할 일", count: state.openTodos.count, collapsed: $todoCollapsed)
-                if !todoCollapsed { todoSection }
+                SectionHeader(title: "내 할 일", count: open.count, collapsed: $todoCollapsed)
+                if !todoCollapsed { todoSection(open) }
 
                 SectionHeader(title: "Jira", count: JiraVersions.filter(state.jiraIssues, VersionFilter(storage: versionFilter)).count, collapsed: $jiraCollapsed) {
                     JiraVersionMenu()
@@ -33,7 +35,7 @@ struct TasksView: View {
         }
     }
 
-    private var todoSection: some View {
+    private func todoSection(_ open: [Todo]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             TextField("할 일 추가…", text: $newTitle)
                 .textFieldStyle(.roundedBorder)
@@ -44,11 +46,11 @@ struct TasksView: View {
                 }
                 .padding(.vertical, 4)
 
-            ForEach(state.openTodos) { todo in
+            ForEach(open) { todo in
                 TodoRow(todo: todo)
             }
 
-            if state.openTodos.isEmpty {
+            if open.isEmpty {
                 Text("할 일 없음").font(.system(size: 11.5 * scale)).foregroundStyle(.tertiary).padding(.vertical, 8)
             }
 
