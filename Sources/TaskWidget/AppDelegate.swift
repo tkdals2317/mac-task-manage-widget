@@ -124,7 +124,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                              styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
             w.title = "ATM 설정"
-            w.titlebarAppearsTransparent = true
             w.toolbarStyle = .unified
             w.isReleasedWhenClosed = false
             w.center()
