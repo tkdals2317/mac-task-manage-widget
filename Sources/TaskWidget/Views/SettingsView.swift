@@ -64,6 +64,9 @@ struct SettingsView: View {
     @State private var hookStatus: HookStatus = .notInstalled
     @State private var skillInstalled = false
     @State private var integrationError = ""
+    @State private var claudeFound: (path: String, source: String)?
+    @State private var claudeSearched = false
+    @State private var claudeSearching = false
     @State private var todayActivityCount = 0
 
     init(initialPane: String? = nil) {
@@ -301,6 +304,23 @@ struct SettingsView: View {
         Section("Claude CLI") {
             TextField("모델", text: $claudeModel, prompt: Text("비우면 CLI 기본"))
             TextField("claude 경로", text: $claudePath, prompt: Text("비우면 자동 탐색"))
+            HStack {
+                Button("자동 찾기") {
+                    claudeSearching = true
+                    Task.detached {
+                        let r = ClaudeRunner.locateWithSource(configured: "")
+                        await MainActor.run { claudeFound = r; claudeSearched = true; claudeSearching = false }
+                    }
+                }
+                .disabled(claudeSearching)
+                if claudeSearching { ProgressView().controlSize(.small) }
+                else if let f = claudeFound {
+                    Text("찾음: \(f.path) (\(f.source))").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    Button("이 경로 사용") { claudePath = f.path }
+                } else if claudeSearched {
+                    Text("찾지 못함").font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

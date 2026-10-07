@@ -75,6 +75,7 @@ make install
 
 - 패널이 안 보임: 메뉴바 아이콘 클릭 (Dock 아이콘 클릭도 가능).
 - Jira 401: 토큰을 다시 발급해 저장.
+- 요약 실패 `claudeNotFound`: 터미널에서 `command -v claude` 로 경로를 확인해 설정 > 요약 > claude 경로에 입력 (또는 **자동 찾기**).
 - 요약이 "기록 없음": 활동 훅이 설치됐는지, 훅 설치 이후의 새 세션인지 확인.
 - 키체인 창이 앱을 켤 때마다 뜸: "허용" 대신 **항상 허용**을 눌렀는지 확인. (재설치 직후 한 번 뜨는 건 정상 — Apple 개발자 팀 ID 없이 빌드한 앱이라 macOS가 새 버전마다 다시 묻는다.)
 - 삭제: 먼저 설정 > Claude 연동에서 훅·스킬을 제거한 뒤, 앱(`~/Applications/ATM.app`)을 휴지통으로, 데이터 폴더 `~/Library/Application Support/TaskWidget/` 를 삭제.

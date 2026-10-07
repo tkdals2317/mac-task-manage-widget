@@ -20,20 +20,21 @@ final class ClaudeRunnerTests: XCTestCase {
     func testLocatePrefersConfiguredPath() throws {
         let custom = dir.appendingPathComponent("my-claude")
         try makeExecutable(custom, script: "#!/bin/sh\necho x\n")
-        XCTAssertEqual(ClaudeRunner.locate(configured: custom.path, home: dir), custom.path)
+        let other = dir.appendingPathComponent(".local/bin/claude")
+        try makeExecutable(other, script: "#!/bin/sh\n")
+        XCTAssertEqual(ClaudeRunner.locate(configured: custom.path, home: dir, shellLookup: { other.path }), custom.path)
     }
 
     func testLocateFallsBackToHomeLocalBin() throws {
         let local = dir.appendingPathComponent(".local/bin/claude")
         try makeExecutable(local, script: "#!/bin/sh\necho x\n")
-        XCTAssertEqual(ClaudeRunner.locate(configured: "/nonexistent/claude", home: dir), local.path)
+        XCTAssertEqual(ClaudeRunner.locate(configured: "/nonexistent/claude", home: dir, shellLookup: { nil }), local.path)
     }
 
     func testLocateSkipsNonExecutable() throws {
         let local = dir.appendingPathComponent(".local/bin/claude")
         try "not exec".write(to: local, atomically: true, encoding: .utf8)
-        // 홈에 실행 파일이 없으면 시스템 경로로 넘어간다 (이 머신에 claude 가 있을 수 있으므로 local 이 아닌 것만 확인)
-        XCTAssertNotEqual(ClaudeRunner.locate(configured: "", home: dir), local.path)
+        XCTAssertNotEqual(ClaudeRunner.locate(configured: "", home: dir, shellLookup: { nil }), local.path)
     }
 
     func testRunPassesPromptOnStdinAndReturnsStdout() throws {
@@ -83,14 +84,90 @@ final class ClaudeRunnerTests: XCTestCase {
         }
     }
 
+    // MARK: locate
+
+    @discardableResult
+    func fake(_ rel: String) throws -> String {
+        let u = dir.appendingPathComponent(rel)
+        try FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try makeExecutable(u, script: "#!/bin/sh\necho x\n")
+        return u.path
+    }
+    func find(_ configured: String = "", shell: String? = nil) -> (path: String, source: String)? {
+        ClaudeRunner.locateWithSource(configured: configured, home: dir, shellLookup: { shell })
+    }
+
+    func testConfiguredDirectoryRejected() throws {
+        let sh = try fake("sh/claude")
+        let r = find(dir.path, shell: sh)
+        XCTAssertEqual(r?.path, sh)
+        XCTAssertEqual(r?.source, "로그인 셸")
+    }
+
+    func testConfiguredBeatsShell() throws {
+        let c = try fake("mine/claude"), sh = try fake("sh/claude")
+        let r = find(c, shell: sh)
+        XCTAssertEqual(r?.path, c)
+        XCTAssertEqual(r?.source, "설정 경로")
+    }
+
+    func testShellLookupGarbageIgnored() throws {
+        let nonExec = dir.appendingPathComponent("noexec")
+        try "x".write(to: nonExec, atomically: true, encoding: .utf8)
+        for bad in ["claude: aliased to foo", "relative/claude", nonExec.path, dir.path] {
+            let r = find(shell: bad)
+            XCTAssertTrue(r == nil || r!.source != "로그인 셸", bad)
+        }
+    }
+
+    func testKnownPathOrder() throws {
+        let npm = try fake(".npm-global/bin/claude")
+        XCTAssertEqual(find()?.path, npm)
+        let local = try fake(".local/bin/claude")
+        XCTAssertEqual(find()?.path, local)
+        XCTAssertEqual(find()?.source, "기본 위치")
+    }
+
+    func testNvmNewestWins() throws {
+        try fake(".nvm/versions/node/v18.19.0/bin/claude")
+        try fake(".nvm/versions/node/v20.9.0/bin/claude")
+        let newest = try fake(".nvm/versions/node/v20.11.0/bin/claude")
+        let r = find()
+        XCTAssertEqual(r?.path, newest)
+        XCTAssertEqual(r?.source, "nvm")
+    }
+
+    func testDesktopEmbeddedNewestVersion() throws {
+        try fake("Library/Application Support/Claude/claude-code/2.1.9/claude.app/Contents/MacOS/claude")
+        let newest = try fake("Library/Application Support/Claude/claude-code/2.1.10/claude.app/Contents/MacOS/claude")
+        let r = find()
+        XCTAssertEqual(r?.path, newest)
+        XCTAssertEqual(r?.source, "Claude 데스크톱 앱")
+    }
+
+    func testNothingUnderHomeIsNotFound() {
+        // 시스템 경로(/opt/homebrew 등)에 실제 claude 가 있을 수 있어, 임시 홈 기반 결과가 없다는 것만 본다.
+        let r = find()
+        XCTAssertTrue(r == nil || !r!.path.hasPrefix(dir.path))
+    }
+
+    func testRunPathIncludesBinaryDir() throws {
+        let bin = dir.appendingPathComponent("custom/bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let fake = bin.appendingPathComponent("claude")
+        try makeExecutable(fake, script: "#!/bin/sh\necho \"$PATH\"\n")
+        let out = try ClaudeRunner(configuredPath: fake.path, baseEnvironment: ["PATH": "/usr/bin:/bin"]).run(prompt: "x", workingDirectory: dir)
+        XCTAssertTrue(out.hasPrefix(bin.path + ":"), out)
+    }
+
     func testNotFound() {
-        XCTAssertThrowsError(try ClaudeRunner(configuredPath: "/nonexistent/claude").runLocated(prompt: "x", home: dir, workingDirectory: dir)) { e in
+        XCTAssertThrowsError(try ClaudeRunner(configuredPath: "/nonexistent/claude").runLocated(prompt: "x", home: dir, workingDirectory: dir, shellLookup: { nil })) { e in
             XCTAssertEqual(e as? SummaryError, .claudeNotFound)
         }
     }
 
     func testUserMessages() {
-        XCTAssertEqual(SummaryError.claudeNotFound.userMessage, "claude CLI 없음. 설정에서 경로 지정")
+        XCTAssertEqual(SummaryError.claudeNotFound.userMessage, "claude CLI를 찾지 못했습니다. 터미널에서 `command -v claude` 결과를 설정 > 요약 > claude 경로에 넣어주세요.")
         XCTAssertEqual(SummaryError.timeout.userMessage, "claude 응답 시간 초과")
         XCTAssertEqual(SummaryError.claudeFailed(2, "a\nlast line\n").userMessage, "claude 실패 (exit 2): last line")
         XCTAssertEqual(SummaryError.emptyOutput.userMessage, "claude 출력이 비어 있음")

@@ -55,6 +55,9 @@ struct SummaryView: View {
                 Text("생성 중…")
             } else if let e = state.summaryError {
                 Text(e).foregroundStyle(.red).lineLimit(1)
+                if e == SummaryError.claudeNotFound.userMessage {
+                    Button("설정 열기") { NotificationCenter.default.post(name: .openSettings, object: "summary") }.controlSize(.mini)
+                }
                 Button("로그") { openLog() }.controlSize(.mini)
             } else if let s = state.summary {
                 Text("\(s.generatedAt.formatted(date: .omitted, time: .shortened)) 생성")
