@@ -14,6 +14,7 @@ public enum SettingsKey {
     public static let summaryHour = "summaryHour"
     public static let summaryMinute = "summaryMinute"
     public static let summaryNotify = "summaryNotify"
+    public static let summaryInstructions = "summaryInstructions"
     public static let claudeModel = "claudeModel"
     public static let claudePath = "claudePath"
     public static let lastTab = "lastTab"
@@ -91,6 +92,11 @@ public final class Settings {
     public var summaryNotify: Bool {
         get { bool(SettingsKey.summaryNotify, true) }
         set { d.set(newValue, forKey: SettingsKey.summaryNotify) }
+    }
+    /// "" = 기본 지시문 사용
+    public var summaryInstructions: String {
+        get { string(SettingsKey.summaryInstructions, "") }
+        set { d.set(newValue, forKey: SettingsKey.summaryInstructions) }
     }
     public var claudeModel: String {
         get { string(SettingsKey.claudeModel, "") }

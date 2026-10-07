@@ -49,6 +49,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.claudePath) private var claudePath = ""
     @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
     @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
+    @AppStorage(SettingsKey.summaryInstructions) private var summaryInstructions = ""
+    @State private var instructionsDraft = ""
     @State private var confirmReset = false
     @State private var newTagId: String?
 
@@ -92,7 +94,10 @@ struct SettingsView: View {
                 .navigationTitle(pane.title)
         }
         .frame(minWidth: 620, minHeight: 440)
-        .onAppear(perform: refreshStatus)
+        .onAppear {
+            refreshStatus()
+            instructionsDraft = summaryInstructions.isEmpty ? SummaryPrompt.defaultInstructions : summaryInstructions
+        }
         .onChange(of: jiraEmail) { _, _ in refreshStatus() }
     }
 
@@ -263,6 +268,27 @@ struct SettingsView: View {
             }
             Toggle("완료 알림", isOn: $summaryNotify)
         }
+        Section {
+            TextEditor(text: $instructionsDraft)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(minHeight: 220)
+            HStack {
+                Button("저장") { saveInstructions() }
+                    .disabled(instructionsDraft == (summaryInstructions.isEmpty ? SummaryPrompt.defaultInstructions : summaryInstructions))
+                Button("기본값으로 되돌리기") {
+                    instructionsDraft = SummaryPrompt.defaultInstructions
+                    summaryInstructions = ""
+                }
+                Spacer()
+                Text(summaryInstructions.isEmpty ? "기본값 사용 중" : "사용자 지정")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("요약 프롬프트")
+        } footer: {
+            Text("`{날짜}`는 그날 날짜로 바뀝니다. 업무 일지·대화 기록·커밋 데이터는 이 지시문 뒤에 자동으로 붙습니다.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
         Section("Claude CLI") {
             TextField("모델", text: $claudeModel, prompt: Text("비우면 CLI 기본"))
             TextField("claude 경로", text: $claudePath, prompt: Text("비우면 자동 탐색"))
@@ -316,6 +342,13 @@ struct SettingsView: View {
             integrationError = "로그인 항목 변경 실패: \(error.localizedDescription)"
             loginAtStart = current
         }
+    }
+
+    private func saveInstructions() {
+        let trimmed = instructionsDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isDefault = trimmed == SummaryPrompt.defaultInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        summaryInstructions = isDefault ? "" : instructionsDraft
+        if isDefault { instructionsDraft = SummaryPrompt.defaultInstructions }
     }
 
     private func saveToken() {

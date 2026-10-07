@@ -27,6 +27,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(s.jiraJQL, "")
         XCTAssertEqual(s.summaryHour, 18)
         XCTAssertEqual(s.summaryMinute, 0)
+        XCTAssertEqual(s.summaryInstructions, "")
         XCTAssertTrue(s.summaryNotify)
         XCTAssertEqual(s.claudeModel, "")
         XCTAssertEqual(s.claudePath, "")

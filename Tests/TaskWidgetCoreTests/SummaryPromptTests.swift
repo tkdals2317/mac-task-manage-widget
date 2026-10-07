@@ -70,4 +70,17 @@ final class SummaryPromptTests: XCTestCase {
         XCTAssertTrue(p.contains("=== 2) 대화 기록 ===\n(없음)"))
         XCTAssertTrue(p.contains("=== 3) 커밋 ===\n(없음)"))
     }
+
+    func testCustomInstructions() {
+        let input = SummaryInput(dayKey: "2026-10-02", worklogRaw: "# w", worklogProjects: [], activity: [], commits: [:])
+        XCTAssertEqual(SummaryPrompt.build(input, calendar: seoul), SummaryPrompt.build(input, instructions: SummaryPrompt.defaultInstructions, calendar: seoul))
+        XCTAssertTrue(SummaryPrompt.build(input, calendar: seoul).contains("날짜: 2026-10-02"))
+
+        let p = SummaryPrompt.build(input, instructions: "CUSTOM {날짜} / {날짜}", calendar: seoul)
+        XCTAssertTrue(p.hasPrefix("CUSTOM 2026-10-02 / 2026-10-02\n\n=== 1) 업무 일지 ===\n# w"))
+        XCTAssertFalse(p.contains("당신은 개발자"))
+        XCTAssertTrue(p.contains("=== 3) 커밋 ==="))
+
+        XCTAssertEqual(SummaryPrompt.build(input, instructions: " \n ", calendar: seoul), SummaryPrompt.build(input, calendar: seoul))
+    }
 }

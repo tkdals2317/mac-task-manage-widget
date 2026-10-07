@@ -20,7 +20,10 @@ final class AppState: ObservableObject {
     let tagStore = TagStore()
 
     /// runner 는 호출 시점의 설정(모델, 경로)을 읽는다.
-    let summaryService = SummaryService { prompt in
+    let summaryService = SummaryService(instructions: {
+        let s = Settings.shared.summaryInstructions
+        return s.isEmpty ? nil : s
+    }) { prompt in
         let s = Settings.shared
         return try ClaudeRunner(configuredPath: s.claudePath, model: s.claudeModel).run(prompt: prompt)
     }

@@ -6,12 +6,15 @@ public final class SummaryService {
     public let dataDir: URL
     public let calendar: Calendar
     private let runner: Runner
+    private let instructions: () -> String?
     private let lock = NSLock()
 
-    public init(dataDir: URL = Paths.dataDir, calendar: Calendar = .current, runner: @escaping Runner) {
+    public init(dataDir: URL = Paths.dataDir, calendar: Calendar = .current,
+                instructions: @escaping () -> String? = { nil }, runner: @escaping Runner) {
         self.dataDir = dataDir
         self.calendar = calendar
         self.runner = runner
+        self.instructions = instructions
     }
 
     public func summaryURL(for day: Date) -> URL {
@@ -73,7 +76,7 @@ public final class SummaryService {
             log += "no records\n"
         } else {
             do {
-                markdown = try runner(SummaryPrompt.build(input, calendar: calendar))
+                markdown = try runner(SummaryPrompt.build(input, instructions: instructions(), calendar: calendar))
             } catch {
                 log += "error: \(error)\n"
                 writeLog(key, log)

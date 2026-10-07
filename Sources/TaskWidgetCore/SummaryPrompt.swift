@@ -57,9 +57,9 @@ public enum SummaryPrompt {
         return String(format: "%02d:%02d", c.hour!, c.minute!)
     }
 
-    public static func build(_ i: SummaryInput, calendar: Calendar = .current) -> String {
-        var s = """
-        당신은 개발자의 하루 업무 일지를 작성합니다. 날짜: \(i.dayKey)
+    /// 기본 지시문. `{날짜}` 는 build 에서 그날 날짜로 바뀐다.
+    public static let defaultInstructions = """
+        당신은 개발자의 하루 업무 일지를 작성합니다. 날짜: {날짜}
 
         입력은 세 종류입니다.
         1) 개발자가 세션 중 직접 기록한 업무 일지 — 가장 신뢰도 높음. 이 내용을 우선합니다.
@@ -69,13 +69,18 @@ public enum SummaryPrompt {
         도구를 사용하지 말고, 아래 데이터만 근거로 한국어 Markdown을 출력하세요. 데이터에 없는 일은 쓰지 않습니다. 다른 설명 없이 Markdown만 출력합니다.
 
         형식:
-        # \(i.dayKey) 업무 요약
+        # {날짜} 업무 요약
         ## {프로젝트명}
         - 한 일 (성과/결과 위주, 3~7개, 각 1~2문장)
         (프로젝트마다 반복)
         ## 미완료 / 내일
         - 일지나 대화에서 드러난 미완료 작업, 다음 단계
         """
+
+    /// instructions 가 nil/공백이면 defaultInstructions. 데이터 섹션은 항상 뒤에 붙는다.
+    public static func build(_ i: SummaryInput, instructions: String? = nil, calendar: Calendar = .current) -> String {
+        let custom = instructions?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var s = (custom.isEmpty ? defaultInstructions : custom).replacingOccurrences(of: "{날짜}", with: i.dayKey)
 
         let worklog = i.worklogRaw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         s += "\n\n=== 1) 업무 일지 ===\n" + (worklog.isEmpty ? "(없음)" : worklog)

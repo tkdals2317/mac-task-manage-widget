@@ -32,6 +32,17 @@ final class SummaryServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("summaries/2026-10-02.md"), encoding: .utf8), s.markdown)
     }
 
+    func testUsesInstructionsProvider() throws {
+        try writeActivity([
+            #"{"cwd":"/Users/x/projects/mrs-cms","event":"prompt","session":"s1","text":"PDF 느림","ts":"2026-10-02T09:12:33+09:00"}"#,
+        ])
+        var received = ""
+        let svc = SummaryService(dataDir: dir, calendar: seoul, instructions: { "MARK {날짜}" }) { p in received = p; return "ok" }
+        try svc.generate(for: day, force: false)
+        XCTAssertTrue(received.hasPrefix("MARK 2026-10-02"))
+        XCTAssertTrue(received.contains("PDF 느림"))
+    }
+
     func testGenerateFromActivityAndWritesFileAndLog() throws {
         try writeActivity([
             #"{"cwd":"/Users/x/projects/mrs-cms","event":"prompt","session":"s1","text":"PDF 느림","ts":"2026-10-02T09:12:33+09:00"}"#,
