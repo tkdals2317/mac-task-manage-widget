@@ -33,7 +33,11 @@ make install
 open ~/Applications/ATM.app
 ```
 
-앱은 `~/Applications/ATM.app` 에 설치된다.
+앱은 `~/Applications/ATM.app` 에 설치된다. `make install` 은 먼저 `make doctor` 로 환경을 점검하고, ❌ 가 있으면 안내 메시지와 함께 멈춘다.
+
+> **Claude Code로 설치하기**: Claude Code 에 아래를 붙여넣는다.
+>
+> "https://github.com/tkdals2317/mac-task-manage-widget 를 ~/mac-task-manage-widget 에 클론하고 README 설치 순서대로 설치해줘. 먼저 make doctor 를 돌려서 ❌ 가 있으면, 나한테 sudo ./scripts/fix-clt.sh 한 줄만 실행해 달라고 해."
 
 ### 처음 설정
 
@@ -130,6 +134,7 @@ make install
 
 ## 문제 해결
 
+- **빌드 중 `Invalid manifest` / `redefinition of module 'SwiftBridging'`**: 예전 명령줄 도구의 잔여 파일 때문이다. `make doctor` 로 확인하고 `sudo ./scripts/fix-clt.sh` 를 실행한다 (파일은 삭제하지 않고 `/Library/Developer/CLT-stale-backup/` 으로 옮긴다). 또는 `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install` 로 재설치한다.
 - **패널이 안 보임**: 메뉴바 아이콘이나 Dock 아이콘을 클릭한다.
 - **Jira 401**: 토큰을 다시 발급해 저장한다.
 - **요약 실패 `claudeNotFound`**: 터미널에서 `command -v claude` 로 경로를 확인해 설정 > 요약 > claude 경로에 입력한다 (또는 **자동 찾기**).

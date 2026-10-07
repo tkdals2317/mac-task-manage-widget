@@ -6,7 +6,7 @@ INSTALL_DIR ?= $(HOME)/Applications
 # 고정 서명 ID. 키체인에 "TaskWidget Dev" 코드 서명 인증서가 있으면 사용, 없으면 ad-hoc.
 SIGN_ID ?= $(shell security find-identity -p codesigning 2>/dev/null | grep -q '"TaskWidget Dev"' && echo "TaskWidget Dev" || echo -)
 
-.PHONY: build test app install run clean
+.PHONY: build test doctor app install run clean
 
 build:
 	swift build
@@ -14,7 +14,10 @@ build:
 test:
 	swift test
 
-app:
+doctor:
+	./scripts/doctor.sh
+
+app: doctor
 	swift build -c release
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
