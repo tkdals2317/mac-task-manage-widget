@@ -111,7 +111,7 @@ open ~/Applications/ATM.app
 </tr>
 <tr>
 <td><img src="docs/images/settings-claude.png" width="300" alt="Claude 연동 설정"><br><sub>Claude 연동: 활동 훅과 /worklog 스킬의 설치 상태.</sub></td>
-<td><img src="docs/images/settings-about.png" width="300" alt="정보"><br><sub>정보: 버전, 업데이트 확인, 개발자 후원 계좌.</sub></td>
+<td><img src="docs/images/settings-about.png" width="300" alt="정보"><br><sub>정보: 버전, 업데이트 확인, 개발자 후원(카카오페이 QR).</sub></td>
 </tr>
 </table>
 
