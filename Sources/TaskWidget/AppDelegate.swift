@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import TaskWidgetCore
 
@@ -12,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var scheduler: Scheduler!
     private var updateTask: Task<Void, Never>?
+    private var hotKey: GlobalHotKey!
+    private var todosSub: AnyCancellable?
+    private var badgeTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -38,7 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             // queue: .main 이라 항상 메인 스레드. Sendable 클로저에서 MainActor 프로퍼티 접근 경고를 피한다.
-            MainActor.assumeIsolated { self?.panel.applyAppearance() }
+            MainActor.assumeIsolated {
+                self?.panel.applyAppearance()
+                self?.syncHotKey()
+            }
         }
 
         settingsObserver = NotificationCenter.default.addObserver(
@@ -46,6 +53,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] note in
             let pane = note.object as? String
             MainActor.assumeIsolated { self?.showSettingsWindow(pane: pane) }
+        }
+
+        hotKey = GlobalHotKey { [weak self] in self?.hotKeyToggle() }
+        syncHotKey()
+
+        // 메뉴바 배지: 할 일이 바뀔 때 + 1분마다(날짜 넘어감)
+        todosSub = state.$todos.sink { [weak self] todos in self?.updateBadge(todos) }
+        badgeTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { if let self { self.updateBadge(self.state.todos) } }
         }
 
         scheduler = Scheduler(state: state)
@@ -84,6 +100,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         edit.addItem(withTitle: "모두 선택", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         main.addItem(editItem)
+
+        let viewItem = NSMenuItem()
+        let view = NSMenu(title: "보기")
+        view.addItem(withTitle: "새 할 일", action: #selector(newTodo), keyEquivalent: "n").target = self
+        view.addItem(.separator())
+        for (i, t) in allTabs.enumerated() {
+            let item = view.addItem(withTitle: "탭 \(i + 1) (\(t.title))", action: #selector(selectTab(_:)), keyEquivalent: "\(i + 1)")
+            item.target = self
+            item.tag = i
+        }
+        viewItem.submenu = view
+        main.addItem(viewItem)
 
         NSApp.mainMenu = main
     }
@@ -125,6 +153,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePanel() { panel.toggle() }
+
+    private func syncHotKey() {
+        if Settings.shared.globalHotKeyEnabled { hotKey.register() } else { hotKey.unregister() }
+    }
+
+    private func hotKeyToggle() {
+        panel.toggle()
+        if panel.isVisible { NSApp.activate(ignoringOtherApps: true) }
+    }
+
+    private func showPanel() {
+        if panel.isMiniaturized { panel.deminiaturize(nil) }
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func newTodo() {
+        showPanel()
+        UserDefaults.standard.set("tasks", forKey: SettingsKey.lastTab)
+        state.focusNewTodo = true
+    }
+
+    /// 켜진 탭 중 n번째로 전환. 범위 밖이면 무시.
+    @objc private func selectTab(_ sender: NSMenuItem) {
+        let enabled = TabConfig.enabled(from: Settings.shared.enabledTabs, all: allTabs.map(\.id))
+        guard enabled.indices.contains(sender.tag) else { return }
+        showPanel()
+        UserDefaults.standard.set(enabled[sender.tag], forKey: SettingsKey.lastTab)
+    }
+
+    private func updateBadge(_ todos: [Todo]) {
+        let n = DueBadge.urgentCount(todos: todos, now: Date())
+        guard let b = statusItem.button else { return }
+        b.title = n > 0 ? " \(n)" : ""
+        b.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        b.imagePosition = n > 0 ? .imageLeading : .imageOnly
+        statusItem.length = n > 0 ? NSStatusItem.variableLength : NSStatusItem.squareLength
+    }
 
     @objc private func generateNow() {
         panel.makeKeyAndOrderFront(nil)

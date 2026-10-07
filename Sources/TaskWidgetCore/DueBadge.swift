@@ -23,6 +23,15 @@ public enum DueBadge {
         }
     }
 
+    /// 안 끝난 할 일 중 마감이 오늘이거나 지난 개수 (메뉴바 배지용).
+    public static func urgentCount(todos: [Todo], now: Date, calendar: Calendar = .current) -> Int {
+        todos.filter { t in
+            guard !t.done else { return false }
+            let s = badge(due: t.dueDate, today: now, calendar: calendar).style
+            return s == .today || s == .overdue
+        }.count
+    }
+
     /// dueDate 오름차순, nil 은 뒤, 동률은 createdAt 오름차순. "yyyy-MM-dd" 는 문자열 비교로 충분.
     public static func sorted(_ todos: [Todo]) -> [Todo] {
         todos.sorted { a, b in
