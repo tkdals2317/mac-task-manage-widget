@@ -5,8 +5,8 @@ macOS 메뉴바 상주 플로팅 위젯. 할 일(마감일) + 내 Jira 미완료
 ## 설치
 
 ```bash
-make install            # /Applications/ATM.app (쓰기 불가면 ~/Applications)
-open ~/Applications/ATM.app   # 또는 /Applications
+make install            # ~/Applications/ATM.app
+open ~/Applications/ATM.app
 ```
 
 이전 이름(TaskWidget.app)에서 업그레이드하면 설정 > Claude 연동에서 활동 훅을 **재설치**(경로 변경)하고, 로그인 시 실행을 껐다 켠다.

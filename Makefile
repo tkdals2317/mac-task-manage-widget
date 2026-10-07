@@ -1,7 +1,7 @@
 APP := build/ATM.app
 BIN_DIR := $(shell swift build -c release --show-bin-path)
-# /Applications 쓰기 불가(비관리자 계정)면 ~/Applications. make install INSTALL_DIR=... 로 지정 가능.
-INSTALL_DIR ?= $(if $(shell test -w /Applications && echo y),/Applications,$(HOME)/Applications)
+# 항상 ~/Applications (관리자 권한이 일시적이어도 설치 위치·훅 경로가 바뀌지 않게). make install INSTALL_DIR=... 로 변경 가능.
+INSTALL_DIR ?= $(HOME)/Applications
 
 # 고정 서명 ID. 키체인에 "TaskWidget Dev" 코드 서명 인증서가 있으면 사용, 없으면 ad-hoc.
 SIGN_ID ?= $(shell security find-identity -p codesigning 2>/dev/null | grep -q '"TaskWidget Dev"' && echo "TaskWidget Dev" || echo -)
