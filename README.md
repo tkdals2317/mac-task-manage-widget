@@ -36,13 +36,7 @@ git clone https://github.com/tkdals2317/mac-task-manage-widget.git
 cd mac-task-manage-widget
 ```
 
-2. (권장) 서명 인증서를 만든다. 재설치할 때마다 키체인 허용 창이 다시 뜨는 걸 줄여준다. 인증서를 만들 때 로그인 암호를 물을 수 있다.
-
-```bash
-make cert
-```
-
-3. 설치하고 실행한다.
+2. 설치하고 실행한다.
 
 ```bash
 make install
@@ -71,14 +65,14 @@ git pull
 make install
 ```
 
-서명 인증서 없이 설치했다면 업데이트 후 키체인 창이 한 번 더 뜬다. 이때도 **항상 허용**.
+업데이트(재설치)할 때마다 처음 Jira를 불러올 때 키체인 창이 한 번 뜬다. **항상 허용**을 누르면 그 버전에서는 다시 묻지 않는다. 창이 떠 있어도 앱은 멈추지 않는다.
 
 ### 문제 해결
 
 - 패널이 안 보임: 메뉴바 아이콘 클릭 (Dock 아이콘 클릭도 가능).
 - Jira 401: 토큰을 다시 발급해 저장.
 - 요약이 "기록 없음": 활동 훅이 설치됐는지, 훅 설치 이후의 새 세션인지 확인.
-- 키체인 창이 반복해서 뜸: `make cert` 후 `make install`.
+- 키체인 창이 앱을 켤 때마다 뜸: "허용" 대신 **항상 허용**을 눌렀는지 확인. (재설치 직후 한 번 뜨는 건 정상 — Apple 개발자 팀 ID 없이 빌드한 앱이라 macOS가 새 버전마다 다시 묻는다.)
 - 삭제: 먼저 설정 > Claude 연동에서 훅·스킬을 제거한 뒤, 앱(`~/Applications/ATM.app`)을 휴지통으로, 데이터 폴더 `~/Library/Application Support/TaskWidget/` 를 삭제.
 
 ### 참고
