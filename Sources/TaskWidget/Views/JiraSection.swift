@@ -21,17 +21,17 @@ struct JiraSection: View {
                 .padding(.vertical, 8)
             } else {
                 let filtered = JiraVersions.filter(state.jiraIssues, filter)
+                let prefix = JiraVersions.commonPrefix(state.jiraIssues.flatMap(\.fixVersions))
                 let mode: JiraRow.Trailing = filter != .all ? .none : (groupByVersion ? .status : .version)
                 if groupByVersion {
                     ForEach(Array(JiraVersions.grouped(filtered).enumerated()), id: \.offset) { _, group in
-                        groupHeader("\(group.title ?? "버전 없음") · \(group.issues.count)",
-                                    color: group.title == nil ? .secondary : .purple)
-                        ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, trailing: mode == .version ? .status : mode) }
+                        groupHeader("\(group.title.map { JiraVersions.display($0, prefix: prefix) } ?? "버전 없음") · \(group.issues.count)")
+                        ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, prefix: prefix, trailing: mode == .version ? .status : mode) }
                     }
                 } else {
                     ForEach(JiraClient.grouped(filtered), id: \.status) { group in
-                        groupHeader("\(group.status) · \(group.issues.count)", color: .secondary)
-                        ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, trailing: mode) }
+                        groupHeader("\(group.status) · \(group.issues.count)")
+                        ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, prefix: prefix, trailing: mode) }
                     }
                 }
                 if filtered.isEmpty && filter != .all && state.jiraError == nil && state.jiraUpdatedAt != nil {
@@ -58,10 +58,10 @@ struct JiraSection: View {
         }
     }
 
-    private func groupHeader(_ text: String, color: Color) -> some View {
+    private func groupHeader(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 10.5 * scale, weight: .semibold))
-            .foregroundStyle(color)
+            .foregroundStyle(.secondary)
             .padding(.top, 8)
             .padding(.bottom, 2)
     }
@@ -89,6 +89,7 @@ struct JiraSection: View {
 struct JiraRow: View {
     let issue: JiraIssue
     let baseURL: String
+    var prefix = ""
     var trailing: Trailing = .none
     enum Trailing { case none, version, status }
     @Environment(\.fontScale) private var scale
@@ -110,12 +111,12 @@ struct JiraRow: View {
                 Spacer(minLength: 0)
                 switch trailing {
                 case .version:
-                    if let tag = JiraVersions.tag(for: issue) {
+                    if let tag = JiraVersions.tag(for: issue, prefix: prefix) {
                         Text(tag)
-                            .font(.system(size: 11 * scale))
-                            .foregroundStyle(.purple)
+                            .font(.system(size: 11 * scale, design: .monospaced))
+                            .foregroundStyle(Color.primary.opacity(0.78))
                             .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Capsule().fill(Color.purple.opacity(0.18)))
+                            .background(Capsule().fill(Color.primary.opacity(0.09)))
                     }
                 case .status:
                     Text(issue.status).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
@@ -169,9 +170,10 @@ struct JiraVersionMenu: View {
 
     @ViewBuilder private var menuItems: some View {
         let c = JiraVersions.counts(state.jiraIssues)
+        let prefix = JiraVersions.commonPrefix(c.versions.map(\.name))
         item("전체 (\(state.jiraIssues.count))", on: filter == .all, to: .all)
         ForEach(c.versions, id: \.name) { v in
-            item("\(v.name) (\(v.count))", on: filter == .named(v.name), to: .named(v.name))
+            item("\(JiraVersions.display(v.name, prefix: prefix)) (\(v.count))", on: filter == .named(v.name), to: .named(v.name))
         }
         item("버전 없음 (\(c.noneCount))", on: filter == .none, to: .none)
         Divider()
@@ -188,7 +190,7 @@ struct JiraVersionMenu: View {
         switch filter {
         case .all: label = groupBy ? "버전별" : "버전 전체"
         case .none: label = "버전 없음"
-        case .named(let n): label = n
+        case .named(let n): label = JiraVersions.display(n, prefix: JiraVersions.commonPrefix(state.jiraIssues.flatMap(\.fixVersions)))
         }
         return HStack(spacing: 3) {
             if filter == .all && groupBy { Image(systemName: "rectangle.split.1x2") }
@@ -196,9 +198,9 @@ struct JiraVersionMenu: View {
             if !selected { Image(systemName: "chevron.down").font(.system(size: 8 * scale)) }
         }
         .font(.system(size: 11 * scale))
-        .foregroundStyle(selected ? Color.purple : Color.secondary)
+        .foregroundStyle(selected ? Color.primary : Color.secondary)
         .padding(.horizontal, 7).padding(.vertical, 1)
-        .background(Capsule().fill(selected ? Color.purple.opacity(0.18) : .clear))
+        .background(Capsule().fill(selected ? Color.primary.opacity(0.14) : .clear))
         .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.5), lineWidth: selected ? 0 : 0.5))
     }
 }

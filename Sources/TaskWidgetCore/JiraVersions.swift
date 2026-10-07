@@ -57,8 +57,20 @@ public enum JiraVersions {
         return out
     }
 
-    public static func tag(for issue: JiraIssue) -> String? {
+    /// 모든 버전 이름이 같은 "XXX_" 접두어(첫 '_' 까지 포함)로 시작하면 그 접두어, 아니면 "". 이름이 하나뿐이어도 적용. 접두어를 빼면 빈 문자열이 되는 이름이 있으면 "".
+    public static func commonPrefix(_ names: [String]) -> String {
+        guard let first = names.first, let i = first.firstIndex(of: "_") else { return "" }
+        let prefix = String(first[...i])
+        return names.allSatisfy { $0.hasPrefix(prefix) && $0.count > prefix.count } ? prefix : ""
+    }
+
+    public static func display(_ name: String, prefix: String) -> String {
+        name.hasPrefix(prefix) ? String(name.dropFirst(prefix.count)) : name
+    }
+
+    public static func tag(for issue: JiraIssue, prefix: String = "") -> String? {
         guard let first = issue.fixVersions.first else { return nil }
-        return issue.fixVersions.count > 1 ? "\(first) +\(issue.fixVersions.count - 1)" : first
+        let shown = display(first, prefix: prefix)
+        return issue.fixVersions.count > 1 ? "\(shown) +\(issue.fixVersions.count - 1)" : shown
     }
 }

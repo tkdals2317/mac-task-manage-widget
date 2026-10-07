@@ -47,4 +47,20 @@ final class JiraVersionsTests: XCTestCase {
         XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0"])), "15.3.0")
         XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0", "15.2.1"])), "15.3.0 +1")
     }
+
+    func testCommonPrefix() {
+        XCTAssertEqual(JiraVersions.commonPrefix(["NMRS_v15.6.0", "NMRS_v15.5.a"]), "NMRS_")
+        XCTAssertEqual(JiraVersions.commonPrefix(["NMRS_v1"]), "NMRS_")
+        XCTAssertEqual(JiraVersions.commonPrefix(["NMRS_v1", "ATS_v1"]), "")
+        XCTAssertEqual(JiraVersions.commonPrefix(["15.9.2", "15.10.0"]), "")
+        XCTAssertEqual(JiraVersions.commonPrefix(["NMRS_"]), "")
+        XCTAssertEqual(JiraVersions.commonPrefix(["NMRS_", "NMRS_v1"]), "")
+        XCTAssertEqual(JiraVersions.commonPrefix([]), "")
+    }
+
+    func testDisplayAndTagWithPrefix() {
+        XCTAssertEqual(JiraVersions.display("NMRS_v1", prefix: "NMRS_"), "v1")
+        XCTAssertEqual(JiraVersions.display("ATS_v1", prefix: "NMRS_"), "ATS_v1")
+        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["NMRS_v15.6.0", "NMRS_v15.5.a"]), prefix: "NMRS_"), "v15.6.0 +1")
+    }
 }
