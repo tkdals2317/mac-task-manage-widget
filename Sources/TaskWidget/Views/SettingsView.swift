@@ -3,7 +3,7 @@ import ServiceManagement
 import TaskWidgetCore
 
 private enum Pane: String, CaseIterable, Identifiable {
-    case appearance, window, tags, jira, summary, claude
+    case appearance, window, tags, jira, summary, claude, about
     var id: Self { self }
 
     var title: String {
@@ -14,6 +14,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         case .jira: return "Jira"
         case .summary: return "요약"
         case .claude: return "Claude 연동"
+        case .about: return "정보"
         }
     }
 
@@ -25,6 +26,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         case .jira: return "ticket"
         case .summary: return "doc.text"
         case .claude: return "sparkles"
+        case .about: return "info.circle"
         }
     }
 }
@@ -54,7 +56,7 @@ struct SettingsView: View {
     @State private var confirmReset = false
     @State private var newTagId: String?
 
-    @State private var pane: Pane = .appearance
+    @State private var pane: Pane
     @State private var token = ""
     @State private var tokenStatus = ""
     @State private var hasToken = false
@@ -63,6 +65,10 @@ struct SettingsView: View {
     @State private var skillInstalled = false
     @State private var integrationError = ""
     @State private var todayActivityCount = 0
+
+    init(initialPane: String? = nil) {
+        _pane = State(initialValue: Pane(rawValue: initialPane ?? "") ?? .appearance)
+    }
 
     private var integration: ClaudeIntegration {
         ClaudeIntegration(executablePath: Bundle.main.executablePath ?? CommandLine.arguments[0])
@@ -110,6 +116,7 @@ struct SettingsView: View {
         case .jira: jiraPane
         case .summary: summaryPane
         case .claude: claudePane
+        case .about: aboutPane
         }
     }
 
@@ -295,6 +302,64 @@ struct SettingsView: View {
         Section("Claude CLI") {
             TextField("모델", text: $claudeModel, prompt: Text("비우면 CLI 기본"))
             TextField("claude 경로", text: $claudePath, prompt: Text("비우면 자동 탐색"))
+        }
+    }
+
+    private var updateLog: URL { Paths.logsDir.appendingPathComponent("update.log") }
+
+    @ViewBuilder
+    private var aboutPane: some View {
+        let info = state.buildInfo
+        Section {
+            LabeledContent("앱", value: "ATM (Ats Task Manager)")
+            LabeledContent("버전", value: info.displayVersion)
+            LabeledContent("빌드 날짜", value: info.buildDate)
+            if !info.sourceDir.isEmpty {
+                LabeledContent("소스 폴더") {
+                    Text(info.sourceDir).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    Button("Finder에서 열기") { NSWorkspace.shared.open(URL(fileURLWithPath: info.sourceDir)) }
+                }
+            }
+        }
+        Section("업데이트") {
+            if info.sourceDir.isEmpty {
+                Text("소스 폴더 정보가 없습니다. 저장소에서 make install 로 다시 설치하세요.")
+                    .foregroundStyle(.secondary)
+            } else {
+                LabeledContent("업데이트 확인") {
+                    if state.checkingUpdates { ProgressView().controlSize(.small) }
+                    if let st = state.updateStatus {
+                        Text(st.checkedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button("업데이트 확인") { Task { await state.checkForUpdates() } }
+                        .disabled(state.checkingUpdates || state.updating)
+                }
+                if let st = state.updateStatus {
+                    if st.behind == 0 {
+                        Text("최신 버전입니다").foregroundStyle(.secondary)
+                    } else {
+                        Text("새 커밋 \(st.behind)개")
+                        Text(st.newCommits.joined(separator: "\n"))
+                            .font(.system(size: 11, design: .monospaced))
+                            .textSelection(.enabled)
+                        if state.updating {
+                            Text("업데이트 중… 끝나면 앱이 다시 열립니다").foregroundStyle(.secondary)
+                        }
+                        Button("업데이트") { Task { await state.startUpdate() } }
+                            .disabled(state.updating)
+                    }
+                }
+            }
+            if let err = state.updateError {
+                HStack {
+                    Text(err).foregroundStyle(.red).font(.caption)
+                    Spacer()
+                    if FileManager.default.fileExists(atPath: updateLog.path) {
+                        Button("로그 열기") { NSWorkspace.shared.open(updateLog) }
+                    }
+                }
+            }
         }
     }
 

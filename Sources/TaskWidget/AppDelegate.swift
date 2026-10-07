@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: Any?
     private var settingsWindow: NSWindow?
     private var scheduler: Scheduler!
+    private var updateTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -36,12 +37,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .openSettings, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.showSettingsWindow() }
+        ) { [weak self] note in
+            let pane = note.object as? String
+            MainActor.assumeIsolated { self?.showSettingsWindow(pane: pane) }
         }
 
         scheduler = Scheduler(state: state)
         scheduler.start()
+
+        // 시작 10초 후 한 번, 이후 6시간마다 업데이트 확인 (소스 폴더 정보가 없으면 checkForUpdates 가 무시)
+        updateTask = Task { [state] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            while !Task.isCancelled {
+                await state.checkForUpdates()
+                try? await Task.sleep(nanoseconds: 6 * 3600 * 1_000_000_000)
+            }
+        }
 
         panel.makeKeyAndOrderFront(nil)
     }
@@ -118,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() { showSettingsWindow() }
 
     /// 패널에 붙은 시트는 key 가 못 돼 컨트롤이 비활성 색(회색 토글)으로 그려진다. 독립 창으로 띄운다.
-    private func showSettingsWindow() {
+    private func showSettingsWindow(pane: String? = nil) {
         let window = settingsWindow ?? {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 480),
                              styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
@@ -131,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return w
         }()
         // 열 때마다 새로 그려 훅/스킬/토큰 상태를 다시 읽는다.
-        window.contentViewController = NSHostingController(rootView: SettingsView().environmentObject(state))
+        window.contentViewController = NSHostingController(rootView: SettingsView(initialPane: pane).environmentObject(state))
         // 패널이 '항상 위'면 일반 레벨 창은 그 밑에 깔린다.
         window.level = Settings.shared.alwaysOnTop ? .floating : .normal
         NSApp.activate(ignoringOtherApps: true)

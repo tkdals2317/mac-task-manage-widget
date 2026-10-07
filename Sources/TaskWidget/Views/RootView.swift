@@ -29,6 +29,14 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             HStack {
+                if let n = state.updateStatus?.behind, n > 0 {
+                    Button("업데이트 있음 (\(n))") {
+                        NotificationCenter.default.post(name: .openSettings, object: "about")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11 * fontScale))
+                    .foregroundStyle(Color.accentColor)
+                }
                 Spacer()
                 Button {
                     NotificationCenter.default.post(name: .openSettings, object: nil)

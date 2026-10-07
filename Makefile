@@ -21,6 +21,16 @@ app:
 	cp $(BIN_DIR)/TaskWidget $(APP)/Contents/MacOS/TaskWidget
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	cp Resources/AppIcon.icns $(APP)/Contents/Resources/AppIcon.icns
+	@# 빌드 정보를 번들에 굽는다 (git 이 없으면 unknown, 소스 폴더는 비움 → 앱의 업데이트 기능 비활성)
+	@P=$(APP)/Contents/Info.plist; \
+	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+	  N=$$(git rev-list --count HEAD); C=$$(git rev-parse --short HEAD); SRC="$(CURDIR)"; \
+	  if [ -n "$$(git status --porcelain)" ]; then D=true; else D=false; fi; \
+	else N=unknown; C=unknown; SRC=""; D=false; fi; \
+	V=$$N; [ "$$N" = unknown ] && V=0; \
+	set_key() { /usr/libexec/PlistBuddy -c "Delete :$$1" $$P 2>/dev/null; /usr/libexec/PlistBuddy -c "Add :$$1 string $$2" $$P; }; \
+	set_key ATMBuildNumber "$$N"; set_key ATMCommit "$$C"; set_key ATMBuildDate "$$(date '+%Y-%m-%d %H:%M')"; \
+	set_key ATMSourceDir "$$SRC"; set_key ATMDirty "$$D"; set_key CFBundleVersion "$$V"
 	codesign --force --timestamp=none --sign "$(SIGN_ID)" $(APP)
 	@echo "signed with: $(SIGN_ID)"
 

@@ -16,6 +16,12 @@ final class AppState: ObservableObject {
     @Published var summaryGenerating = false
     @Published var summaryError: String?
     @Published var tagConfig: TagConfig
+    @Published var updateStatus: UpdateStatus?
+    @Published var updateError: String?
+    @Published var updating = false
+    @Published var checkingUpdates = false
+    let buildInfo = BuildInfo(infoDictionary: Bundle.main.infoDictionary ?? [:])
+    private var updateErrorFromCheck = false
     let todoStore: TodoStore
     let tagStore = TagStore()
 
@@ -33,6 +39,66 @@ final class AppState: ObservableObject {
         self.todos = todoStore.load()
         self.tagConfig = tagStore.load()
         enforceSingleSelect()
+        consumeUpdateFailure()
+    }
+
+    // MARK: - Update
+
+    private var updateLog: URL { Paths.logsDir.appendingPathComponent("update.log") }
+
+    /// 직전 업데이트 스크립트가 실패했다면(로그 마지막 줄) 한 번 보여주고 로그를 보관용으로 옮긴다.
+    private func consumeUpdateFailure() {
+        guard let text = try? String(contentsOf: updateLog, encoding: .utf8),
+              let last = text.split(separator: "\n").last, last.hasPrefix("UPDATE_FAILED") else { return }
+        updateError = "직전 업데이트 실패: " + last.dropFirst("UPDATE_FAILED:".count).trimmingCharacters(in: .whitespaces)
+        let f = DateFormatter(); f.dateFormat = "yyyyMMdd-HHmmss"
+        try? FileManager.default.moveItem(at: updateLog,
+            to: Paths.logsDir.appendingPathComponent("update-\(f.string(from: Date())).log"))
+    }
+
+    func checkForUpdates() async {
+        let dir = buildInfo.sourceDir
+        guard !dir.isEmpty, !checkingUpdates, !updating else { return }
+        checkingUpdates = true
+        defer { checkingUpdates = false }
+        let r = await Task.detached { Result { try Updater(sourceDir: dir).check() } }.value
+        switch r {
+        case .success(let st):
+            updateStatus = st
+            if updateErrorFromCheck { updateError = nil; updateErrorFromCheck = false }
+        case .failure(let e):
+            updateError = (e as? UpdateError)?.userMessage ?? e.localizedDescription
+            updateErrorFromCheck = true
+        }
+    }
+
+    func startUpdate() async {
+        let dir = buildInfo.sourceDir
+        guard !dir.isEmpty, !updating else { return }
+        let dirty = await Task.detached { Result { try Updater(sourceDir: dir).hasLocalChanges() } }.value
+        switch dirty {
+        case .success(true): updateError = UpdateError.localChanges.userMessage; updateErrorFromCheck = false; return
+        case .failure(let e):
+            updateError = (e as? UpdateError)?.userMessage ?? e.localizedDescription; updateErrorFromCheck = false; return
+        case .success(false): break
+        }
+        let script = Paths.logsDir.appendingPathComponent("update.sh")
+        do {
+            try Paths.ensureDirectories()
+            try Updater.updateScript(sourceDir: dir, logPath: updateLog.path)
+                .write(to: script, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+            // 앱이 make install 에 죽어도 스크립트가 살아남도록 sh 가 nohup 으로 백그라운드 실행하고 바로 돌아온다.
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = ["-c", "nohup /bin/sh \(Updater.shellQuote(script.path)) >/dev/null 2>&1 &"]
+            try p.run()
+            updateError = nil
+            updating = true
+        } catch {
+            updateError = "업데이트 실패: \(error.localizedDescription)"
+            updateErrorFromCheck = false
+        }
     }
 
     // MARK: - Todos
