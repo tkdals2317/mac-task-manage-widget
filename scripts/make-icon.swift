@@ -131,27 +131,16 @@ func orangeSparkle(_ g: CGContext, _ c: CGPoint, _ R: CGFloat, _ s: CGFloat, _ s
     sparkle(g, c, R, s, small: small, inner: rgb(0xFDBA74), outer: rgb(0xF97316), glow: rgb(0xF97316, 0.55))
 }
 
-/// 컨셉 B: 업무 영수증 (살짝 기울어진 영수증 + 체크 항목 + 주황 반짝이)
+/// 컨셉 D: ATM 모노그램 (흰 워드마크 + 초록 체크 밑줄 + 주황 반짝이)
 func content(_ g: CGContext, _ s: CGFloat, _ small: Bool) {
-    rotated(g, 512, 512, -4) {
-        let rp = receipt(-220, 220, -350, 350, tornTop: true, tornBot: true, tw: 28, th: 16)
-        shadowed(g, s, small: small, dy: 16, blur: 36, rgb(0, 0.40)) { g.setFillColor(rgb(0xFFFFFF)); g.addPath(rp); g.fillPath() }
-        drawText(g, "ATM", rounded(70, .heavy), rgb(0x111827), at: CGPoint(x: 0, y: -255))
-        if !small { dashed(g, -180, 180, -190, rgb(0xD1D5DB)) }
-        for (i, cy) in [CGFloat(-120), -30, 60].enumerated() {
-            if i < 2 { check(g, CGPoint(x: -146, y: cy), 44, 12, rgb(0x22C55E)) }
-            else { g.setStrokeColor(rgb(0xD1D5DB)); g.setLineWidth(8); g.strokeEllipse(in: CGRect(x: -166, y: cy - 20, width: 40, height: 40)) }
-            bar(g, -100, cy, i == 1 ? 210 : 270, 18, rgb(0xCBD5E1))
-        }
-        if !small { dashed(g, -180, 180, 130, rgb(0xD1D5DB)) }
-        bar(g, -180, 200, 264, 22, rgb(0x111827))
-        bar(g, 110, 200, 70, 22, rgb(0x9CA3AF))
-        if !small {
-            g.setFillColor(rgb(0xCBD5E1))
-            for i in 0..<15 { g.fill(CGRect(x: -150 + CGFloat(i) * 20, y: 255, width: i % 3 == 0 ? 4 : 8, height: 55)) }
-        }
-    }
-    orangeSparkle(g, CGPoint(x: 700, y: 230), 80, s, small)  // 스쿼클 안쪽, 영수증 우상단 모서리와 겹침
+    let wm = rounded(260, .black)
+    drawText(g, "ATM", wm, rgb(0xFFFFFF), kern: -4, at: CGPoint(x: 512, y: 470))
+    g.setStrokeColor(rgb(0x22C55E)); g.setLineWidth(small ? 34 : 26); g.setLineCap(.round); g.setLineJoin(.round)
+    g.move(to: CGPoint(x: 300, y: 700)); g.addLine(to: CGPoint(x: 640, y: 700))
+    g.addLine(to: CGPoint(x: 690, y: 745)); g.addLine(to: CGPoint(x: 780, y: 640))
+    g.strokePath()
+    sparkle(g, CGPoint(x: 800, y: 330), small ? 90 : 70, s, small: small,
+            inner: rgb(0xFDBA74), outer: rgb(0xF97316), glow: rgb(0xFDBA74, 0.45))
 }
 
 func draw(_ g: CGContext, px: Int) {
@@ -159,11 +148,13 @@ func draw(_ g: CGContext, px: Int) {
     let small = px <= 32
     g.translateBy(x: 0, y: CGFloat(px)); g.scaleBy(x: s, y: -s)
     let body = rr(CGRect(x: 100, y: 100, width: 824, height: 824), 185)
-    let stops = [(CGFloat(0), rgb(0x4338CA)), (1, rgb(0x7C3AED))]
+    let stops = [(CGFloat(0), rgb(0x374151)), (1, rgb(0x111827))]
     shadowed(g, s, small: small, dy: 12, blur: 28, rgb(0, 0.30)) { g.setFillColor(stops[0].1); g.addPath(body); g.fillPath() }
     g.saveGState()
     g.addPath(body); g.clip()
-    g.drawLinearGradient(grad(stops), start: CGPoint(x: 100, y: 100), end: CGPoint(x: 924, y: 924), options: [])
+    g.drawLinearGradient(grad(stops), start: CGPoint(x: 0, y: 100), end: CGPoint(x: 0, y: 924), options: [])
+    g.drawLinearGradient(grad([(0, rgb(0xFFFFFF, 0.08)), (1, rgb(0xFFFFFF, 0))]),
+                         start: CGPoint(x: 0, y: 100), end: CGPoint(x: 0, y: 100 + 824 * 0.4), options: [])
     content(g, s, small)
     g.restoreGState()
 }
