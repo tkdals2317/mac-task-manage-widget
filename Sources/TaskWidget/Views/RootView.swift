@@ -14,11 +14,11 @@ struct RootView: View {
         VStack(spacing: 0) {
             if enabled.count > 1 {
                 HStack(spacing: 8) {
-                    Picker("", selection: Binding(get: { current }, set: { tab = $0 })) {
-                        ForEach(allTabs.filter { enabled.contains($0.id) }, id: \.id) { Text($0.title).tag($0.id) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                    TabSegmentedControl(
+                        items: allTabs.filter { enabled.contains($0.id) }.map { ($0.id, $0.title) },
+                        selection: Binding(get: { current }, set: { tab = $0 })
+                    )
+                    .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 10)   // 아래 목록과 같은 좌우 여백
                 .padding(.top, 8)
