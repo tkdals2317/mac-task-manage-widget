@@ -19,8 +19,6 @@ public enum SettingsKey {
     public static let lastTab = "lastTab"
     public static let todoSectionCollapsed = "todoSectionCollapsed"
     public static let jiraSectionCollapsed = "jiraSectionCollapsed"
-    public static let panelCollapsed = "panelCollapsed"
-    public static let panelExpandedHeight = "panelExpandedHeight"
 }
 
 public final class Settings {
@@ -101,13 +99,5 @@ public final class Settings {
     public var lastTab: String {
         get { string(SettingsKey.lastTab, "tasks") }
         set { d.set(newValue, forKey: SettingsKey.lastTab) }
-    }
-    public var panelCollapsed: Bool {
-        get { bool(SettingsKey.panelCollapsed, false) }
-        set { d.set(newValue, forKey: SettingsKey.panelCollapsed) }
-    }
-    public var panelExpandedHeight: Double {
-        get { double(SettingsKey.panelExpandedHeight, 520) }
-        set { d.set(newValue, forKey: SettingsKey.panelExpandedHeight) }
     }
 }

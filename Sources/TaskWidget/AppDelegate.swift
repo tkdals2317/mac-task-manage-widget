@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = AppState()
     private var defaultsObserver: Any?
     private var settingsObserver: Any?
-    private var collapseObserver: Any?
     private var settingsWindow: NSWindow?
     private var scheduler: Scheduler!
 
@@ -18,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? Paths.ensureDirectories()
 
         let host = NSHostingView(rootView: RootView().environmentObject(state))
-        // 패널 크기는 FloatingPanel 이 직접 관리 (minSize/maxSize, 접기). SwiftUI 콘텐츠 크기를 창 제약으로 올리지 않는다.
+        // 패널 크기는 FloatingPanel 이 직접 관리 (minSize/maxSize). SwiftUI 콘텐츠 크기를 창 제약으로 올리지 않는다.
         host.sizingOptions = []
         panel = FloatingPanel(content: host)
 
@@ -39,16 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .openSettings, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.showSettingsWindow() }
-        }
-
-        collapseObserver = NotificationCenter.default.addObserver(
-            forName: .togglePanelCollapse, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                let c = !Settings.shared.panelCollapsed
-                Settings.shared.panelCollapsed = c
-                self?.panel.setCollapsed(c)
-            }
         }
 
         scheduler = Scheduler(state: state)
