@@ -29,14 +29,6 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             HStack {
-                if let n = state.updateStatus?.behind, n > 0 {
-                    Button("업데이트 있음 (\(n))") {
-                        NotificationCenter.default.post(name: .openSettings, object: "about")
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11 * fontScale))
-                    .foregroundStyle(Color.accentColor)
-                }
                 Spacer()
                 Button {
                     NotificationCenter.default.post(name: .openSettings, object: nil)
@@ -63,5 +55,29 @@ struct RootView: View {
         case "summary": SummaryView()
         default: TasksView()
         }
+    }
+}
+
+/// 패널 타이틀바 오른쪽(신호등 버튼 줄)에 붙는 업데이트 버튼. 새 커밋이 있을 때만 보인다.
+/// 하단 상태줄은 눈에 잘 안 띄고, 별도 줄을 만들면 아래 내용이 밀려서 타이틀바 빈 자리를 쓴다.
+struct UpdateTitlebarButton: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0)
+            if let n = state.updateStatus?.behind, n > 0 {
+                // 기본 버튼은 흰색이라 눈에 안 띈다. 작은 크기는 유지하고 강조 스타일(시스템 강조색)만 쓴다.
+                Button(state.updating ? "업데이트 중…" : "업데이트") { Task { await state.startUpdate() } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(state.updating)
+                    .help("새 커밋 \(n)개 — 받아서 다시 설치합니다")
+            }
+        }
+        // 패널 모서리에 붙지 않게 아래 탭 바와 같은 좌우 여백(10)을 주고, 신호등 버튼 높이에 맞춰 살짝 내린다.
+        .padding(.trailing, 10)
+        .padding(.top, 6)
+        .frame(maxHeight: .infinity)
     }
 }
