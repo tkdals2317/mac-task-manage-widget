@@ -45,6 +45,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.summaryNotify) private var summaryNotify = true
     @AppStorage(SettingsKey.claudeModel) private var claudeModel = ""
     @AppStorage(SettingsKey.claudePath) private var claudePath = ""
+    @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
 
     @State private var pane: Pane = .appearance
     @State private var token = ""
@@ -136,6 +137,21 @@ struct SettingsView: View {
         Section("창") {
             Toggle("항상 위", isOn: $alwaysOnTop)
             Toggle("모든 Spaces에 표시", isOn: $allSpaces)
+        }
+        Section("탭") {
+            let ids = allTabs.map(\.id)
+            let enabled = TabConfig.enabled(from: enabledTabs, all: ids)
+            ForEach(allTabs, id: \.id) { t in
+                let isOn = enabled.contains(t.id)
+                Toggle(t.title, isOn: Binding(
+                    get: { isOn },
+                    set: { _ in enabledTabs = TabConfig.toggled(t.id, in: enabledTabs, all: ids) }
+                ))
+                .disabled(enabled.count == 1 && isOn)
+            }
+            if enabled.count == 1 {
+                Text("최소 1개는 켜져 있어야 합니다").font(.caption).foregroundStyle(.secondary)
+            }
         }
         Section("일반") {
             Toggle("로그인 시 실행", isOn: $loginAtStart)

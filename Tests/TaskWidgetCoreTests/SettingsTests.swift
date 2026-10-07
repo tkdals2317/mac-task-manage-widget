@@ -31,6 +31,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(s.claudeModel, "")
         XCTAssertEqual(s.claudePath, "")
         XCTAssertEqual(s.lastTab, "tasks")
+        XCTAssertEqual(s.enabledTabs, "tasks,summary")
     }
 
     func testSetAndGet() {

@@ -17,6 +17,7 @@ public enum SettingsKey {
     public static let claudeModel = "claudeModel"
     public static let claudePath = "claudePath"
     public static let lastTab = "lastTab"
+    public static let enabledTabs = "enabledTabs"
     public static let todoSectionCollapsed = "todoSectionCollapsed"
     public static let jiraSectionCollapsed = "jiraSectionCollapsed"
 }
@@ -99,5 +100,9 @@ public final class Settings {
     public var lastTab: String {
         get { string(SettingsKey.lastTab, "tasks") }
         set { d.set(newValue, forKey: SettingsKey.lastTab) }
+    }
+    public var enabledTabs: String {
+        get { string(SettingsKey.enabledTabs, "tasks,summary") }
+        set { d.set(newValue, forKey: SettingsKey.enabledTabs) }
     }
 }
