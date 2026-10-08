@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TaskWidgetCore
 
@@ -45,6 +46,7 @@ struct TeleportView: View {
             HStack {
                 if let m = tp.message {
                     Text(m).foregroundStyle(.red).lineLimit(2).help(m)
+                    Button("로그") { NSWorkspace.shared.open(TeleportManager.loginLogURL) }.controlSize(.mini)
                 }
                 Spacer()
                 if let d = tp.lastLogin { Text("마지막 로그인 \(Self.hm.string(from: d))").foregroundStyle(.secondary) }
@@ -115,6 +117,7 @@ private struct TunnelRow: View {
                     .lineLimit(1).help(label(st))
             }
             Spacer()
+            if case .failed = st { Button("로그") { NSWorkspace.shared.open(tp.logURL(for: tunnel)) }.controlSize(.mini) }
             Toggle("", isOn: Binding(
                 get: { st == .connected || st == .connecting },
                 set: { on in Task { if on { await tp.connect(tunnel) } else { tp.disconnect(tunnel) } } }

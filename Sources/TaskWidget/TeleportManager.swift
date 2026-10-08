@@ -11,7 +11,17 @@ enum TunnelState: Equatable {
 @MainActor
 final class TeleportManager: ObservableObject {
     @Published private(set) var config: TeleportConfig
-    @Published private(set) var states: [String: TunnelState] = [:]
+    @Published private(set) var states: [String: TunnelState] = [:] {
+        didSet {
+            for (n, st) in states where oldValue[n] != st {
+                switch st {
+                case .failed(let m): DiagLog.append("teleport tunnel \(n) failed: \(m)")
+                case .portInUse: DiagLog.append("teleport tunnel \(n) portInUse")
+                default: break
+                }
+            }
+        }
+    }
     @Published private(set) var validUntil: Date?
     @Published private(set) var busy: String?          // "로그인 중…" 등
     @Published private(set) var message: String?       // 마지막 오류/안내
@@ -52,6 +62,15 @@ final class TeleportManager: ObservableObject {
 
     func state(_ t: TeleportTunnel) -> TunnelState { states[t.name] ?? .disconnected }
 
+    static var loginLogURL: URL { Paths.logsDir.appendingPathComponent("teleport-login.log") }
+
+    /// 실패한 터널의 로그: 로그인 실패면 로그인 기록, 아니면 tsh proxy 로그.
+    func logURL(for t: TeleportTunnel) -> URL {
+        if case .failed(let m) = state(t), m == message { return Self.loginLogURL }
+        let u = Paths.logsDir.appendingPathComponent("teleport-\(t.name).log")
+        return FileManager.default.fileExists(atPath: u.path) ? u : Self.loginLogURL
+    }
+
     func locateTsh() {
         tshPath = TeleportTsh.locate(configured: Settings.shared.tshPath)
     }
@@ -90,16 +109,16 @@ final class TeleportManager: ObservableObject {
 
     /// 저장된 비밀번호/OTP 키로 로그인. 이미 유효하면 아무것도 안 한다.
     @discardableResult
-    func ensureLoggedIn(force: Bool = false) async -> Bool {
+    func ensureLoggedIn(force: Bool = false, kind: String = "connect") async -> Bool {
         if let t = loginTask { return await t.value }
-        let t = Task { await self.performLogin(force: force) }
+        let t = Task { await self.performLogin(force: force, kind: kind) }
         loginTask = t
         let ok = await t.value
         loginTask = nil
         return ok
     }
 
-    private func performLogin(force: Bool) async -> Bool {
+    private func performLogin(force: Bool, kind: String) async -> Bool {
         guard let tsh = tshPath else { message = "tsh 가 설치되어 있지 않아요"; return false }
         if !force {
             await refreshStatus()
@@ -113,9 +132,10 @@ final class TeleportManager: ObservableObject {
         let login = TeleportLogin(tsh: tsh, proxy: config.proxy, user: config.user)
         let last = Self.lastOTPCounter
         let used = OTPBox()
-        let res = await Task.detached {
-            login.run(password: sec.password, otp: { let r = totp.freshCode(after: last); used.counter = r.counter; return r.code })
+        let (res, report) = await Task.detached {
+            login.runReported(password: sec.password, otp: { let r = totp.freshCode(after: last); used.counter = r.counter; return r.code })
         }.value
+        TeleportLoginLog.append(kind: kind, user: config.user, proxy: config.proxy, tsh: tsh, report: report, result: res)
         if let c = used.counter { Self.lastOTPCounter = c }
         switch res {
         case .success:
@@ -240,12 +260,17 @@ final class TeleportManager: ObservableObject {
                     failures: failures, loggedIn: loggedIn)
         }
         let p = plan()
-        if p.relogin, !(await ensureLoggedIn(force: true)) {
-            for n in names { fail(n) }
-            return
+        if p.relogin {
+            DiagLog.append("teleport watchdog: relogin (wanted=\(names.joined(separator: ",")))")
+            if !(await ensureLoggedIn(force: true, kind: "watchdog")) {
+                DiagLog.append("teleport watchdog: relogin failed: \(message ?? "?")")
+                for n in names { fail(n) }
+                return
+            }
         }
         // 재로그인했으면 plan 이 이미 모든 켜 둔 터널을 재시작 대상으로 잡았다.
         p.giveUp.forEach { giveUp($0) }
+        if !p.restart.isEmpty { DiagLog.append("teleport watchdog: restart \(p.restart.joined(separator: ","))") }
         for n in p.restart {
             guard wanted.contains(n), let t = config.tunnels.first(where: { $0.name == n }) else { continue }
             if procs[n] != nil {
@@ -263,6 +288,7 @@ final class TeleportManager: ObservableObject {
     }
 
     private func giveUp(_ n: String) {
+        DiagLog.append("teleport watchdog: give up \(n) after \(failures[n] ?? 0) failures")
         wanted.remove(n)
         stop(n)
         states[n] = .failed("자동 재연결 \(TeleportWatchdogPolicy.maxFailures)회 실패 · 토글로 다시 시도")

@@ -58,6 +58,7 @@ final class AppState: ObservableObject {
         guard let text = try? String(contentsOf: updateLog, encoding: .utf8),
               let last = text.split(separator: "\n").last, last.hasPrefix("UPDATE_FAILED") else { return }
         updateError = "직전 업데이트 실패: " + last.dropFirst("UPDATE_FAILED:".count).trimmingCharacters(in: .whitespaces)
+        DiagLog.append(updateError ?? "")
         let f = DateFormatter(); f.dateFormat = "yyyyMMdd-HHmmss"
         try? FileManager.default.moveItem(at: updateLog,
             to: Paths.logsDir.appendingPathComponent("update-\(f.string(from: Date())).log"))
@@ -76,6 +77,7 @@ final class AppState: ObservableObject {
         case .failure(let e):
             updateError = (e as? UpdateError)?.userMessage ?? e.localizedDescription
             updateErrorFromCheck = true
+            DiagLog.append("update check failed: \(updateError ?? "")")
         }
     }
 
@@ -105,6 +107,7 @@ final class AppState: ObservableObject {
         } catch {
             updateError = "업데이트 실패: \(error.localizedDescription)"
             updateErrorFromCheck = false
+            DiagLog.append("update start failed: \(error.localizedDescription)")
         }
     }
 
@@ -321,10 +324,12 @@ final class AppState: ObservableObject {
             if Task.isCancelled { return }
             if case .unauthorized = e { cachedToken = nil }
             jiraError = e.userMessage
+            DiagLog.append("jira refresh error: \(e.userMessage)")
         } catch {
             // 갱신 주기 변경/뷰 사라짐으로 .task 가 취소된 경우는 오류가 아님
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             jiraError = error.localizedDescription
+            DiagLog.append("jira refresh error: \(error.localizedDescription)")
         }
     }
 
@@ -350,8 +355,10 @@ final class AppState: ObservableObject {
             return true
         } catch let e as SummaryError {
             summaryError = e.userMessage
+            DiagLog.append("summary error: \(e.userMessage)")
         } catch {
             summaryError = error.localizedDescription
+            DiagLog.append("summary error: \(error.localizedDescription)")
         }
         return false
     }
@@ -374,8 +381,10 @@ final class AppState: ObservableObject {
             return true
         } catch let e as SummaryError {
             summaryError = e.userMessage
+            DiagLog.append("summary error: \(e.userMessage)")
         } catch {
             summaryError = error.localizedDescription
+            DiagLog.append("summary error: \(error.localizedDescription)")
         }
         return false
     }

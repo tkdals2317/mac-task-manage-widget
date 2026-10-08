@@ -117,6 +117,25 @@ final class TeleportLoginTests: XCTestCase {
         l.extraEnvironment["TELEPORT_HOME"] = "/tmp/atm-verify"
         XCTAssertNil(msg(l.run(password: "p", otp: { "1" })))
     }
+    /// 최신 tsh 처럼 배경색·커서 위치를 묻고 답을 읽은 뒤에 프롬프트를 띄우는 경우
+    func testAnswersTerminalQueriesBeforePrompts() throws {
+        let script = """
+        #!/bin/bash
+        printf '\\033]11;?\\033\\\\'; IFS= read -rs -d '\\' bg
+        printf '\\033[6n'; IFS= read -rs -d R pos
+        echo "Press [ENTER] to continue"; read -s x
+        printf '\\033]11;?\\033\\\\'; IFS= read -rs -d '\\' bg2
+        printf '\\033[6n'; IFS= read -rs -d R pos2
+        printf "Enter password for Teleport user tester:"; read -s pw; echo
+        [ "$pw" = "secret-pw" ] || { echo "ERROR: invalid credentials"; exit 1; }
+        printf "Enter your OTP token:"; read -s otp; echo
+        [ "$otp" = "\(code)" ] || { echo "ERROR: invalid credentials"; exit 1; }
+        """
+        let f = dir.appendingPathComponent("fake-query-tsh.sh")
+        try script.write(to: f, atomically: true, encoding: .utf8)
+        let l = TeleportLogin(executable: "/bin/bash", arguments: [f.path], timeout: 10)
+        XCTAssertNil(msg(l.run(password: "secret-pw", otp: { self.code })))
+    }
     func testMissingExecutable() {
         guard case .failure = TeleportLogin(executable: "/nope/tsh", arguments: []).run(password: "p", otp: { "1" }) else { return XCTFail() }
     }

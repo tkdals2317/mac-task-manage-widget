@@ -36,6 +36,13 @@ public struct TeleportTunnel: Codable, Equatable, Identifiable {
 }
 
 public struct TeleportConfig: Codable, Equatable {
+    /// 아이디·프록시에서 공백, 줄바꿈, 폭 없는 공백 같은 보이지 않는 문자를 지운다 (복사해 붙이면 섞여 들어온다).
+    public static func cleanID(_ s: String) -> String {
+        String(String.UnicodeScalarView(s.unicodeScalars.filter { u in
+            !(u.properties.isWhitespace || u.properties.generalCategory == .format || u.properties.generalCategory == .control)
+        }))
+    }
+
     public static let defaultProxy = ""
     public static let basePort = 4306
 

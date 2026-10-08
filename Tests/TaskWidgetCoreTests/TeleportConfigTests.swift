@@ -39,3 +39,11 @@ final class TeleportConfigTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(TeleportSecrets.self, from: JSONEncoder().encode(s)), s)
     }
 }
+
+final class TeleportCleanIDTests: XCTestCase {
+    func testRemovesInvisibleCharacters() {
+        XCTAssertEqual(TeleportConfig.cleanID(" hsw0618\u{200B}\n"), "hsw0618")
+        XCTAssertEqual(TeleportConfig.cleanID("\u{FEFF}lsm0506\u{00A0}"), "lsm0506")
+        XCTAssertEqual(TeleportConfig.cleanID("teleport.example.com\t"), "teleport.example.com")
+    }
+}
