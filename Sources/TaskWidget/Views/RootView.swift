@@ -69,11 +69,12 @@ struct UpdateTitlebarButton: View {
             Spacer(minLength: 0)
             if let n = state.updateStatus?.behind, n > 0 {
                 // 기본 버튼은 흰색이라 눈에 안 띈다. 작은 크기는 유지하고 강조 스타일(시스템 강조색)만 쓴다.
-                Button(state.updating ? "업데이트 중…" : "업데이트") { Task { await state.startUpdate() } }
+                Button(state.updating ? "업데이트 중…" : (state.updateStatus?.latestVersion.map { "새 버전 \($0)" } ?? "업데이트")) { Task { await state.startUpdate() } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(state.updating)
-                    .help("새 커밋 \(n)개 — 받아서 다시 설치합니다")
+                    .help(state.updateStatus?.notes.first.map { "\($0.body.components(separatedBy: "\n").prefix(5).joined(separator: "\n"))\n— 받아서 다시 설치합니다" }
+                          ?? "새 커밋 \(n)개 — 받아서 다시 설치합니다")
             }
         }
         // 패널 모서리에 붙지 않게 아래 탭 바와 같은 좌우 여백(10)을 주고, 신호등 버튼 높이에 맞춰 살짝 내린다.

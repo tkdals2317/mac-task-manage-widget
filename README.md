@@ -217,4 +217,5 @@ make run       # build/ATM.app 실행
 
 - 앱 아이콘: `swift scripts/make-icon.swift` 로 다시 생성한다 (`Resources/AppIcon.icns`).
 - 설계 문서: `docs/superpowers/specs/2026-10-02-task-widget-design.md`
+- 릴리스: `VERSION` 을 올리고(기능 추가 = minor, 버그 수정 = patch) `CHANGELOG.md` 맨 위에 `## <버전> — <날짜>` 섹션을 추가한다 (사용자 입장의 짧은 한글 항목). 같은 PR에 넣는다. 머지 후 원하면 `git tag v<버전> && git push origin v<버전>`.
 - 릴리스 전 확인 목록: [docs/manual-test-checklist.md](docs/manual-test-checklist.md)

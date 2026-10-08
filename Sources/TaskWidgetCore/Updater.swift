@@ -22,6 +22,8 @@ public struct BuildInfo: Equatable {
 public struct UpdateStatus: Equatable {
     public let behind: Int
     public let newCommits: [String]
+    public let latestVersion: String?
+    public let notes: [ReleaseNote]
     public let checkedAt: Date
 }
 
@@ -61,7 +63,7 @@ public struct Updater {
         return m.isEmpty ? "종료 코드 \(r.status)" : m
     }
 
-    public func check(now: Date = Date()) throws -> UpdateStatus {
+    public func check(installedVersion: String = "unknown", now: Date = Date()) throws -> UpdateStatus {
         guard !sourceDir.isEmpty else { throw UpdateError.noSourceDir }
         guard git(["rev-parse", "--is-inside-work-tree"]).status == 0 else { throw UpdateError.notARepo }
         let fetch = git(["fetch", "--quiet", "origin"])
@@ -81,7 +83,16 @@ public struct Updater {
             let log = git(["log", "--format=%h %s", "-n", "20", range])
             commits = log.stdout.split(separator: "\n").map(String.init)
         }
-        return UpdateStatus(behind: behind, newCommits: commits, checkedAt: now)
+
+        // 원격 CHANGELOG/VERSION 은 없어도 된다 (실패 → nil)
+        func show(_ f: String) -> String? {
+            let r = git(["show", "origin/\(branch):\(f)"])
+            return r.status == 0 ? r.stdout : nil
+        }
+        let latest = show("VERSION")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let notes = show("CHANGELOG.md").map { ReleaseNotes.newer(than: installedVersion, in: ReleaseNotes.parse($0)) } ?? []
+        return UpdateStatus(behind: behind, newCommits: commits,
+                            latestVersion: (latest?.isEmpty ?? true) ? nil : latest, notes: notes, checkedAt: now)
     }
 
     public func hasLocalChanges() throws -> Bool {
