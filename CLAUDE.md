@@ -19,3 +19,4 @@ ATM (SwiftPM macOS 앱). 설치·빌드 시 AI 에이전트가 지킬 규칙.
 - sudo 명령은 짧은 한 줄로 안내한다 (긴 명령은 붙여넣기에서 깨진다).
 - 설치 후 사용자에게 알린다: Jira 첫 로드 시 키체인 창에서 **항상 허용**을 누를 것, 설정 > Jira 의 "토큰 발급 ↗" 링크로 API 토큰을 만들 것.
 - Teleport 비밀번호·OTP 키는 채팅에 붙여넣어 달라고 절대 요청하지 않는다. 사용자가 앱(Teleport 탭 설정)에 직접 입력한다.
+- ATM 문제를 디버깅할 때는 사용자에게 설정 > 정보 > 진단 정보 내보내기 zip(바탕화면 `ATM-진단-*.zip`)을 달라고 한다. 로그 위치: `~/Library/Application Support/TaskWidget/logs/` (`app.log`, `teleport-login.log`, `teleport-<DB>.log`, `summary-*.log`, `update.log`).

@@ -85,6 +85,18 @@ public enum TeleportTsh {
         return parts[i + 1] == name
     }
 
+    private static let versionLock = NSLock()
+    nonisolated(unsafe) private static var versionCache: [String: String] = [:]
+
+    /// `tsh version` 첫 줄 (경로별로 한 번만 실행해 캐시).
+    public static func versionLine(_ tsh: String) -> String {
+        versionLock.lock(); defer { versionLock.unlock() }
+        if let v = versionCache[tsh] { return v }
+        let v = DiagnosticsExport.commandLine(tsh, ["version"])
+        versionCache[tsh] = v
+        return v
+    }
+
     public static func isListening(port: Int) -> Bool {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
@@ -139,8 +151,25 @@ public struct TeleportLogin {
 
     /// `otp` 는 OTP 프롬프트가 나온 시점에 불린다(30초 경계에 걸리지 않게).
     public func run(password: String, otp: () -> String) -> Result<Void, TeleportError> {
+        runReported(password: password, otp: otp).0
+    }
+
+    /// run + 대화 기록(비밀 값은 가려짐).
+    public func runReported(password: String, otp: () -> String) -> (Result<Void, TeleportError>, LoginReport) {
+        let start = Date()
+        var events: [DiagTranscript.Event] = []
+        var secrets = [password]
+        var timedOut = false
+        func ms() -> Int { Int(Date().timeIntervalSince(start) * 1000) }
+        func report(_ status: Int32) -> LoginReport {
+            LoginReport(transcript: DiagTranscript.render(events, secrets: secrets), exitStatus: status, durationMs: ms(), timedOut: timedOut)
+        }
+        func send(_ fd: Int32, _ s: String) {
+            events.append(.init(ms: ms(), outbound: true, text: s))
+            _ = Array(s.utf8).withUnsafeBufferPointer { write(fd, $0.baseAddress, $0.count) }
+        }
         var master: Int32 = -1, slave: Int32 = -1
-        guard openpty(&master, &slave, nil, nil, nil) == 0 else { return .failure(TeleportError("PTY 를 만들지 못했어요")) }
+        guard openpty(&master, &slave, nil, nil, nil) == 0 else { return (.failure(TeleportError("PTY 를 만들지 못했어요")), report(-1)) }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
         p.arguments = arguments
@@ -152,11 +181,10 @@ public struct TeleportLogin {
         p.standardInput = h; p.standardOutput = h; p.standardError = h
         do { try p.run() } catch {
             close(master); close(slave)
-            return .failure(TeleportError("tsh 실행 실패: \(error.localizedDescription)"))
+            return (.failure(TeleportError("tsh 실행 실패: \(error.localizedDescription)")), report(-1))
         }
         close(slave)   // 부모 쪽 slave 를 닫아야 자식 종료 시 master 에 EOF 가 온다
 
-        var secrets = [password]
         var buf = "", all = ""
         var sent = [Int](repeating: 0, count: Self.prompts.count)
         var failure: String?
@@ -166,6 +194,7 @@ public struct TeleportLogin {
             if Date() > deadline {
                 // 기다리던 프롬프트가 아닌 문구에서 멈췄을 수 있다. 마지막 출력을 보여준다(비밀값은 가림).
                 let last = Self.tail(all, redacting: secrets, status: -1).components(separatedBy: ": ").dropFirst().joined(separator: ": ")
+                timedOut = true
                 failure = "시간 초과 (\(Int(timeout))초)" + (last.isEmpty ? "" : " · 마지막 출력: \(last)")
                 break
             }
@@ -177,10 +206,11 @@ public struct TeleportLogin {
             if n <= 0 { break }
             let s = String(decoding: bytes[0..<n], as: UTF8.self)
             buf += s; all += s
+            events.append(.init(ms: ms(), outbound: false, text: s))
             // 최신 tsh 는 터미널에 배경색(OSC 11)·커서 위치(DSR) 를 묻고 답을 기다린다. 실제 터미널처럼 답해 준다.
             // 답하지 않으면 tsh 가 멈추거나, 뒤에 보내는 Enter/비밀번호를 그 답으로 읽어 버린다.
             for reply in Self.terminalReplies(to: s) {
-                _ = Array(reply.utf8).withUnsafeBufferPointer { write(master, $0.baseAddress, $0.count) }
+                send(master, reply)
             }
             for (i, alts) in Self.prompts.enumerated() where alts.contains(where: { buf.localizedCaseInsensitiveContains($0) }) {
                 sent[i] += 1
@@ -194,7 +224,7 @@ public struct TeleportLogin {
                 // tsh 는 프롬프트를 찍은 뒤에 입력 모드(에코 끄기)를 바꾼다. 그 전에 보내면 앞 글자가 버려질 수 있어
                 // 잠깐 기다렸다 보낸다 (pexpect 의 delaybeforesend 와 같은 이유).
                 usleep(Self.sendDelayMicros)
-                _ = Array((answer + "\n").utf8).withUnsafeBufferPointer { write(master, $0.baseAddress, $0.count) }
+                send(master, answer + "\n")
                 buf = ""
                 break
             }
@@ -202,8 +232,9 @@ public struct TeleportLogin {
         if failure != nil, p.isRunning { p.terminate() }
         p.waitUntilExit()
         close(master)
-        if failure == nil, p.terminationStatus == 0 { return .success(()) }
-        return .failure(TeleportError(failure ?? Self.tail(all, redacting: secrets, status: p.terminationStatus)))
+        let rep = report(p.terminationStatus)
+        if failure == nil, p.terminationStatus == 0 { return (.success(()), rep) }
+        return (.failure(TeleportError(failure ?? Self.tail(all, redacting: secrets, status: p.terminationStatus))), rep)
     }
 
     /// 마지막 비어있지 않은 3줄. ANSI 이스케이프 제거, 비밀 값은 *** 로.

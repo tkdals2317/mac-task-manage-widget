@@ -64,7 +64,8 @@ final class TeleportSetupModel: ObservableObject {
             tempHome = dir
         }
         let pw = password
-        let res = await Task.detached { [login] in login.run(password: pw, otp: { totp.code() }) }.value
+        let (res, report) = await Task.detached { [login] in login.runReported(password: pw, otp: { totp.code() }) }.value
+        TeleportLoginLog.append(kind: "setup", user: TeleportConfig.cleanID(user), proxy: TeleportConfig.cleanID(proxy), tsh: tsh, report: report, result: res)
         if let d = tempHome { try? FileManager.default.removeItem(at: d) }
         if case .failure(let e) = res { error = e.message; return }
         do {
@@ -162,7 +163,10 @@ struct TeleportSetupView: View {
                     Text(m.step == 1 ? "1/2  계정" : "2/2  DB 선택")
                         .font(.system(size: 12 * scale, weight: .semibold)).foregroundStyle(.secondary)
                     if m.step == 1 { account } else { dbs }
-                    if let e = m.error { Text(e).font(.system(size: 11 * scale)).foregroundStyle(.red).textSelection(.enabled) }
+                    if let e = m.error {
+                        Text(e).font(.system(size: 11 * scale)).foregroundStyle(.red).textSelection(.enabled)
+                        Button("로그") { NSWorkspace.shared.open(TeleportManager.loginLogURL) }.controlSize(.mini)
+                    }
                     if let n = m.note { Text(n).font(.system(size: 11 * scale)).foregroundStyle(.orange) }
                 }
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)

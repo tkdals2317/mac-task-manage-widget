@@ -63,6 +63,9 @@ struct SettingsView: View {
     @State private var secretBusy = false
     @State private var instructionsDraft = ""
     @State private var confirmReset = false
+    @State private var diagMessage = ""
+    @State private var diagError = false
+    @State private var diagBusy = false
     @State private var newTagId: String?
 
     @State private var pane: Pane
@@ -415,6 +418,32 @@ struct SettingsView: View {
         }
     }
 
+    private func exportDiagnostics() {
+        let s = Settings.shared, tp = state.teleport
+        let input = DiagnosticsExport.InfoInput(
+            build: state.buildInfo, settings: s, teleport: tp.config, tshPath: tp.tshPath,
+            claudePath: ClaudeRunner.locateWithSource(configured: s.claudePath)?.path,
+            hasJiraToken: state.jiraConfigured, hasTeleportSecrets: tp.hasSecrets)
+        diagBusy = true; diagMessage = ""
+        Task {
+            let r = await Task.detached { () -> Result<URL, Error> in
+                Result {
+                    let defaults = ProcessRunner.run(executable: "/usr/bin/defaults", arguments: ["read", DiagnosticsExport.defaultsDomain], timeout: 5).stdout
+                    let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
+                    return try DiagnosticsExport.export(to: desktop, info: DiagnosticsExport.infoText(input), defaults: defaults)
+                }
+            }.value
+            diagBusy = false
+            switch r {
+            case .success(let url):
+                diagError = false; diagMessage = "내보냄: \(url.lastPathComponent)"
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            case .failure(let e):
+                diagError = true; diagMessage = "내보내기 실패: \((e as? TeleportError)?.message ?? e.localizedDescription)"
+            }
+        }
+    }
+
     private var updateLog: URL { Paths.logsDir.appendingPathComponent("update.log") }
 
     @ViewBuilder
@@ -485,6 +514,17 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+        Section("문제 해결") {
+            LabeledContent("진단 정보") {
+                if diagBusy { ProgressView().controlSize(.small) }
+                Button("진단 정보 내보내기") { exportDiagnostics() }.disabled(diagBusy)
+            }
+            if !diagMessage.isEmpty {
+                Text(diagMessage).font(.caption).foregroundStyle(diagError ? .red : .secondary).textSelection(.enabled)
+            }
+            Text("로그와 설정 요약을 zip 으로 만들어요. 비밀번호·OTP·토큰은 들어가지 않아요. 이 파일을 개발자에게 보내 주세요.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         Section("개발자 후원") {
             LabeledContent("카카오페이로 후원하기") {

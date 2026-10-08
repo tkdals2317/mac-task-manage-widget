@@ -182,6 +182,7 @@ make install
 
 ## 문제 해결
 
+- **문제가 생기면**: 설정 > 정보 > 진단 정보 내보내기 → 바탕화면 zip 을 개발자에게 전달 (로그·환경 요약만 담기고 비밀번호·OTP·토큰은 들어가지 않는다).
 - **빌드 중 `Invalid manifest` / `redefinition of module 'SwiftBridging'`**: 예전 명령줄 도구의 잔여 파일 때문이다. `make doctor` 로 확인하고 `sudo ./scripts/fix-clt.sh` 를 실행한다 (파일은 삭제하지 않고 `/Library/Developer/CLT-stale-backup/` 으로 옮긴다). 또는 `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install` 로 재설치한다.
 - **패널이 안 보임**: 메뉴바 아이콘이나 Dock 아이콘을 클릭한다.
 - **Jira 에 "Jira 주소를 입력하세요"**: 업데이트로 기본 주소가 빠졌다. 설정 > Jira 에 회사 Jira 주소(`https://<사이트>.atlassian.net`)를 넣는다.
