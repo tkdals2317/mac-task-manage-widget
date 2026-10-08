@@ -120,6 +120,16 @@ public struct TeleportLogin {
 
     static let sendDelayMicros: useconds_t = 300_000
 
+    /// 출력에 섞인 터미널 질의에 대한 답. OSC 10/11(전경/배경색), DSR(커서 위치), DA(장치 속성).
+    static func terminalReplies(to output: String) -> [String] {
+        var r: [String] = []
+        if output.contains("\u{1B}]10;?") { r.append("\u{1B}]10;rgb:0000/0000/0000\u{1B}\\") }
+        if output.contains("\u{1B}]11;?") { r.append("\u{1B}]11;rgb:ffff/ffff/ffff\u{1B}\\") }
+        if output.contains("\u{1B}[6n") { r.append("\u{1B}[1;1R") }
+        if output.contains("\u{1B}[c") || output.contains("\u{1B}[0c") { r.append("\u{1B}[?1;2c") }
+        return r
+    }
+
     /// 프롬프트별 문구 후보. 보안키·Touch ID 도 등록된 계정은 OTP 를 다른 문구로 묻는다.
     private static let prompts: [[String]] = [
         ["Press [ENTER] to continue"],
@@ -167,6 +177,11 @@ public struct TeleportLogin {
             if n <= 0 { break }
             let s = String(decoding: bytes[0..<n], as: UTF8.self)
             buf += s; all += s
+            // 최신 tsh 는 터미널에 배경색(OSC 11)·커서 위치(DSR) 를 묻고 답을 기다린다. 실제 터미널처럼 답해 준다.
+            // 답하지 않으면 tsh 가 멈추거나, 뒤에 보내는 Enter/비밀번호를 그 답으로 읽어 버린다.
+            for reply in Self.terminalReplies(to: s) {
+                _ = Array(reply.utf8).withUnsafeBufferPointer { write(master, $0.baseAddress, $0.count) }
+            }
             for (i, alts) in Self.prompts.enumerated() where alts.contains(where: { buf.localizedCaseInsensitiveContains($0) }) {
                 sent[i] += 1
                 if sent[i] > 1 { failure = "같은 프롬프트가 다시 나왔어요 (비밀번호/OTP 거절?)"; break loop }
