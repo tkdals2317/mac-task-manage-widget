@@ -24,7 +24,8 @@ final class TeleportManager: ObservableObject {
     private static let lastLoginKey = "teleportLastLogin"
     private var procs: [String: Process] = [:]
     private var intentionalStop = Set<String>()
-    private var loginInFlight = false
+    /// 진행 중인 로그인. 여러 DB 를 동시에 켤 때 로그인은 한 번만 하고 나머지는 결과를 기다린다.
+    private var loginTask: Task<Bool, Never>?
     /// 사용자가 켜 둔 터널. 프로세스가 예기치 않게 죽어도 유지되고, 사용자가 끄거나 자동 재연결을 포기하면 빠진다.
     private var wanted = Set<String>() {
         didSet { UserDefaults.standard.set(wanted.sorted(), forKey: SettingsKey.teleportWanted) }   // 종료(shutdown)는 건드리지 않는다: 다음 실행에서 복원
@@ -88,17 +89,25 @@ final class TeleportManager: ObservableObject {
     /// 저장된 비밀번호/OTP 키로 로그인. 이미 유효하면 아무것도 안 한다.
     @discardableResult
     func ensureLoggedIn(force: Bool = false) async -> Bool {
+        if let t = loginTask { return await t.value }
+        let t = Task { await self.performLogin(force: force) }
+        loginTask = t
+        let ok = await t.value
+        loginTask = nil
+        return ok
+    }
+
+    private func performLogin(force: Bool) async -> Bool {
         guard let tsh = tshPath else { message = "tsh 가 설치되어 있지 않아요"; return false }
         if !force {
             await refreshStatus()
             if loggedIn { return true }
         }
-        guard !loginInFlight else { return false }
         guard let sec = TeleportSecrets.load(), let totp = TOTP(input: sec.otpSecret), !config.user.isEmpty else {
             message = "Teleport 설정이 필요해요"; return false
         }
-        loginInFlight = true; busy = "로그인 중…"; message = nil
-        defer { loginInFlight = false; busy = nil }
+        busy = "로그인 중…"; message = nil
+        defer { busy = nil }
         let login = TeleportLogin(tsh: tsh, proxy: config.proxy, user: config.user)
         let res = await Task.detached { login.run(password: sec.password, otp: { totp.code() }) }.value
         switch res {
@@ -213,7 +222,7 @@ final class TeleportManager: ObservableObject {
 
     /// 1분마다: 켜 둔 터널이 실제로 응답하는지 보고, 아니면 (필요하면 재로그인 후) 다시 연결한다.
     private func watchdog() async {
-        guard isConfigured, tshPath != nil, !wanted.isEmpty, !watchdogBusy, loginInFlight == false else { return }
+        guard isConfigured, tshPath != nil, !wanted.isEmpty, !watchdogBusy, loginTask == nil else { return }
         watchdogBusy = true; defer { watchdogBusy = false }
         // 사용자가 연결 중인 터널은 건드리지 않는다.
         let names = config.tunnels.map(\.name).filter { wanted.contains($0) && states[$0] != .connecting }
