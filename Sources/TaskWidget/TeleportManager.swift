@@ -25,6 +25,10 @@ final class TeleportManager: ObservableObject {
     private var procs: [String: Process] = [:]
     private var intentionalStop = Set<String>()
     private var loginInFlight = false
+    /// 사용자가 켜 둔 터널. 프로세스가 예기치 않게 죽어도 유지되고, 사용자가 끄거나 자동 재연결을 포기하면 빠진다.
+    private var wanted = Set<String>()
+    private var failures: [String: Int] = [:]
+    private var watchdogBusy = false
     private var timer: Timer?
     /// 이 실행 중 터널을 띄웠거나 로그인한 적이 있나. 종료 시 남의 tsh 세션을 건드리지 않기 위한 표식.
     private var touched = false
@@ -60,7 +64,11 @@ final class TeleportManager: ObservableObject {
     func start() {
         Task { await refreshStatus() }
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { if let self, self.tshPath != nil, self.config.user != "" { Task { await self.refreshStatus() } } }
+            MainActor.assumeIsolated {
+                if let self, self.tshPath != nil, self.config.user != "" {
+                    Task { await self.refreshStatus(); await self.watchdog() }
+                }
+            }
         }
     }
 
@@ -103,7 +111,13 @@ final class TeleportManager: ObservableObject {
 
     // MARK: - 터널
 
+    /// 사용자가 켠 터널. 이후 watchdog 이 살아 있게 유지한다.
     func connect(_ t: TeleportTunnel) async {
+        wanted.insert(t.name); failures[t.name] = 0
+        await open(t)
+    }
+
+    private func open(_ t: TeleportTunnel) async {
         if let p = procs[t.name], p.isRunning { return }
         if TeleportTsh.isListening(port: t.port) { states[t.name] = .portInUse; return }
         states[t.name] = .connecting
@@ -156,7 +170,7 @@ final class TeleportManager: ObservableObject {
         p.terminate()
     }
 
-    func disconnect(_ t: TeleportTunnel) { stop(t.name) }
+    func disconnect(_ t: TeleportTunnel) { wanted.remove(t.name); stop(t.name) }
 
     func connectAll() async {
         guard await ensureLoggedIn() else { return }
@@ -165,9 +179,53 @@ final class TeleportManager: ObservableObject {
         }
     }
 
+    // MARK: - 자동 유지
+
+    /// 1분마다: 켜 둔 터널이 실제로 응답하는지 보고, 아니면 (필요하면 재로그인 후) 다시 연결한다.
+    private func watchdog() async {
+        guard isConfigured, tshPath != nil, !wanted.isEmpty, !watchdogBusy, loginInFlight == false else { return }
+        watchdogBusy = true; defer { watchdogBusy = false }
+        // 사용자가 연결 중인 터널은 건드리지 않는다.
+        let names = config.tunnels.map(\.name).filter { wanted.contains($0) && states[$0] != .connecting }
+        func plan() -> TeleportWatchdogPolicy {
+            .decide(wanted: names,
+                    running: Set(names.filter { procs[$0]?.isRunning == true }),
+                    listening: Set(config.tunnels.filter { names.contains($0.name) && TeleportTsh.isListening(port: $0.port) }.map(\.name)),
+                    failures: failures, loggedIn: loggedIn)
+        }
+        var p = plan()
+        if p.relogin, !(await ensureLoggedIn(force: true)) {
+            for n in names { fail(n) }
+            return
+        }
+        // 재로그인했으면 plan 이 이미 모든 켜 둔 터널을 재시작 대상으로 잡았다.
+        p.giveUp.forEach { giveUp($0) }
+        for n in p.restart {
+            guard wanted.contains(n), let t = config.tunnels.first(where: { $0.name == n }) else { continue }
+            if procs[n] != nil {
+                stop(n)
+                for _ in 0..<20 where procs[n] != nil { try? await Task.sleep(nanoseconds: 100_000_000) }
+            }
+            await open(t)
+            if states[n] == .connected { failures[n] = 0 } else { fail(n) }
+        }
+    }
+
+    private func fail(_ n: String) {
+        failures[n, default: 0] += 1
+        if failures[n]! >= TeleportWatchdogPolicy.maxFailures { giveUp(n) }
+    }
+
+    private func giveUp(_ n: String) {
+        wanted.remove(n)
+        stop(n)
+        states[n] = .failed("자동 재연결 \(TeleportWatchdogPolicy.maxFailures)회 실패 · 토글로 다시 시도")
+    }
+
     /// 터널 종료 + `tsh db logout` 각각 + `tsh logout` (Python 도구와 같은 순서).
     func disconnectAll() async {
         let names = config.tunnels.map(\.name)
+        wanted.removeAll()
         for n in procs.keys { stop(n) }
         guard let tsh = tshPath else { return }
         busy = "끊는 중…"
