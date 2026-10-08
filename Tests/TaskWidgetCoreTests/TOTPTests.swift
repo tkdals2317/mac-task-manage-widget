@@ -5,6 +5,13 @@ final class TOTPTests: XCTestCase {
     // RFC 6238 부록 B (SHA1, 비밀 "12345678901234567890")
     let b32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
+    /// 기존 파이썬 도구(pyotp)와 같은 코드가 나오는지. 기대값은 pyotp.TOTP(key).at(1700000000).
+    func testMatchesPyotp() throws {
+        let url = "otpauth://totp/midas-teleport:fake%40teleport.devops.midasin.com?secret=JBSWY3DPEHPK3PXP&issuer=midas-teleport"
+        let t = try XCTUnwrap(TOTP(input: url))
+        XCTAssertEqual(t.code(at: Date(timeIntervalSince1970: 1_700_000_000)), "324550")
+    }
+
     func testRFCVectors8Digits() throws {
         let t = try XCTUnwrap(TOTP(input: b32))
         let v: [(TimeInterval, String)] = [(59, "94287082"), (1111111109, "07081804"), (1111111111, "14050471"),
