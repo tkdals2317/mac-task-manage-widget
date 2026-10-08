@@ -235,18 +235,18 @@ public enum DiagnosticsExport {
         return files
     }
 
-    /// `<destDir>/ATM-진단-<yyyyMMdd-HHmm>.zip` 을 만든다 (ditto, 임시 폴더 사용).
+    /// `<destDir>/ATM-diagnostics-<yyyyMMdd-HHmm>.zip` 을 만든다 (ditto, 임시 폴더 사용).
     public static func export(to destDir: URL, dataDir: URL = Paths.dataDir, logsDir: URL = Paths.logsDir,
                               info: String, defaults: String, now: Date = Date()) throws -> URL {
         let f = DateFormatter(); f.dateFormat = "yyyyMMdd-HHmm"; f.locale = Locale(identifier: "en_US_POSIX")
-        let name = "ATM-진단-\(f.string(from: now))"
+        let name = "ATM-diagnostics-\(f.string(from: now))"   // 압축 해제 도구마다 한글 이름이 깨져 영문으로
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("atm-diag-\(UUID().uuidString)")
         let root = tmp.appendingPathComponent(name)
         defer { try? FileManager.default.removeItem(at: tmp) }
         try stage(into: root, dataDir: dataDir, logsDir: logsDir, info: info, defaults: defaults)
         let zip = destDir.appendingPathComponent("\(name).zip")
         try? FileManager.default.removeItem(at: zip)
-        let r = ProcessRunner.run(executable: "/usr/bin/ditto", arguments: ["-c", "-k", "--keepParent", root.path, zip.path], timeout: 60)
+        let r = ProcessRunner.run(executable: "/usr/bin/ditto", arguments: ["-c", "-k", "--norsrc", "--noextattr", "--keepParent", root.path, zip.path], timeout: 60)
         guard r.status == 0 else { throw TeleportError("zip 만들기 실패: \(r.stderr.trimmingCharacters(in: .whitespacesAndNewlines))") }
         return zip
     }

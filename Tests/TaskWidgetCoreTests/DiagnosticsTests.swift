@@ -122,11 +122,12 @@ final class DiagnosticsTests: XCTestCase {
         let desktop = dir.appendingPathComponent("desktop")
         try fm.createDirectory(at: desktop, withIntermediateDirectories: true)
         let zip = try DiagnosticsExport.export(to: desktop, dataDir: data, logsDir: logs, info: "info\n", defaults: "{\n    pw = 1;\n    secretKey = 2;\n}")
-        XCTAssertTrue(zip.lastPathComponent.hasPrefix("ATM-진단-") && zip.pathExtension == "zip")
+        XCTAssertTrue(zip.lastPathComponent.hasPrefix("ATM-diagnostics-") && zip.pathExtension == "zip")
 
         let r = ProcessRunner.run(executable: "/usr/bin/unzip", arguments: ["-Z1", zip.path], timeout: 10)
         let names = r.stdout.split(separator: "\n").map(String.init)
         for want in ["logs/app.log", "info.txt", "defaults.txt", "teleport.json"] { XCTAssertTrue(names.contains { $0.hasSuffix(want) }, "\(want) in \(names)") }
+        XCTAssertFalse(names.contains { $0.contains("/._") }, "AppleDouble 파일 없음: \(names)")
         for bad in ["secrets.json", "todos.json", "activity.jsonl", "worklog"] { XCTAssertFalse(names.contains { $0.contains(bad) }, "\(bad) in \(names)") }
 
         let files = try DiagnosticsExport.stage(into: dir.appendingPathComponent("stage"), dataDir: data, logsDir: logs, info: "i", defaults: "")

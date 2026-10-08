@@ -423,7 +423,7 @@ struct SettingsView: View {
         let input = DiagnosticsExport.InfoInput(
             build: state.buildInfo, settings: s, teleport: tp.config, tshPath: tp.tshPath,
             claudePath: ClaudeRunner.locateWithSource(configured: s.claudePath)?.path,
-            hasJiraToken: state.jiraConfigured, hasTeleportSecrets: tp.hasSecrets)
+            hasJiraToken: !Settings.shared.jiraEmail.isEmpty && SecretStore.get(service: Keychain.service, account: Settings.shared.jiraEmail) != nil, hasTeleportSecrets: tp.hasSecrets)
         diagBusy = true; diagMessage = ""
         Task {
             let r = await Task.detached { () -> Result<URL, Error> in
