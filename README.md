@@ -72,12 +72,49 @@ open ~/Applications/ATM.app
 
 ### Teleport
 
-- 설정 > 창·일반 > 탭에서 **Teleport** 를 켠다 (기본 꺼짐). `tsh` 가 필요하다 (`make doctor` 가 확인, 없으면 탭에 설치 링크가 나온다).
-- 첫 설정은 2단계다. ① 계정: 프록시·사용자 ID·비밀번호·OTP 키(base32 키, `otpauth://` URL, 또는 "QR 이미지로 읽기") 입력 후 "다음"을 누르면 실제로 로그인해 확인한다. ② DB 선택: `tsh db ls` 목록에서 체크하고 DB 사용자·포트를 정한다 (포트는 4306부터 자동, 운영 DB 는 빨간 "운영" 표시에 기본 선택 안 됨). 다시 하려면 설정 > Teleport > "설정 다시 하기".
-- 탭 상단에 로그인 상태와 남은 시간, "모두 연결 / 모두 끊기", DB 별 토글이 있다. 로그인이 만료됐으면 "다시 로그인"(저장된 비밀번호와 OTP 로 자동 입력).
+DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번호 + OTP)은 ATM 이 대신 입력한다.
+
+**준비물**
+
+- `tsh` 설치 (`make doctor` 가 확인한다. 없으면 탭에 설치 링크가 나온다).
+- Teleport 사용자 ID, 비밀번호, OTP 키. OTP 키는 아래 중 하나면 된다.
+  - base32 키 문자열
+  - `otpauth://totp/...?secret=...` 주소 (OTP 앱·브라우저 확장에서 내보낸 것)
+  - OTP 등록 QR 코드 캡처 이미지 ("QR 이미지로 읽기")
+
+**처음 설정**
+
+1. 설정 > 창·일반 > 탭에서 **Teleport** 를 켠다 (기본 꺼짐).
+2. Teleport 탭의 **1/2 계정** 에서 프록시, 사용자 ID, 비밀번호, OTP 키를 넣는다.
+   - 사용자 ID 는 Teleport 계정이다. DB 사용자(`developer`)가 아니다. OTP 주소를 넣으면 계정이 자동으로 채워진다.
+   - OTP 키 아래 "현재 코드" 6자리가 휴대폰/확장의 OTP 와 같으면 키가 맞다.
+
+   <img src="docs/images/teleport-setup.png" width="420" alt="Teleport 첫 설정 1단계">
+
+3. **다음** 을 누르면 실제로 로그인해 확인하고, 통과하면 비밀번호·OTP 키를 키체인에 저장한다.
+4. **2/2 DB 선택** 에서 `tsh db ls` 로 불러온 DB 를 체크한다. 포트는 4306 부터 자동으로 채워지고(수정 가능, 겹치면 빨간색), 운영 DB 는 빨간 "운영" 표시에 기본 선택되지 않는다. **N개 저장** 을 누른다.
+
+**사용**
+
+<img src="docs/images/teleport-tab.png" width="420" alt="Teleport 탭">
+
+- **모두 연결 / 모두 끊기**, 또는 DB 별 토글로 켜고 끈다. 필요하면 저장된 비밀번호와 OTP 로 자동 로그인한다.
+- 토글과 점은 실제 상태를 보여준다: 초록 연결됨, 주황 연결 중, 회색 끊김, 빨강 실패(이유가 아래 줄에 나온다).
+- **자동 유지**: 1분마다 켜 둔 터널이 응답하는지 확인한다. 로그인이 만료됐으면 자동으로 다시 로그인하고, 죽은 터널은 다시 연결한다. 3번 연속 실패하면 빨간색으로 멈추니 토글로 다시 켠다.
 - DB 툴 접속 정보: 호스트 `localhost`, 해당 포트, DB 사용자(기본 `developer`), 비밀번호 없음.
-- ATM 을 종료하면 ATM 이 연 터널이 닫히고 `tsh logout` 이 실행된다.
-- 비밀번호·OTP 키는 키체인(`com.lsm0506.TaskWidget.teleport`)에, DB 목록은 `~/Library/Application Support/TaskWidget/teleport.json` 에 저장된다. 터널 로그는 `logs/teleport-<이름>.log`.
+- ATM 을 끄면(업데이트·`make install` 포함) ATM 이 연 터널을 닫고 `tsh logout` 한다. 다음에 켜서 **모두 연결** 을 누르면 된다.
+- 다른 프로그램이 그 포트를 쓰고 있으면 "포트 사용 중"으로 표시만 하고 건드리지 않는다.
+
+**설정 바꾸기**
+
+- 계정이나 DB 목록을 바꾸려면 설정 > Teleport > **설정 다시 하기**.
+- 그룹 이름은 DB 이름의 첫 부분(`app-dv` → APP)이다. 바꾸려면 설정 > Teleport > **teleport.json 열기** 에서 해당 DB 에 `"group": "원하는 이름"` 을 넣는다.
+- 저장 위치: 비밀번호·OTP 키는 키체인(`com.lsm0506.TaskWidget.teleport`), DB 목록은 `~/Library/Application Support/TaskWidget/teleport.json`, 터널 로그는 `logs/teleport-<이름>.log`.
+
+**문제 해결**
+
+- `ERROR: invalid username, password or second factor`: 사용자 ID 가 Teleport 계정인지(`developer` 아님), 비밀번호, OTP 키를 확인하고 설정 다시 하기.
+- 키체인 창이 뜨면 **항상 허용** (업데이트 직후 한 번).
 
 ### Jira
 
@@ -145,6 +182,7 @@ make install
 
 - **빌드 중 `Invalid manifest` / `redefinition of module 'SwiftBridging'`**: 예전 명령줄 도구의 잔여 파일 때문이다. `make doctor` 로 확인하고 `sudo ./scripts/fix-clt.sh` 를 실행한다 (파일은 삭제하지 않고 `/Library/Developer/CLT-stale-backup/` 으로 옮긴다). 또는 `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install` 로 재설치한다.
 - **패널이 안 보임**: 메뉴바 아이콘이나 Dock 아이콘을 클릭한다.
+- **Jira 에 "Jira 주소를 입력하세요"**: 업데이트로 기본 주소가 빠졌다. 설정 > Jira 에 회사 Jira 주소(`https://<사이트>.atlassian.net`)를 넣는다.
 - **Jira 401**: 토큰을 다시 발급해 저장한다.
 - **요약 실패 `claudeNotFound`**: 터미널에서 `command -v claude` 로 경로를 확인해 설정 > 요약 > claude 경로에 입력한다 (또는 **자동 찾기**).
 - **요약이 "기록 없음"**: 활동 훅이 설치됐는지, 훅 설치 이후의 새 세션인지 확인한다.
