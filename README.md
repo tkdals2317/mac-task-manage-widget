@@ -44,7 +44,8 @@ open ~/Applications/ATM.app
 메뉴바 아이콘(또는 Dock 아이콘)으로 패널을 열고 맨 아래 ⚙(설정)을 누른다.
 
 1. **Jira**: Jira 주소(예: `https://your-site.atlassian.net`)와 이메일을 입력하고 "토큰 발급 ↗"로 API 토큰을 만들어 붙여넣은 뒤 저장 → 연결 테스트. 키체인 창이 뜨면 **항상 허용**을 누른다 (창이 싫으면 설정 > 창·일반 > 비밀 정보 저장 에서 **파일**을 고를 수 있다).
-2. **Claude 연동**: "활동 훅 설치", "/worklog 스킬 설치". 훅은 새 Claude Code 세션부터 기록한다.
+2. **Claude 연동**: "활동 훅 설치", "/worklog 스킬 설치", "할 일 추가 스킬 (atm-todo) 설치". 훅은 새 Claude Code 세션부터 기록한다.
+   - atm-todo 스킬을 설치하면 Claude Code 에서 "이거 할 일에 추가해줘, 금요일까지" 처럼 말해 ATM 할 일을 추가할 수 있다. 내부적으로 `ATM.app/Contents/MacOS/TaskWidget --add-todo --title "..." [--due YYYY-MM-DD] [--tag 이름] [--memo "..."]` 를 실행하며, 앱이 꺼져 있으면 다음 실행 때 반영된다. 앱을 옮기면 스킬을 다시 설치한다.
 3. **창·일반**: "로그인 시 실행"을 켠다.
 4. **요약**: 생성 시각을 확인한다 (기본 18:00).
 

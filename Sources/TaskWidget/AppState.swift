@@ -111,6 +111,39 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Inbox (TaskWidget --add-todo)
+
+    private var inboxSource: DispatchSourceFileSystemObject?
+    private var inboxTimer: Timer?
+
+    /// 실행 시 한 번 읽고, inbox 폴더가 바뀔 때와 5초마다 다시 읽는다 (감시가 놓친 경우 대비).
+    func startInbox() {
+        try? FileManager.default.createDirectory(at: TodoInbox.dir, withIntermediateDirectories: true)
+        let fd = open(TodoInbox.dir.path, O_EVTONLY)
+        if fd >= 0 {
+            let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+            src.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.importInbox() } }
+            src.setCancelHandler { close(fd) }
+            src.resume()
+            inboxSource = src
+        }
+        inboxTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.importInbox() }
+        }
+        importInbox()
+    }
+
+    func importInbox() {
+        TodoInbox.importPending(config: tagConfig) { new in
+            let known = Set(todos.map(\.id))
+            let add = new.filter { !known.contains($0.id) }
+            guard !add.isEmpty else { return }
+            let before = todos
+            todos.append(contentsOf: add)
+            do { try todoStore.save(todos) } catch { todos = before; throw error }
+        }
+    }
+
     // MARK: - Todos
 
     /// byTag 는 호출하는 뷰가 @AppStorage 로 읽어 넘긴다 (토글 시 다시 그려지도록).

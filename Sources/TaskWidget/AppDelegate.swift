@@ -70,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { if let self { self.updateBadge(self.state.todos) } }
         }
 
+        state.startInbox()
         state.teleport.start()
         // UI 가 뜬 뒤 지난번에 켜 둔 Teleport DB 를 다시 연결
         Task { [state] in

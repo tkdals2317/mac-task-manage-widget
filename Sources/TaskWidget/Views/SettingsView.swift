@@ -75,6 +75,7 @@ struct SettingsView: View {
     @State private var loginAtStart = false
     @State private var hookStatus: HookStatus = .notInstalled
     @State private var skillInstalled = false
+    @State private var todoSkillInstalled = false
     @State private var integrationError = ""
     @State private var claudeFound: (path: String, source: String)?
     @State private var claudeSearched = false
@@ -195,6 +196,10 @@ struct SettingsView: View {
                 .onChange(of: loginAtStart) { _, on in setLogin(on) }
             if !isBundled {
                 Text("앱 번들로 실행했을 때만 가능 (make install)").font(.caption).foregroundStyle(.secondary)
+            }
+            LabeledContent("할 일 추가 스킬 (atm-todo)") {
+                Text(todoSkillInstalled ? "설치됨" : "미설치").foregroundStyle(.secondary)
+                Button(todoSkillInstalled ? "제거" : "설치") { toggleTodoSkill() }
             }
             if !integrationError.isEmpty {
                 Text(integrationError).foregroundStyle(.red).font(.caption)
@@ -576,6 +581,7 @@ struct SettingsView: View {
     private func refreshStatus() {
         hookStatus = integration.hookStatus()
         skillInstalled = integration.skillInstalled()
+        todoSkillInstalled = integration.todoSkillInstalled()
         todayActivityCount = ActivityLog.records(on: Date(), from: Paths.activityFile).count
         let email = jiraEmail
         Task {
@@ -671,6 +677,16 @@ struct SettingsView: View {
             integrationError = ""
         } catch {
             integrationError = "훅 변경 실패: \(error)"
+        }
+        refreshStatus()
+    }
+
+    private func toggleTodoSkill() {
+        do {
+            if todoSkillInstalled { try integration.removeTodoSkill() } else { try integration.installTodoSkill() }
+            integrationError = ""
+        } catch {
+            integrationError = "스킬 변경 실패: \(error)"
         }
         refreshStatus()
     }
