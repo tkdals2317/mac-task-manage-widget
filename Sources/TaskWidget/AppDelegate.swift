@@ -16,8 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: GlobalHotKey!
     private var todosSub: AnyCancellable?
     private var badgeTimer: Timer?
+    private var sigterm: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // make install / 업데이트의 pkill(SIGTERM) 도 정상 종료로 처리해 Teleport 터널을 정리한다.
+        signal(SIGTERM, SIG_IGN)
+        sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        sigterm?.setEventHandler { NSApp.terminate(nil) }
+        sigterm?.resume()
         installMainMenu()
         try? Paths.ensureDirectories()
 
@@ -64,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { if let self { self.updateBadge(self.state.todos) } }
         }
 
+        state.teleport.start()
         scheduler = Scheduler(state: state)
         scheduler.start()
 
@@ -77,6 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        state.teleport.shutdown()
     }
 
     /// ⌘V/⌘C/⌘X/⌘A/⌘Z 는 메인 메뉴의 Edit 항목을 통해서만 동작한다.
@@ -105,8 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let view = NSMenu(title: "보기")
         view.addItem(withTitle: "새 할 일", action: #selector(newTodo), keyEquivalent: "n").target = self
         view.addItem(.separator())
-        for (i, t) in allTabs.enumerated() {
-            let item = view.addItem(withTitle: "탭 \(i + 1) (\(t.title))", action: #selector(selectTab(_:)), keyEquivalent: "\(i + 1)")
+        for i in allTabs.indices {
+            let item = view.addItem(withTitle: "탭 \(i + 1)", action: #selector(selectTab(_:)), keyEquivalent: "\(i + 1)")
             item.target = self
             item.tag = i
         }

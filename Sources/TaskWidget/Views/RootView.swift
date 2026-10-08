@@ -53,6 +53,7 @@ struct RootView: View {
     private func content(for id: String) -> some View {
         switch id {
         case "summary": SummaryView()
+        case "teleport": TeleportView(tp: state.teleport)
         default: TasksView()
         }
     }

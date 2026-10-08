@@ -1,0 +1,9 @@
+[
+  {"kind":"db","metadata":{"name":"mrs-st2","labels":{"env":"st2"}},"spec":{"protocol":"mysql"}},
+  {"kind":"db","metadata":{"name":"mrs-dv","labels":{"env":"dv"}},"spec":{"protocol":"mysql"}},
+  {"kind":"db","metadata":{"name":"mrs-prd-rep","labels":{"env":"dv"}}},
+  {"kind":"db","metadata":{"name":"ats-llm-x","labels":{"env":"production"}}},
+  {"kind":"db","metadata":{}},
+  {"kind":"db","metadata":{"name":"ats-llm-dv"}},
+  {"kind":"db","metadata":{"name":"mrs-dv"}}
+]

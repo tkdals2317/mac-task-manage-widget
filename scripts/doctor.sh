@@ -20,6 +20,10 @@ if [ -z "$DOCTOR_ONLY_CLT" ]; then
 
   c=$("${SHELL:-/bin/zsh}" -lc 'command -v claude' 2>/dev/null | tail -1)
   if [ -n "$c" ]; then ok "claude: $c"; else warn "claude CLI 없음: 요약 기능에 필요 (설치는 계속 가능)"; fi
+
+  t=$("${SHELL:-/bin/zsh}" -lc 'command -v tsh' 2>/dev/null | tail -1)
+  [ -z "$t" ] && for c in /usr/local/bin/tsh /opt/homebrew/bin/tsh; do [ -x "$c" ] && t=$c && break; done
+  if [ -n "$t" ]; then ok "tsh: $t"; else warn "tsh 없음: Teleport 탭에 필요 (설치는 계속 가능)"; fi
 fi
 
 if [ -n "$DOCTOR_SKIP_XCODE_SELECT" ]; then active="$CLT_ROOT"; else active=$(xcode-select -p 2>/dev/null); fi

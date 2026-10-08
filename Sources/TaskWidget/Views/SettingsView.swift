@@ -3,7 +3,7 @@ import ServiceManagement
 import TaskWidgetCore
 
 private enum Pane: String, CaseIterable, Identifiable {
-    case appearance, window, tags, jira, summary, claude, about
+    case appearance, window, tags, jira, summary, claude, teleport, about
     var id: Self { self }
 
     var title: String {
@@ -14,6 +14,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         case .jira: return "Jira"
         case .summary: return "요약"
         case .claude: return "Claude 연동"
+        case .teleport: return "Teleport"
         case .about: return "정보"
         }
     }
@@ -26,6 +27,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         case .jira: return "ticket"
         case .summary: return "doc.text"
         case .claude: return "sparkles"
+        case .teleport: return "network"
         case .about: return "info.circle"
         }
     }
@@ -50,6 +52,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.summaryNotify) private var summaryNotify = true
     @AppStorage(SettingsKey.claudeModel) private var claudeModel = ""
     @AppStorage(SettingsKey.claudePath) private var claudePath = ""
+    @AppStorage(SettingsKey.tshPath) private var tshPath = ""
     @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
     @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
     @AppStorage(SettingsKey.summaryInstructions) private var summaryInstructions = ""
@@ -121,6 +124,7 @@ struct SettingsView: View {
         case .jira: jiraPane
         case .summary: summaryPane
         case .claude: claudePane
+        case .teleport: teleportPane
         case .about: aboutPane
         }
     }
@@ -187,6 +191,38 @@ struct SettingsView: View {
             if !integrationError.isEmpty {
                 Text(integrationError).foregroundStyle(.red).font(.caption)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var teleportPane: some View {
+        Section {
+            LabeledContent("tsh") {
+                if let p = state.teleport.tshPath {
+                    Text(p).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+                } else {
+                    Link("설치 안 됨 · goteleport.com/download", destination: teleportDownloadURL)
+                }
+            }
+            TextField("tsh 경로 (비우면 자동 탐색)", text: $tshPath)
+                .onSubmit { state.teleport.locateTsh() }
+            Button("다시 찾기") { state.teleport.locateTsh() }
+        }
+        Section {
+            Button("설정 다시 하기") {
+                if !TabConfig.enabled(from: enabledTabs, all: allTabs.map(\.id)).contains("teleport") {
+                    enabledTabs = TabConfig.toggled("teleport", in: enabledTabs, all: allTabs.map(\.id))
+                }
+                UserDefaults.standard.set("teleport", forKey: SettingsKey.lastTab)
+                state.teleport.setupRequested = true
+            }
+            .disabled(state.teleport.tshPath == nil)
+            Button("teleport.json 열기") {
+                if !FileManager.default.fileExists(atPath: Paths.teleportFile.path) { try? state.teleport.config.save() }
+                NSWorkspace.shared.open(Paths.teleportFile)
+            }
+            Text("탭이 꺼져 있으면 켜지고, Teleport 탭에서 설정이 이어집니다. 비밀번호·OTP 키는 키체인에 저장돼요.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

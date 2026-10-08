@@ -27,6 +27,7 @@ final class AppState: ObservableObject {
     private var updateErrorFromCheck = false
     let todoStore: TodoStore
     let tagStore = TagStore()
+    let teleport = TeleportManager()
 
     /// Jira 탭을 안 열어도 18시 자동 요약이 키를 알도록 마지막으로 본 프로젝트 접두사를 저장해 둔다.
     nonisolated static let jiraPrefixesKey = "jiraProjectPrefixes"

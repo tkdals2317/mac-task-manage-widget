@@ -9,6 +9,7 @@ public enum Paths {
     public static var activityFile: URL { dataDir.appendingPathComponent("activity.jsonl") }
     public static var worklogDir: URL { dataDir.appendingPathComponent("worklog", isDirectory: true) }
     public static var summariesDir: URL { dataDir.appendingPathComponent("summaries", isDirectory: true) }
+    public static var teleportFile: URL { dataDir.appendingPathComponent("teleport.json") }
     public static var logsDir: URL { dataDir.appendingPathComponent("logs", isDirectory: true) }
     public static var claudeDir: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude", isDirectory: true)
