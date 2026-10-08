@@ -145,6 +145,11 @@ final class AppState: ObservableObject {
         update(todo.id) { $0.title = title }
     }
 
+    func setMemo(_ todo: Todo, _ memo: String) {
+        guard memo != todo.memo else { return }
+        update(todo.id) { $0.memo = memo }
+    }
+
     func delete(_ todo: Todo) {
         todos.removeAll { $0.id == todo.id }
         persistTodos()
