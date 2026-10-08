@@ -110,8 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let view = NSMenu(title: "보기")
         view.addItem(withTitle: "새 할 일", action: #selector(newTodo), keyEquivalent: "n").target = self
         view.addItem(.separator())
-        for (i, t) in allTabs.enumerated() {
-            let item = view.addItem(withTitle: "탭 \(i + 1) (\(t.title))", action: #selector(selectTab(_:)), keyEquivalent: "\(i + 1)")
+        for i in allTabs.indices {
+            let item = view.addItem(withTitle: "탭 \(i + 1)", action: #selector(selectTab(_:)), keyEquivalent: "\(i + 1)")
             item.target = self
             item.tag = i
         }
