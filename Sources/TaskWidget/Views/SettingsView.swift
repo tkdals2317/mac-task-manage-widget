@@ -263,8 +263,8 @@ struct SettingsView: View {
     @ViewBuilder
     private var jiraPane: some View {
         Section("계정") {
-            TextField("URL", text: $jiraBaseURL)
-            TextField("이메일", text: $jiraEmail, prompt: Text("name@midasin.com"))
+            TextField("URL", text: $jiraBaseURL, prompt: Text("https://your-site.atlassian.net"))
+            TextField("이메일", text: $jiraEmail, prompt: Text("name@company.com"))
             HStack {
                 SecureField(hasToken ? "API 토큰 (저장됨 · 바꾸려면 입력)" : "API 토큰", text: $token)
                 Button("저장") { saveToken() }   // 비활성화하지 않고 누르면 빠진 걸 알려준다

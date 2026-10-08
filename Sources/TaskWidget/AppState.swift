@@ -285,7 +285,10 @@ final class AppState: ObservableObject {
         let s = Settings.shared
         let token = s.jiraEmail.isEmpty ? nil : await jiraToken(for: s.jiraEmail)
         jiraConfigured = token != nil
-        guard let token, let url = URL(string: s.jiraBaseURL) else { return }
+        guard let token else { return }
+        guard !s.jiraBaseURL.trimmingCharacters(in: .whitespaces).isEmpty, let url = URL(string: s.jiraBaseURL) else {
+            jiraError = "설정 > Jira 에서 Jira 주소를 입력하세요"; return
+        }
         guard !jiraLoading else { return }
         jiraLoading = true
         defer { jiraLoading = false }

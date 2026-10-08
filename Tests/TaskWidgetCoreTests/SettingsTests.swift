@@ -22,7 +22,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(s.alwaysOnTop)
         XCTAssertTrue(s.allSpaces)
         XCTAssertTrue(s.globalHotKeyEnabled)
-        XCTAssertEqual(s.jiraBaseURL, "https://midasitweb-jira.atlassian.net")
+        XCTAssertEqual(s.jiraBaseURL, "", "회사 주소를 기본값으로 두지 않는다")
         XCTAssertEqual(s.jiraEmail, "")
         XCTAssertEqual(s.jiraRefreshMinutes, 5)
         XCTAssertEqual(s.jiraJQL, "")

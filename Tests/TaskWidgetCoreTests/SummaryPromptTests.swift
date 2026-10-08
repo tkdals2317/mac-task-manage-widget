@@ -98,6 +98,6 @@ final class SummaryPromptTests: XCTestCase {
         let p = SummaryPrompt.build(input, calendar: seoul)
         XCTAssertTrue(p.contains("=== 4) Jira 키 ===\nmrs-cms: NMRS-1, NMRS-2"))
         XCTAssertFalse(p.contains("empty:"))
-        XCTAssertTrue(p.contains("Jira 키(예: NMRS-123)"))
+        XCTAssertTrue(p.contains("Jira 키(예: ABC-123)"))
     }
 }
