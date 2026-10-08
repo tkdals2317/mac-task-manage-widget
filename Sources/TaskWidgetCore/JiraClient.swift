@@ -5,6 +5,8 @@ public enum JiraError: Error, Equatable {
     case badQuery(String)
     case http(Int)
     case network(String)
+    /// 상태 전환 등 쓰기 요청 실패 (사용자에게 그대로 보여줄 메시지)
+    case message(String)
 
     public var userMessage: String {
         switch self {
@@ -12,6 +14,7 @@ public enum JiraError: Error, Equatable {
         case .badQuery(let m): return "JQL 오류: \(m)"
         case .http(let c): return "HTTP \(c)"
         case .network(let m): return "네트워크: \(m)"
+        case .message(let m): return m
         }
     }
 }
@@ -64,7 +67,20 @@ public struct JiraClient {
     }
 
     private func get(_ url: URL) async throws -> Data {
+        let (data, code) = try await send(url)
+        switch code {
+        case 200...299: return data
+        case 401, 403: throw JiraError.unauthorized
+        case 400: throw JiraError.badQuery(Self.errorMessage(data))
+        default: throw JiraError.http(code)
+        }
+    }
+
+    private func send(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, Int) {
         var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.httpBody = body
+        if body != nil { req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         req.timeoutInterval = 20
         req.setValue("Basic " + Data("\(email):\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -75,12 +91,48 @@ public struct JiraClient {
         } catch {
             throw JiraError.network(error.localizedDescription)
         }
-        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
+    // MARK: - Transitions
+
+    public func fetchTransitions(issueKey: String) async throws -> [JiraTransition] {
+        let (data, code) = try await send(transitionsURL(issueKey))
+        guard (200...299).contains(code) else { throw Self.transitionError(code) }
+        return try Self.decodeTransitions(data)
+    }
+
+    public func transition(issueKey: String, transitionId: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["transition": ["id": transitionId]])
+        let (_, code) = try await send(transitionsURL(issueKey), method: "POST", body: body)
+        guard code == 204 else { throw Self.transitionError(code) }
+    }
+
+    private func transitionsURL(_ key: String) -> URL {
+        baseURL.appendingPathComponent("rest/api/3/issue/\(key)/transitions")
+    }
+
+    static func transitionError(_ code: Int) -> JiraError {
         switch code {
-        case 200...299: return data
-        case 401, 403: throw JiraError.unauthorized
-        case 400: throw JiraError.badQuery(Self.errorMessage(data))
-        default: throw JiraError.http(code)
+        case 400: return .message("이 상태로 바꿀 수 없음 (필수 입력값이 필요할 수 있음 — Jira 에서 직접 변경)")
+        case 401: return .message("토큰 만료 — 설정에서 토큰을 다시 입력하세요")
+        case 403: return .message("권한 없음")
+        case 404: return .message("이슈 없음")
+        default: return .http(code)
+        }
+    }
+
+    struct TransitionsResponse: Decodable {
+        struct T: Decodable {
+            struct To: Decodable { let name: String; let statusCategory: Category? }
+            let id: String; let name: String; let to: To
+        }
+        let transitions: [T]
+    }
+
+    static func decodeTransitions(_ data: Data) throws -> [JiraTransition] {
+        try JSONDecoder().decode(TransitionsResponse.self, from: data).transitions.map {
+            JiraTransition(id: $0.id, name: $0.name, toName: $0.to.name, toCategory: $0.to.statusCategory?.key ?? "")
         }
     }
 

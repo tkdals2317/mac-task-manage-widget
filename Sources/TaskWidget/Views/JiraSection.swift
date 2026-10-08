@@ -90,15 +90,54 @@ struct JiraSection: View {
     }
 }
 
+/// 상태 변경 팝오버. (열린 NSMenu 는 비동기 로드 후 다시 그려지지 않아 팝오버를 쓴다.)
+struct JiraTransitionPopover: View {
+    @EnvironmentObject var state: AppState
+    let issue: JiraIssue
+    let close: () -> Void
+    @State private var items: [JiraTransition]?
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let error {
+                Text(error).foregroundStyle(.red).frame(maxWidth: 260, alignment: .leading)
+            } else if let items {
+                let next = items.filter { $0.toName != issue.status }
+                if next.isEmpty { Text("가능한 전환 없음").foregroundStyle(.secondary) }
+                ForEach(next) { t in
+                    Button("→ \(t.toName)") {
+                        close()
+                        Task { await state.transitionJira(issue.id, to: t) }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
+                }
+            } else {
+                HStack(spacing: 6) { ProgressView().controlSize(.small); Text("불러오는 중…") }
+            }
+        }
+        .font(.system(size: 12))
+        .padding(10)
+        .task {
+            do { items = try await state.loadTransitions(for: issue.id) }
+            catch { self.error = (error as? JiraError)?.userMessage ?? error.localizedDescription }
+        }
+    }
+}
+
 struct JiraRow: View {
+    @EnvironmentObject var state: AppState
     let issue: JiraIssue
     let baseURL: String
     var prefix = ""
     var trailing: Trailing = .none
     enum Trailing { case none, version, status }
+    @State private var showTransitions = false
     @Environment(\.fontScale) private var scale
 
     var body: some View {
+        HStack(spacing: 6) {
         Button {
             if let u = URL(string: "\(baseURL)/browse/\(issue.id)") {
                 NSWorkspace.shared.open(u)
@@ -123,7 +162,7 @@ struct JiraRow: View {
                             .background(Capsule().fill(Color.primary.opacity(0.09)))
                     }
                 case .status:
-                    Text(issue.status).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                    EmptyView()
                 case .none:
                     EmptyView()
                 }
@@ -133,6 +172,26 @@ struct JiraRow: View {
         }
         .buttonStyle(.plain)
         .help(issue.summary)
+        if trailing == .status {
+            if state.jiraBusyKeys.contains(issue.id) {
+                ProgressView().controlSize(.mini)
+            } else {
+                Button { showTransitions = true } label: {
+                    Text(issue.status).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("눌러서 상태 변경")
+            }
+        } else if state.jiraBusyKeys.contains(issue.id) {
+            ProgressView().controlSize(.mini)
+        }
+        }
+        .popover(isPresented: $showTransitions, arrowEdge: .bottom) {
+            JiraTransitionPopover(issue: issue) { showTransitions = false }
+        }
+        .contextMenu {
+            Button("상태 변경…") { showTransitions = true }
+        }
         Divider()
     }
 

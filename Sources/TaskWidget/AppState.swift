@@ -338,6 +338,45 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Jira transition
+
+    @Published var jiraBusyKeys: Set<String> = []
+
+    private func jiraClient() async -> JiraClient? {
+        let s = Settings.shared
+        guard !s.jiraEmail.isEmpty, let token = await jiraToken(for: s.jiraEmail),
+              let url = URL(string: s.jiraBaseURL.trimmingCharacters(in: .whitespaces)) else { return nil }
+        return JiraClient(baseURL: url, email: s.jiraEmail, token: token)
+    }
+
+    /// 가능한 전환 목록. 실패하면 메시지를 담은 JiraError 를 던진다 (팝오버에서 인라인 표시).
+    func loadTransitions(for key: String) async throws -> [JiraTransition] {
+        guard let c = await jiraClient() else { throw JiraError.message("Jira 설정 필요") }
+        do { return try await c.fetchTransitions(issueKey: key) }
+        catch {
+            DiagLog.append("jira transitions error \(key): \((error as? JiraError)?.userMessage ?? error.localizedDescription)")
+            throw error
+        }
+    }
+
+    func transitionJira(_ key: String, to t: JiraTransition) async {
+        guard let c = await jiraClient(), !jiraBusyKeys.contains(key) else { return }
+        jiraBusyKeys.insert(key)
+        defer { jiraBusyKeys.remove(key) }
+        do {
+            try await c.transition(issueKey: key, transitionId: t.id)
+            DiagLog.append("jira transition \(key) -> \(t.toName)")
+            jiraError = nil
+        } catch {
+            let m = (error as? JiraError)?.userMessage ?? error.localizedDescription
+            jiraError = "\(key): \(m)"
+            DiagLog.append("jira transition error \(key): \(m)")
+            return
+        }
+        jiraLoading = false  // 진행 중 갱신이 있어도 바뀐 상태를 바로 다시 읽는다
+        await refreshJira()
+    }
+
     // MARK: - Summary
 
     func loadSummary(for day: Date) {
