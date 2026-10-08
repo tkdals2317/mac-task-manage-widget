@@ -9,9 +9,11 @@ public struct Todo: Codable, Identifiable, Equatable {
     /// "yyyy-MM-dd" 로컬 날짜. 시각 없음.
     public var dueDate: String?
     public var tagIds: [String]
+    /// 여러 줄 메모. 없으면 "".
+    public var memo: String
 
     public init(id: UUID = UUID(), title: String, done: Bool = false, createdAt: Date = Date(),
-                completedAt: Date? = nil, dueDate: String? = nil, tagIds: [String] = []) {
+                completedAt: Date? = nil, dueDate: String? = nil, tagIds: [String] = [], memo: String = "") {
         self.id = id
         self.title = title
         self.done = done
@@ -19,6 +21,7 @@ public struct Todo: Codable, Identifiable, Equatable {
         self.completedAt = completedAt
         self.dueDate = dueDate
         self.tagIds = tagIds
+        self.memo = memo
     }
 
     public init(from decoder: Decoder) throws {
@@ -30,6 +33,13 @@ public struct Todo: Codable, Identifiable, Equatable {
         completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
         dueDate = try c.decodeIfPresent(String.self, forKey: .dueDate)
         tagIds = try c.decodeIfPresent([String].self, forKey: .tagIds) ?? []
+        memo = try c.decodeIfPresent(String.self, forKey: .memo) ?? ""
+    }
+
+    /// 메모 첫 비어 있지 않은 줄 (미리보기용). 없으면 nil.
+    public var memoPreview: String? {
+        memo.split(whereSeparator: \.isNewline).lazy
+            .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
     }
 
     /// 앞뒤 공백 제거. 비면 nil.

@@ -10,11 +10,17 @@ struct TodoRow: View {
     @State private var showTags = false
     @State private var editing = false
     @State private var draft = ""
+    @State private var memoOpen = false
+    @State private var memoDraft = ""
+    @State private var memoSave: Task<Void, Never>?
     @FocusState private var titleFocused: Bool
+    @FocusState private var memoFocused: Bool
 
     var body: some View {
         let badge = DueBadge.badge(due: todo.dueDate, today: Date())
-        HStack(spacing: 8) {
+        let hasMemo = todo.memoPreview != nil
+        VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .top, spacing: 8) {
             Button { state.toggle(todo) } label: {
                 Image(systemName: todo.done ? "checkmark.square.fill" : "square")
                     .font(.system(size: 13 * scale))
@@ -22,6 +28,7 @@ struct TodoRow: View {
             }
             .buttonStyle(.plain)
 
+            VStack(alignment: .leading, spacing: 2) {
             if editing {
                 TextField("", text: $draft)
                     .textFieldStyle(.plain)
@@ -40,10 +47,33 @@ struct TodoRow: View {
                     .onTapGesture(count: 2) { beginEdit() }
                     .help("더블클릭하면 수정")
             }
+            if let preview = todo.memoPreview {
+                Button { toggleMemo() } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "note.text").font(.system(size: 9 * scale))
+                        Text(preview).font(.system(size: 11 * scale)).lineLimit(1)
+                    }
+                    .foregroundStyle(.secondary)
+                    .opacity(todo.done ? 0.5 : 1)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            }
 
             Spacer(minLength: 4)
 
             tagsArea.opacity(todo.done ? 0.5 : 1)
+
+            if hovering || hasMemo || memoOpen {
+                Button { toggleMemo() } label: {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 11 * scale))
+                        .foregroundStyle(hasMemo || memoOpen ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("메모")
+            }
 
             Button { showDue = true } label: {
                 if badge.style == .none {
@@ -79,6 +109,8 @@ struct TodoRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        if memoOpen { memoEditor }
+        }
         .contextMenu {
             ForEach(state.tagConfig.groups) { group in
                 Menu(group.name) {
@@ -116,6 +148,53 @@ struct TodoRow: View {
             .buttonStyle(.plain)
             .popover(isPresented: $showTags) { TagPopover(todo: todo).environmentObject(state) }
         }
+    }
+
+    private var memoEditor: some View {
+        TextEditor(text: $memoDraft)
+            .font(.system(size: 12 * scale))
+            .scrollContentBackground(.hidden)
+            .focused($memoFocused)
+            .onExitCommand { toggleMemo() }
+            .onChange(of: memoDraft) { _, new in
+                memoSave?.cancel()
+                memoSave = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    if !Task.isCancelled { state.setMemo(todo, new) }
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if memoDraft.isEmpty {
+                    Text("메모 (여러 줄, - 목록·링크 가능)")
+                        .font(.system(size: 12 * scale)).foregroundStyle(.tertiary)
+                        .padding(.leading, 5).allowsHitTesting(false)
+                }
+            }
+            .frame(minHeight: 12 * scale * 3 * 1.3, maxHeight: 12 * scale * 8 * 1.3)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(4)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .padding(.leading, 21)
+            .padding(.bottom, 6)
+            .onDisappear { flushMemo() }
+    }
+
+    private func toggleMemo() {
+        if memoOpen {
+            flushMemo()
+            memoOpen = false
+        } else {
+            memoDraft = todo.memo
+            memoOpen = true
+            DispatchQueue.main.async { memoFocused = true }
+        }
+    }
+
+    private func flushMemo() {
+        memoSave?.cancel()
+        memoSave = nil
+        if memoOpen { state.setMemo(todo, memoDraft) }
     }
 
     private func beginEdit() {
