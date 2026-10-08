@@ -162,6 +162,9 @@ public struct TeleportLogin {
         for s in secrets where !s.isEmpty { t = t.replacingOccurrences(of: s, with: "***") }
         let lines = t.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return "tsh 로그인 실패 (exit \(status))" + (lines.isEmpty ? "" : ": " + lines.suffix(3).joined(separator: " / "))
+        // 로그인 공지 배너가 길어서, ERROR 줄이 있으면 그 줄만 보여준다.
+        let errLine = t.range(of: "ERROR:[^\\r\\n]*", options: [.regularExpression, .backwards]).map { String(t[$0]).trimmingCharacters(in: .whitespaces) }
+        let shown = errLine.map { [$0] } ?? Array(lines.suffix(3))
+        return "tsh 로그인 실패 (exit \(status))" + (shown.isEmpty ? "" : ": " + shown.joined(separator: " / "))
     }
 }

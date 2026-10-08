@@ -42,3 +42,16 @@ final class TOTPTests: XCTestCase {
         XCTAssertEqual(TOTP.secondsLeft(at: Date(timeIntervalSince1970: 89)), 1)
     }
 }
+
+final class TOTPAccountTests: XCTestCase {
+    func testAccountUser() {
+        XCTAssertEqual(TOTP.accountUser(in: "otpauth://totp/Teleport%3Alsm0506%40teleport.devops.midasin.com?secret=JBSWY3DPEHPK3PXP"), "lsm0506")
+        XCTAssertEqual(TOTP.accountUser(in: "otpauth://totp/lsm0506?secret=JBSWY3DPEHPK3PXP"), "lsm0506")
+        XCTAssertNil(TOTP.accountUser(in: "JBSWY3DPEHPK3PXP"))
+    }
+
+    func testLoginErrorShowsErrorLineOnly() {
+        let out = "⚠️ 공지\n긴 안내문\nPress [ENTER] to continue.\nEnter password for Teleport user developer:\nEnter your OTP token:\nERROR: invalid username, password or second factor\n"
+        XCTAssertEqual(TeleportLogin.tail(out, redacting: [], status: 1), "tsh 로그인 실패 (exit 1): ERROR: invalid username, password or second factor")
+    }
+}

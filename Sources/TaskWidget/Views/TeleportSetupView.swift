@@ -173,11 +173,21 @@ struct TeleportSetupView: View {
     private var account: some View {
         VStack(alignment: .leading, spacing: 8) {
             field("프록시") { TextField("", text: $m.proxy) }
-            field("사용자 ID") { TextField("", text: $m.user) }
+            field("사용자 ID") {
+                VStack(alignment: .leading, spacing: 2) {
+                    TextField("Teleport 계정 (DB 사용자 developer 아님)", text: $m.user)
+                    if let u = TOTP.accountUser(in: m.otpKey), u != m.user.trimmingCharacters(in: .whitespaces) {
+                        Text("OTP 키의 계정은 \(u) 이에요").font(.system(size: 10.5 * scale)).foregroundStyle(.orange)
+                    }
+                }
+            }
             field("비밀번호") { SecureField("", text: $m.password) }
             field("OTP 키") {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("base32 키 또는 otpauth:// URL", text: $m.otpKey)
+                        .onChange(of: m.otpKey) { _, k in
+                            if m.user.trimmingCharacters(in: .whitespaces).isEmpty, let u = TOTP.accountUser(in: k) { m.user = u }
+                        }
                     HStack {
                         Button("QR 이미지로 읽기") { m.readQR() }.controlSize(.small)
                         TimelineView(.periodic(from: .now, by: 1)) { ctx in

@@ -16,6 +16,16 @@ public struct TOTP {
         key = k
     }
 
+    /// `otpauth://totp/Teleport:lsm0506@host?...` 의 계정 이름(`lsm0506`). 없으면 nil.
+    public static func accountUser(in input: String) -> String? {
+        guard let c = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
+              c.scheme?.lowercased() == "otpauth" else { return nil }
+        var label = String(c.path.drop(while: { $0 == "/" }))
+        if let colon = label.firstIndex(of: ":") { label = String(label[label.index(after: colon)...]) }
+        let user = label.split(separator: "@").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return user.isEmpty ? nil : user
+    }
+
     public func code(at date: Date = Date(), digits: Int = 6, period: TimeInterval = 30) -> String {
         var counter = UInt64(max(0, date.timeIntervalSince1970) / period).bigEndian
         let mac = HMAC<Insecure.SHA1>.authenticationCode(for: Data(bytes: &counter, count: 8), using: SymmetricKey(data: key))
