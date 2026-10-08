@@ -47,4 +47,17 @@ final class TodoStoreTests: XCTestCase {
         try store.save([Todo(title: "x")])
         XCTAssertEqual(store.load().count, 1)
     }
+
+    func testMemoDecodesWhenMissingAndRoundTrips() throws {
+        let old = #"{"id":"11111111-1111-1111-1111-111111111111","title":"a","done":false,"createdAt":0,"tagIds":[]}"#
+        let dec = JSONDecoder()
+        let t = try dec.decode(Todo.self, from: Data(old.utf8))
+        XCTAssertEqual(t.memo, "")
+        XCTAssertNil(t.memoPreview)
+        var m = t
+        m.memo = "\n  첫 줄\n둘째"
+        XCTAssertEqual(m.memoPreview, "첫 줄")
+        let back = try dec.decode(Todo.self, from: JSONEncoder().encode(m))
+        XCTAssertEqual(back, m)
+    }
 }

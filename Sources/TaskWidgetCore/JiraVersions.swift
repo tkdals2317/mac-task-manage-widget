@@ -23,10 +23,10 @@ public enum VersionFilter: Equatable {
 }
 
 public enum JiraVersions {
-    /// 최신 버전 먼저 (숫자 인지 비교 내림차순, 동률은 이름순)
-    static func newestFirst(_ a: String, _ b: String) -> Bool {
+    /// 먼저 나갈 버전 먼저 (숫자 인지 비교 오름차순: 15.5.a → 15.6.0, 동률은 이름순)
+    static func releaseOrder(_ a: String, _ b: String) -> Bool {
         let r = a.compare(b, options: .numeric)
-        return r == .orderedSame ? a < b : r == .orderedDescending
+        return r == .orderedSame ? a < b : r == .orderedAscending
     }
 
     public static func counts(_ issues: [JiraIssue]) -> (versions: [(name: String, count: Int)], noneCount: Int) {
@@ -36,7 +36,7 @@ public enum JiraVersions {
             if i.fixVersions.isEmpty { none += 1 }
             for v in Set(i.fixVersions) { c[v, default: 0] += 1 }
         }
-        return (c.keys.sorted(by: newestFirst).map { ($0, c[$0]!) }, none)
+        return (c.keys.sorted(by: releaseOrder).map { ($0, c[$0]!) }, none)
     }
 
     public static func filter(_ issues: [JiraIssue], _ f: VersionFilter) -> [JiraIssue] {
@@ -69,7 +69,8 @@ public enum JiraVersions {
     }
 
     public static func tag(for issue: JiraIssue, prefix: String = "") -> String? {
-        guard let first = issue.fixVersions.first else { return nil }
+        // 여러 버전이면 가장 먼저 나갈 버전을 보여준다.
+        guard let first = issue.fixVersions.sorted(by: releaseOrder).first else { return nil }
         let shown = display(first, prefix: prefix)
         return issue.fixVersions.count > 1 ? "\(shown) +\(issue.fixVersions.count - 1)" : shown
     }

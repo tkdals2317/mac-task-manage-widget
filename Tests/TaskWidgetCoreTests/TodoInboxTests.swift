@@ -48,13 +48,14 @@ final class TodoInboxTests: XCTestCase {
     }
 
     func testImportResolvesTagsDeletesFilesAndMovesBad() throws {
-        let id = run(["--title", "t", "--tag", "긴급", "--tag", "낮음", "--tag", "WORK", "--due", "2026-10-09"]).obj["id"] as! String
+        let id = run(["--title", "t", "--tag", "긴급", "--tag", "낮음", "--tag", "WORK", "--due", "2026-10-09", "--memo", "  상세 내용\n- 링크  "]).obj["id"] as! String
         try Data("{oops".utf8).write(to: dir.appendingPathComponent("junk.json"))
         var got: [Todo] = []
         XCTAssertEqual(TodoInbox.importPending(inboxDir: dir, config: cfg) { got = $0 }, 1)
         XCTAssertEqual(got.count, 1)
         XCTAssertEqual(got[0].id.uuidString, id)
         XCTAssertEqual(got[0].dueDate, "2026-10-09")
+        XCTAssertEqual(got[0].memo, "상세 내용\n- 링크")
         XCTAssertEqual(got[0].tagIds, ["urgent", "Work"])   // 하나만 그룹은 첫 태그만
         XCTAssertTrue(files().isEmpty)
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("bad/junk.json").path))

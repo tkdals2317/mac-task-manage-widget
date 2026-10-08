@@ -115,9 +115,9 @@ public enum TodoInbox {
                 continue
             }
             let id = UUID(uuidString: f.deletingPathExtension().lastPathComponent) ?? UUID()
-            // TODO(memo): Todo 에 memo 필드가 생기면 item.memo 를 여기서 넘긴다. 지금은 버린다.
             todos.append(Todo(id: id, title: title, createdAt: item.createdAt, dueDate: item.due,
-                              tagIds: resolve(item.tags, in: config).ids))
+                              tagIds: resolve(item.tags, in: config).ids,
+                              memo: item.memo?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
             good.append(f)
         }
         guard !todos.isEmpty, (try? apply(todos)) != nil else { return 0 }
