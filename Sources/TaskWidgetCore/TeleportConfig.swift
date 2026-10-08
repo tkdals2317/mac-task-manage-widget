@@ -81,10 +81,10 @@ public struct TeleportConfig: Codable, Equatable {
     }
 }
 
-/// 비밀번호·OTP 키는 키체인 항목 하나(JSON)에 둔다.
+/// 비밀번호·OTP 키는 SecretStore 항목 하나(JSON)에 둔다.
 public struct TeleportSecrets: Codable, Equatable {
     public static let service = "com.lsm0506.TaskWidget.teleport"
-    private static let account = "credentials"
+    public static let account = "credentials"
 
     public var password: String
     public var otpSecret: String
@@ -95,15 +95,15 @@ public struct TeleportSecrets: Codable, Equatable {
     }
 
     public static func load() -> TeleportSecrets? {
-        guard let s = Keychain.get(account: account, service: service),
+        guard let s = SecretStore.get(service: service, account: account),
               let v = try? JSONDecoder().decode(TeleportSecrets.self, from: Data(s.utf8)) else { return nil }
         return v
     }
 
     public func save() throws {
         let d = try JSONEncoder().encode(self)
-        try Keychain.set(String(decoding: d, as: UTF8.self), account: Self.account, service: Self.service)
+        try SecretStore.set(String(decoding: d, as: UTF8.self), service: Self.service, account: Self.account)
     }
 
-    public static func delete() { Keychain.delete(account: account, service: Self.service) }
+    public static func delete() { SecretStore.delete(service: service, account: account) }
 }

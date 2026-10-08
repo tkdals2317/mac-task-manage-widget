@@ -63,7 +63,7 @@ final class TeleportSetupModel: ObservableObject {
         do {
             try TeleportSecrets(password: password, otpSecret: otpKey.trimmed).save()
         } catch {
-            self.error = "키체인 저장 실패: \(error)"; return
+            self.error = "비밀 정보 저장 실패: \(error)"; return
         }
         saved.proxy = proxy.trimmed
         saved.user = user.trimmed
@@ -207,7 +207,7 @@ struct TeleportSetupView: View {
                     }
                 }
             }
-            Text("비밀번호와 OTP 키는 키체인에만 저장돼요. 다음을 누르면 실제로 로그인해 확인합니다.")
+            Text("비밀번호와 OTP 키는 설정에서 고른 저장 위치(키체인 또는 secrets.json)에만 저장돼요. 다음을 누르면 실제로 로그인해 확인합니다.")
                 .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
         }
         .textFieldStyle(.roundedBorder)

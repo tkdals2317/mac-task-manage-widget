@@ -28,6 +28,7 @@ public enum SettingsKey {
     public static let jiraGroupByVersion = "jiraGroupByVersion"
     public static let sortTodosByTag = "sortTodosByTag"
     public static let globalHotKeyEnabled = "globalHotKeyEnabled"
+    public static let secretStorage = "secretStorage"
 }
 
 public final class Settings {
@@ -137,6 +138,11 @@ public final class Settings {
     public var teleportAutoConnect: Bool {
         get { bool(SettingsKey.teleportAutoConnect, true) }
         set { d.set(newValue, forKey: SettingsKey.teleportAutoConnect) }
+    }
+    /// "keychain" (기본) | "file"
+    public var secretStorage: String {
+        get { string(SettingsKey.secretStorage, "keychain") }
+        set { d.set(newValue, forKey: SettingsKey.secretStorage) }
     }
     public var enabledTabs: String {
         get { string(SettingsKey.enabledTabs, "tasks,summary") }

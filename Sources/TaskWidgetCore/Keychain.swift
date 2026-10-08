@@ -26,6 +26,18 @@ public enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
+    /// get 과 달리 취소·접근 거부를 "없음"과 구분한다 (저장소 전환 시 데이터 유실 방지).
+    public static func read(account: String, service: String = Keychain.service) throws -> String? {
+        var q = baseQuery(account: account, service: service)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(q as CFDictionary, &item)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw KeychainError.status(status) }
+        return (item as? Data).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
     public static func set(_ value: String, account: String, service: String = Keychain.service) throws {
         let data = Data(value.utf8)
         let q = baseQuery(account: account, service: service)
