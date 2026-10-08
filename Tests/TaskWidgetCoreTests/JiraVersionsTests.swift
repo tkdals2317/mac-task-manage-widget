@@ -45,7 +45,7 @@ final class JiraVersionsTests: XCTestCase {
     func testTag() {
         XCTAssertNil(JiraVersions.tag(for: issue("a", [])))
         XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0"])), "15.3.0")
-        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0", "15.2.1"])), "15.3.0 +1")
+        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0", "15.2.1"])), "15.2.1 +1", "먼저 나갈 버전")
     }
 
     func testCommonPrefix() {
