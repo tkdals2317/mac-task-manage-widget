@@ -116,7 +116,12 @@ public struct TeleportLogin {
         self.init(executable: tsh, arguments: ["login", "--proxy", proxy, "--user", user], timeout: timeout)
     }
 
-    private static let prompts = ["Press [ENTER] to continue", "Enter password", "Enter your OTP token"]
+    /// 프롬프트별 문구 후보. 보안키·Touch ID 도 등록된 계정은 OTP 를 다른 문구로 묻는다.
+    private static let prompts: [[String]] = [
+        ["Press [ENTER] to continue"],
+        ["Enter password"],
+        ["Enter your OTP token", "enter a code from a OTP device", "Enter an OTP code"],
+    ]
 
     /// `otp` 는 OTP 프롬프트가 나온 시점에 불린다(30초 경계에 걸리지 않게).
     public func run(password: String, otp: () -> String) -> Result<Void, TeleportError> {
@@ -143,7 +148,12 @@ public struct TeleportLogin {
         let deadline = Date().addingTimeInterval(timeout)
         var bytes = [UInt8](repeating: 0, count: 4096)
         loop: while true {
-            if Date() > deadline { failure = "시간 초과 (\(Int(timeout))초)"; break }
+            if Date() > deadline {
+                // 기다리던 프롬프트가 아닌 문구에서 멈췄을 수 있다. 마지막 출력을 보여준다(비밀값은 가림).
+                let last = Self.tail(all, redacting: secrets, status: -1).components(separatedBy: ": ").dropFirst().joined(separator: ": ")
+                failure = "시간 초과 (\(Int(timeout))초)" + (last.isEmpty ? "" : " · 마지막 출력: \(last)")
+                break
+            }
             var pfd = pollfd(fd: master, events: Int16(POLLIN), revents: 0)
             let r = poll(&pfd, 1, 200)
             if r < 0 { if errno == EINTR { continue }; break }
@@ -152,7 +162,7 @@ public struct TeleportLogin {
             if n <= 0 { break }
             let s = String(decoding: bytes[0..<n], as: UTF8.self)
             buf += s; all += s
-            for (i, prompt) in Self.prompts.enumerated() where buf.contains(prompt) {
+            for (i, alts) in Self.prompts.enumerated() where alts.contains(where: { buf.localizedCaseInsensitiveContains($0) }) {
                 sent[i] += 1
                 if sent[i] > 1 { failure = "같은 프롬프트가 다시 나왔어요 (비밀번호/OTP 거절?)"; break loop }
                 let answer: String

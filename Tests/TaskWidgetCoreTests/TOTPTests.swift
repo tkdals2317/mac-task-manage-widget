@@ -63,3 +63,24 @@ final class TeleportLeftoverTests: XCTestCase {
         XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/mysql/bin/mysqld --port 4306", name: "mrs-dv"))
     }
 }
+
+final class TOTPFreshCodeTests: XCTestCase {
+    func testWaitsForNextWindowWhenSameCounter() throws {
+        let t = try XCTUnwrap(TOTP(input: "JBSWY3DPEHPK3PXP"))
+        var clock = Date(timeIntervalSince1970: 1_700_000_020)   // 구간 시작 후 10초
+        var slept: TimeInterval = 0
+        let last = TOTP.counter(at: clock)
+        let r = t.freshCode(after: last, now: { clock }, sleep: { slept += $0; clock = clock.addingTimeInterval($0) })
+        XCTAssertGreaterThan(r.counter, last)
+        XCTAssertEqual(slept, 20.5, accuracy: 0.01)
+        XCTAssertEqual(r.code, t.code(at: clock))
+    }
+    func testNoWaitForNewWindow() throws {
+        let t = try XCTUnwrap(TOTP(input: "JBSWY3DPEHPK3PXP"))
+        let d = Date(timeIntervalSince1970: 1_700_000_020)
+        var slept = false
+        let r = t.freshCode(after: TOTP.counter(at: d) - 1, now: { d }, sleep: { _ in slept = true })
+        XCTAssertFalse(slept)
+        XCTAssertEqual(r.code, t.code(at: d))
+    }
+}

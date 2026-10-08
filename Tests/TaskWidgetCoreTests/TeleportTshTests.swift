@@ -62,14 +62,14 @@ final class TeleportLoginTests: XCTestCase {
     override func tearDown() { try? FileManager.default.removeItem(at: dir) }
 
     /// tsh 와 같은 프롬프트(`read -s`). 비밀번호 "secret-pw", OTP "123456" 일 때만 exit 0.
-    private func fake(banner: Bool = true) throws -> TeleportLogin {
+    private func fake(banner: Bool = true, otpPrompt: String = "Enter your OTP token:") throws -> TeleportLogin {
         let script = """
         #!/bin/bash
         [ -t 0 ] || { echo "no tty"; exit 2; }
         \(banner ? #"echo "Press [ENTER] to continue"; read -s x"# : "")
         printf "Enter password for Teleport user tester:"; read -s pw; echo
         [ "$pw" = "secret-pw" ] || { echo "access denied for $pw"; exit 1; }
-        printf "Enter your OTP token:"; read -s otp; echo
+        printf "\(otpPrompt)"; read -s otp; echo
         [ "$otp" = "\(code)" ] || { echo "invalid OTP"; exit 1; }
         echo "> Profile URL: x"
         """
@@ -81,6 +81,17 @@ final class TeleportLoginTests: XCTestCase {
     func testSuccess() throws {
         XCTAssertNil(msg(try fake().run(password: "secret-pw", otp: { self.code })))
         XCTAssertNil(msg(try fake(banner: false).run(password: "secret-pw", otp: { self.code })))
+    }
+    /// 보안키도 등록된 계정의 OTP 문구
+    func testSecurityKeyAccountOTPPrompt() throws {
+        XCTAssertNil(msg(try fake(otpPrompt: "Tap any security key or enter a code from a OTP device").run(password: "secret-pw", otp: { self.code })))
+    }
+    func testTimeoutShowsLastPrompt() throws {
+        let l = try fake(otpPrompt: "Unknown prompt:")
+        let short = TeleportLogin(executable: l.executable, arguments: l.arguments, timeout: 2)
+        guard case .failure(let e) = short.run(password: "secret-pw", otp: { self.code }) else { return XCTFail() }
+        XCTAssertTrue(e.message.contains("Unknown prompt"), e.message)
+        XCTAssertFalse(e.message.contains("secret-pw"), e.message)
     }
     func testWrongPasswordFailsWithoutLeakingIt() throws {
         guard case .failure(let e) = try fake().run(password: "wrong-pw", otp: { self.code }) else { return XCTFail("성공하면 안 됨") }
