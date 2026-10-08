@@ -104,7 +104,13 @@ final class TeleportSetupModel: ObservableObject {
 
     func save() {
         var c = saved
-        c.tunnels = checked.map { TeleportTunnel(name: $0.name, dbUser: $0.dbUser.trimmed, port: Int($0.portText) ?? 0) }
+        // teleport.json 에 직접 적은 그룹 이름은 유지한다.
+        let prevGroup = Dictionary(uniqueKeysWithValues: saved.tunnels.map { ($0.name, $0.groupOverride) })
+        c.tunnels = checked.map { e in
+            var t = TeleportTunnel(name: e.name, dbUser: e.dbUser.trimmed, port: Int(e.portText) ?? 0)
+            t.groupOverride = prevGroup[e.name] ?? nil
+            return t
+        }
         do {
             try c.save()
             tp.setupFinished(c)
