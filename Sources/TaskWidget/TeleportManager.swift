@@ -26,7 +26,11 @@ final class TeleportManager: ObservableObject {
     private var intentionalStop = Set<String>()
     private var loginInFlight = false
     /// 사용자가 켜 둔 터널. 프로세스가 예기치 않게 죽어도 유지되고, 사용자가 끄거나 자동 재연결을 포기하면 빠진다.
-    private var wanted = Set<String>()
+    private var wanted = Set<String>() {
+        didSet { UserDefaults.standard.set(wanted.sorted(), forKey: SettingsKey.teleportWanted) }   // 종료(shutdown)는 건드리지 않는다: 다음 실행에서 복원
+    }
+    /// 지난 실행에서 켜 두었던 터널. 시작 시 한 번 복원한다.
+    private var pendingRestore: [String]
     private var failures: [String: Int] = [:]
     private var watchdogBusy = false
     private var timer: Timer?
@@ -36,6 +40,7 @@ final class TeleportManager: ObservableObject {
     init() {
         config = TeleportConfig.load()
         hasSecrets = TeleportSecrets.load() != nil
+        pendingRestore = UserDefaults.standard.stringArray(forKey: SettingsKey.teleportWanted) ?? []
         locateTsh()
     }
 
@@ -187,6 +192,20 @@ final class TeleportManager: ObservableObject {
         guard await ensureLoggedIn() else { return }
         await withTaskGroup(of: Void.self) { g in
             for t in config.tunnels where state(t) != .connected { g.addTask { @MainActor in await self.connect(t) } }
+        }
+    }
+
+    /// ATM 시작 시: 지난번에 켜 둔 터널을 다시 연결한다 (로그인이 필요하면 자동 로그인).
+    func restoreWanted(tabEnabled: Bool) async {
+        let saved = pendingRestore; pendingRestore = []
+        guard tabEnabled, isConfigured, tshPath != nil else { return }
+        let names = TeleportAutoConnect.namesToRestore(persisted: saved, configured: config.tunnels.map(\.name),
+                                                       enabled: Settings.shared.teleportAutoConnect)
+        guard !names.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { g in
+            for t in config.tunnels where names.contains(t.name) && state(t) != .connected {
+                g.addTask { @MainActor in await self.connect(t) }
+            }
         }
     }
 

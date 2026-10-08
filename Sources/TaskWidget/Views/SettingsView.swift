@@ -53,6 +53,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.claudeModel) private var claudeModel = ""
     @AppStorage(SettingsKey.claudePath) private var claudePath = ""
     @AppStorage(SettingsKey.tshPath) private var tshPath = ""
+    @AppStorage(SettingsKey.teleportAutoConnect) private var teleportAutoConnect = true
     @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
     @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
     @AppStorage(SettingsKey.summaryInstructions) private var summaryInstructions = ""
@@ -207,6 +208,9 @@ struct SettingsView: View {
             TextField("tsh 경로 (비우면 자동 탐색)", text: $tshPath)
                 .onSubmit { state.teleport.locateTsh() }
             Button("다시 찾기") { state.teleport.locateTsh() }
+        }
+        Section {
+            Toggle("ATM 시작 시 마지막에 켜 둔 DB 자동 연결", isOn: $teleportAutoConnect)
         }
         Section {
             Button("설정 다시 하기") {

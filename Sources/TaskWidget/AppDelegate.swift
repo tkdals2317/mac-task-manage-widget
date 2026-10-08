@@ -71,6 +71,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         state.teleport.start()
+        // UI 가 뜬 뒤 지난번에 켜 둔 Teleport DB 를 다시 연결
+        Task { [state] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            let on = TabConfig.enabled(from: Settings.shared.enabledTabs, all: allTabs.map(\.id)).contains("teleport")
+            await state.teleport.restoreWanted(tabEnabled: on)
+        }
         scheduler = Scheduler(state: state)
         scheduler.start()
 
