@@ -105,6 +105,8 @@ public struct TeleportLogin {
     public var executable: String
     public var arguments: [String]
     public var timeout: TimeInterval
+    /// 추가 환경 변수 (예: TELEPORT_HOME — 현재 세션을 건드리지 않고 비밀번호/OTP 만 검증할 때).
+    public var extraEnvironment: [String: String] = [:]
 
     public init(executable: String, arguments: [String], timeout: TimeInterval = 60) {
         self.executable = executable
@@ -132,6 +134,7 @@ public struct TeleportLogin {
         p.arguments = arguments
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm"
+        env.merge(extraEnvironment) { $1 }
         p.environment = env
         let h = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
         p.standardInput = h; p.standardOutput = h; p.standardError = h

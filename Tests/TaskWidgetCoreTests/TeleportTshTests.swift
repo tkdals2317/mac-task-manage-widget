@@ -111,6 +111,12 @@ final class TeleportLoginTests: XCTestCase {
         guard case .failure(let e) = l.run(password: "p", otp: { "1" }) else { return XCTFail() }
         XCTAssertTrue(e.message.contains("시간 초과"))
     }
+    func testExtraEnvironmentReachesTsh() {
+        var l = TeleportLogin(executable: "/bin/sh", arguments: ["-c", "test \"$TELEPORT_HOME\" = /tmp/atm-verify"], timeout: 5)
+        guard case .failure = l.run(password: "p", otp: { "1" }) else { return XCTFail("환경 변수 없이는 실패해야 함") }
+        l.extraEnvironment["TELEPORT_HOME"] = "/tmp/atm-verify"
+        XCTAssertNil(msg(l.run(password: "p", otp: { "1" })))
+    }
     func testMissingExecutable() {
         guard case .failure = TeleportLogin(executable: "/nope/tsh", arguments: []).run(password: "p", otp: { "1" }) else { return XCTFail() }
     }

@@ -54,12 +54,19 @@ final class TeleportSetupModel: ObservableObject {
         guard canNext, let tsh = tp.tshPath, let totp = TOTP(input: otpKey) else { return }
         busy = true; error = nil; note = nil
         defer { busy = false }
-        let wasLoggedIn = tp.loggedIn
-        let login = TeleportLogin(tsh: tsh, proxy: proxy.trimmed, user: user.trimmed)
+        var login = TeleportLogin(tsh: tsh, proxy: proxy.trimmed, user: user.trimmed)
+        // 이미 로그인돼 있으면 tsh 가 비밀번호를 묻지 않아 검증이 안 된다. 임시 프로필로 따로 로그인해 확인한다.
+        var tempHome: URL?
+        if tp.loggedIn {
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atm-tsh-verify-\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            login.extraEnvironment["TELEPORT_HOME"] = dir.path
+            tempHome = dir
+        }
         let pw = password
-        let res = await Task.detached { login.run(password: pw, otp: { totp.code() }) }.value
+        let res = await Task.detached { [login] in login.run(password: pw, otp: { totp.code() }) }.value
+        if let d = tempHome { try? FileManager.default.removeItem(at: d) }
         if case .failure(let e) = res { error = e.message; return }
-        if wasLoggedIn { note = "이미 로그인된 세션이 있어 비밀번호는 확인되지 않았어요" }
         do {
             try TeleportSecrets(password: password, otpSecret: otpKey.trimmed).save()
         } catch {
