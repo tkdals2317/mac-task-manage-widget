@@ -271,14 +271,29 @@ final class AppState: ObservableObject {
     /// 키체인 접근은 ACL 프롬프트로 무기한 블록될 수 있어 메인 스레드 밖에서만 한다.
     func jiraToken(for account: String) async -> String? {
         if let c = cachedToken, c.account == account { return c.token }
-        let t = await Task.detached { Keychain.get(account: account) }.value
+        let t = await Task.detached { SecretStore.get(service: Keychain.service, account: account) }.value
         if let t { cachedToken = (account, t) }
         return t
     }
 
     func setJiraToken(_ token: String, account: String) async throws {
-        try await Task.detached { try Keychain.set(token, account: account) }.value
+        try await Task.detached { try SecretStore.set(token, service: Keychain.service, account: account) }.value
         cachedToken = (account, token)
+    }
+
+    /// 비밀 정보 저장 위치를 바꾸고 기존 값을 옮긴다. 실패하면 설정은 그대로. 옮긴 개수를 돌려준다.
+    func switchSecretStorage(to kind: SecretStorageKind) async throws -> Int {
+        let s = Settings.shared
+        let email = s.jiraEmail
+        let from = SecretStore.backend(for: SecretStorageKind(rawValue: s.secretStorage) ?? .keychain)
+        let to = SecretStore.backend(for: kind)
+        let moved = try await Task.detached {
+            try SecretStore.migrate(items: SecretStore.knownItems(jiraEmail: email), from: from, to: to)
+        }.value
+        s.secretStorage = kind.rawValue
+        cachedToken = nil
+        teleport.reloadConfig()
+        return moved
     }
 
     func refreshJira() async {

@@ -43,7 +43,7 @@ open ~/Applications/ATM.app
 
 메뉴바 아이콘(또는 Dock 아이콘)으로 패널을 열고 맨 아래 ⚙(설정)을 누른다.
 
-1. **Jira**: Jira 주소(예: `https://your-site.atlassian.net`)와 이메일을 입력하고 "토큰 발급 ↗"로 API 토큰을 만들어 붙여넣은 뒤 저장 → 연결 테스트. 키체인 창이 뜨면 **항상 허용**을 누른다.
+1. **Jira**: Jira 주소(예: `https://your-site.atlassian.net`)와 이메일을 입력하고 "토큰 발급 ↗"로 API 토큰을 만들어 붙여넣은 뒤 저장 → 연결 테스트. 키체인 창이 뜨면 **항상 허용**을 누른다 (창이 싫으면 설정 > 창·일반 > 비밀 정보 저장 에서 **파일**을 고를 수 있다).
 2. **Claude 연동**: "활동 훅 설치", "/worklog 스킬 설치". 훅은 새 Claude Code 세션부터 기록한다.
 3. **창·일반**: "로그인 시 실행"을 켠다.
 4. **요약**: 생성 시각을 확인한다 (기본 18:00).
@@ -91,7 +91,7 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
 
    <img src="docs/images/teleport-setup.png" width="420" alt="Teleport 첫 설정 1단계">
 
-3. **다음** 을 누르면 실제로 로그인해 확인하고, 통과하면 비밀번호·OTP 키를 키체인에 저장한다.
+3. **다음** 을 누르면 실제로 로그인해 확인하고, 통과하면 비밀번호·OTP 키를 저장한다 (기본 키체인, 설정 > 창·일반 > 비밀 정보 저장 에서 파일로 바꿀 수 있다).
 4. **2/2 DB 선택** 에서 `tsh db ls` 로 불러온 DB 를 체크한다. 포트는 4306 부터 자동으로 채워지고(수정 가능, 겹치면 빨간색), 운영 DB 는 빨간 "운영" 표시에 기본 선택되지 않는다. **N개 저장** 을 누른다.
 
 **사용**
@@ -110,12 +110,12 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
 
 - 계정이나 DB 목록을 바꾸려면 설정 > Teleport > **설정 다시 하기**.
 - 그룹 이름은 DB 이름의 첫 부분(`app-dv` → APP)이다. 바꾸려면 설정 > Teleport > **teleport.json 열기** 에서 해당 DB 에 `"group": "원하는 이름"` 을 넣는다.
-- 저장 위치: 비밀번호·OTP 키는 키체인(`com.lsm0506.TaskWidget.teleport`), DB 목록은 `~/Library/Application Support/TaskWidget/teleport.json`, 터널 로그는 `logs/teleport-<이름>.log`.
+- 저장 위치: 비밀번호·OTP 키는 키체인(`com.lsm0506.TaskWidget.teleport`) 또는 `secrets.json`(저장 위치 설정에 따름), DB 목록은 `~/Library/Application Support/TaskWidget/teleport.json`, 터널 로그는 `logs/teleport-<이름>.log`.
 
 **문제 해결**
 
 - `ERROR: invalid username, password or second factor`: 사용자 ID 가 Teleport 계정인지(`developer` 아님), 비밀번호, OTP 키를 확인하고 설정 다시 하기.
-- 키체인 창이 뜨면 **항상 허용** (업데이트 직후 한 번).
+- 키체인 창이 뜨면 **항상 허용** (업데이트 직후 한 번). 매번 뜨는 게 싫으면 설정 > 창·일반 > 비밀 정보 저장 을 **파일**로 바꾼다.
 
 ### Jira
 
@@ -187,7 +187,7 @@ make install
 - **Jira 401**: 토큰을 다시 발급해 저장한다.
 - **요약 실패 `claudeNotFound`**: 터미널에서 `command -v claude` 로 경로를 확인해 설정 > 요약 > claude 경로에 입력한다 (또는 **자동 찾기**).
 - **요약이 "기록 없음"**: 활동 훅이 설치됐는지, 훅 설치 이후의 새 세션인지 확인한다.
-- **키체인 창이 앱을 켤 때마다 뜸**: "허용" 대신 **항상 허용**을 눌렀는지 확인한다. 재설치 직후 한 번 뜨는 건 정상이다. Apple 개발자 팀 ID 없이 빌드한 앱이라 macOS 가 새 버전마다 다시 묻는다.
+- **키체인 창이 앱을 켤 때마다 뜸**: "허용" 대신 **항상 허용**을 눌렀는지 확인한다. 재설치 직후 한 번 뜨는 건 정상이다. Apple 개발자 팀 ID 없이 빌드한 앱이라 macOS 가 새 버전마다 다시 묻는다. 설정 > 창·일반 > 비밀 정보 저장 을 **파일**로 바꾸면 더는 뜨지 않는다 (대신 평문 저장, 아래 참고).
 - **앱을 옮긴 뒤 훅이 동작하지 않음**: `~/.claude/settings.json` 의 훅 경로가 깨진 것이다. 설정 > Claude 연동에서 "재설치"한다.
 - **이전 이름(TaskWidget.app)에서 업그레이드**: 설정 > Claude 연동에서 활동 훅을 재설치하고, 로그인 시 실행을 껐다 켠다.
 - **삭제**: 먼저 설정 > Claude 연동에서 훅·스킬을 제거한 뒤, `~/Applications/ATM.app` 을 휴지통으로 옮기고 데이터 폴더 `~/Library/Application Support/TaskWidget/` 를 삭제한다.
@@ -201,7 +201,7 @@ make install
 - `worklog/`: `/worklog` 로 남긴 일지
 - `summaries/`: 생성된 요약
 - `logs/`: 업데이트 등 로그
-- Jira API 토큰은 키체인(`com.lsm0506.TaskWidget.jira`)에 저장된다.
+- 비밀 정보(Jira API 토큰, Teleport 비밀번호·OTP 키)는 기본적으로 키체인(`com.lsm0506.TaskWidget.jira`, `com.lsm0506.TaskWidget.teleport`)에 저장된다. 설정 > 창·일반 > 비밀 정보 저장 에서 **파일**을 고르면 `secrets.json` 에 **암호화 없이** 저장된다 (권한 600, 내 계정만 읽기 가능). 저장소 밖이라 git 에 올라가지 않는다. 전환하면 기존 값을 새 위치로 옮기고 이전 위치에서 지운다.
 
 외부로 나가는 통신은 Jira API 호출과 로컬 `claude` CLI 실행(요약 생성)뿐이다. 그 외 서버로 데이터를 보내지 않는다.
 

@@ -57,6 +57,10 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
     @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
     @AppStorage(SettingsKey.summaryInstructions) private var summaryInstructions = ""
+    @AppStorage(SettingsKey.secretStorage) private var secretStorage = "keychain"
+    @State private var secretStatus = ""
+    @State private var secretError = ""
+    @State private var secretBusy = false
     @State private var instructionsDraft = ""
     @State private var confirmReset = false
     @State private var newTagId: String?
@@ -193,6 +197,50 @@ struct SettingsView: View {
                 Text(integrationError).foregroundStyle(.red).font(.caption)
             }
         }
+        Section("비밀 정보 저장") {
+            Picker("저장 위치", selection: Binding(
+                get: { secretStorage },
+                set: { switchSecretStorage(to: $0) }
+            )) {
+                Text("키체인 (권장)").tag("keychain")
+                Text("파일").tag("file")
+            }
+            .pickerStyle(.segmented)
+            .disabled(secretBusy)
+            if secretStorage == "file" {
+                Text("Jira 토큰과 Teleport 비밀번호·OTP 키가 ~/Library/Application Support/TaskWidget/secrets.json 에 암호화 없이 저장돼요 (내 계정만 읽기 가능). 키체인 허용 창이 뜨지 않아요.")
+                    .font(.caption).foregroundStyle(.orange)
+            } else {
+                Text("업데이트·재설치 후 macOS가 한 번 허용을 물어요.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !secretStatus.isEmpty {
+                Text(secretStatus).font(.caption).foregroundStyle(.secondary)
+            }
+            if !secretError.isEmpty {
+                Text(secretError).font(.caption).foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var secretWhere: String { secretStorage == "file" ? "secrets.json" : "키체인" }
+
+    private func switchSecretStorage(to value: String) {
+        guard value != secretStorage, let kind = SecretStorageKind(rawValue: value) else { return }
+        secretBusy = true
+        secretStatus = "옮기는 중…"
+        secretError = ""
+        Task {
+            defer { secretBusy = false }
+            do {
+                let n = try await state.switchSecretStorage(to: kind)
+                secretStatus = "옮김: \(n)개"
+                refreshStatus()
+            } catch {
+                secretStatus = ""
+                secretError = "저장 위치를 바꾸지 못했어요 (기존 설정 유지): \(error.localizedDescription)"
+            }
+        }
     }
 
     @ViewBuilder
@@ -225,7 +273,7 @@ struct SettingsView: View {
                 if !FileManager.default.fileExists(atPath: Paths.teleportFile.path) { try? state.teleport.config.save() }
                 NSWorkspace.shared.open(Paths.teleportFile)
             }
-            Text("탭이 꺼져 있으면 켜지고, Teleport 탭에서 설정이 이어집니다. 비밀번호·OTP 키는 키체인에 저장돼요.")
+            Text("탭이 꺼져 있으면 켜지고, Teleport 탭에서 설정이 이어집니다. 비밀번호·OTP 키는 \(secretWhere)에 저장돼요.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -274,7 +322,7 @@ struct SettingsView: View {
                 Button("저장") { saveToken() }   // 비활성화하지 않고 누르면 빠진 걸 알려준다
                 Link("토큰 발급 ↗", destination: Links.jiraToken)
             }
-            Text("Atlassian 계정 > 보안 > API 토큰에서 'API 토큰 만들기' 후 복사해 붙여넣으세요.")
+            Text("Atlassian 계정 > 보안 > API 토큰에서 'API 토큰 만들기' 후 복사해 붙여넣으세요. 토큰은 \(secretWhere)에 저장돼요.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("연결 테스트") { testJira() }
