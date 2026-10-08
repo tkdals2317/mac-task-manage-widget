@@ -81,6 +81,7 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
   - base32 키 문자열
   - `otpauth://totp/...?secret=...` 주소 (OTP 앱·브라우저 확장에서 내보낸 것)
   - OTP 등록 QR 코드 캡처 이미지 ("QR 이미지로 읽기")
+  - OTP 키를 어디서 구하는지 모르겠으면 → [OTP 키 구하는 법](docs/otp-key.md) (휴대폰 OTP 앱 / 브라우저 확장별 안내)
 
 **처음 설정**
 
