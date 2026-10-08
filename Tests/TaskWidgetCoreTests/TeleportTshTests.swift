@@ -136,6 +136,36 @@ final class TeleportLoginTests: XCTestCase {
         let l = TeleportLogin(executable: "/bin/bash", arguments: [f.path], timeout: 10)
         XCTAssertNil(msg(l.run(password: "secret-pw", otp: { self.code })))
     }
+    /// tsh v17 처럼 /dev/tty 를 열어 질의·입력을 하는 경우: 제어 터미널이 있어야 한다.
+    private func devTTYFake() throws -> URL {
+        let script = """
+        #!/bin/bash
+        exec 3<>/dev/tty || { echo "ERROR: no controlling terminal"; exit 3; }
+        printf '\\033]11;?\\033\\\\' >&3; IFS= read -rs -t 5 -d '\\' bg <&3
+        echo "Press [ENTER] to continue"; read -s x <&3
+        printf "Enter password for Teleport user tester:"; read -s pw <&3; echo
+        [ "$pw" = "secret-pw" ] || { echo "ERROR: invalid credentials"; exit 1; }
+        printf "Enter your OTP token:"; read -s otp <&3; echo
+        [ "$otp" = "\(code)" ] || { echo "ERROR: invalid credentials"; exit 1; }
+        """
+        let f = dir.appendingPathComponent("fake-devtty-tsh.sh")
+        try script.write(to: f, atomically: true, encoding: .utf8)
+        return f
+    }
+    func testDevTTYFailsWithoutControllingTerminal() throws {
+        let f = try devTTYFake()
+        let l = TeleportLogin(executable: "/bin/bash", arguments: [f.path], timeout: 8)
+        guard case .failure = l.run(password: "secret-pw", otp: { self.code }) else { return XCTFail("제어 터미널 없이 성공하면 안 됨") }
+    }
+    func testDevTTYWorksWithScriptWrapper() throws {
+        let f = try devTTYFake()
+        let w = TeleportLogin.withControllingTerminal(executable: "/bin/bash", arguments: [f.path])
+        let l = TeleportLogin(executable: w.executable, arguments: w.arguments, timeout: 15)
+        XCTAssertNil(msg(l.run(password: "secret-pw", otp: { self.code })))
+        // 실패도 그대로 전달되는지
+        guard case .failure(let e) = l.run(password: "wrong-pw", otp: { self.code }) else { return XCTFail() }
+        XCTAssertTrue(e.message.contains("invalid credentials"), e.message)
+    }
     func testMissingExecutable() {
         guard case .failure = TeleportLogin(executable: "/nope/tsh", arguments: []).run(password: "p", otp: { "1" }) else { return XCTFail() }
     }

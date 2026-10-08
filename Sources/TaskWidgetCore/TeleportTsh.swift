@@ -127,7 +127,14 @@ public struct TeleportLogin {
     }
 
     public init(tsh: String, proxy: String, user: String, timeout: TimeInterval = 60) {
-        self.init(executable: tsh, arguments: ["login", "--proxy", proxy, "--user", user], timeout: timeout)
+        let w = Self.withControllingTerminal(executable: tsh, arguments: ["login", "--proxy", proxy, "--user", user])
+        self.init(executable: w.executable, arguments: w.arguments, timeout: timeout)
+    }
+
+    /// 앱이 띄운 자식은 제어 터미널(/dev/tty)이 없다. tsh v17 은 /dev/tty 로 터미널 질의를 하고 입력을 읽어서
+    /// 질의가 5초씩 멈추고, 답이 입력 버퍼에 남아 비밀번호로 읽힌다. macOS 기본 `script` 로 감싸면 제어 터미널이 생긴다.
+    public static func withControllingTerminal(executable: String, arguments: [String]) -> (executable: String, arguments: [String]) {
+        ("/usr/bin/script", ["-q", "/dev/null", executable] + arguments)
     }
 
     static let sendDelayMicros: useconds_t = 300_000
