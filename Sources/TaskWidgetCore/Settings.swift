@@ -17,6 +17,7 @@ public enum SettingsKey {
     public static let summaryInstructions = "summaryInstructions"
     public static let claudeModel = "claudeModel"
     public static let claudePath = "claudePath"
+    public static let tshPath = "tshPath"
     public static let lastTab = "lastTab"
     public static let enabledTabs = "enabledTabs"
     public static let todoSectionCollapsed = "todoSectionCollapsed"
@@ -110,6 +111,10 @@ public final class Settings {
     public var claudePath: String {
         get { string(SettingsKey.claudePath, "") }
         set { d.set(newValue, forKey: SettingsKey.claudePath) }
+    }
+    public var tshPath: String {
+        get { string(SettingsKey.tshPath, "") }
+        set { d.set(newValue, forKey: SettingsKey.tshPath) }
     }
     public var lastTab: String {
         get { string(SettingsKey.lastTab, "tasks") }

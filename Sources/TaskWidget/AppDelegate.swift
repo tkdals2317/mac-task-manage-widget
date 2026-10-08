@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { if let self { self.updateBadge(self.state.todos) } }
         }
 
+        state.teleport.start()
         scheduler = Scheduler(state: state)
         scheduler.start()
 
@@ -77,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         panel.makeKeyAndOrderFront(nil)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        state.teleport.shutdown()
     }
 
     /// ⌘V/⌘C/⌘X/⌘A/⌘Z 는 메인 메뉴의 Edit 항목을 통해서만 동작한다.

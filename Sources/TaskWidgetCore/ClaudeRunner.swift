@@ -37,7 +37,7 @@ public struct ClaudeRunner {
         self.baseEnvironment = baseEnvironment
     }
 
-    private static func isExe(_ path: String) -> Bool {
+    static func isExe(_ path: String) -> Bool {
         var isDir: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && !isDir.boolValue
             && FileManager.default.isExecutableFile(atPath: path)
