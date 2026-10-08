@@ -395,12 +395,22 @@ struct SettingsView: View {
                 }
                 if let st = state.updateStatus {
                     if st.behind == 0 {
-                        Text("최신 버전입니다").foregroundStyle(.secondary)
+                        Text("최신 버전입니다 (\(info.version))").foregroundStyle(.secondary)
                     } else {
-                        Text("새 커밋 \(st.behind)개")
-                        Text(st.newCommits.joined(separator: "\n"))
-                            .font(.system(size: 11, design: .monospaced))
-                            .textSelection(.enabled)
+                        Text(st.notes.isEmpty ? "작은 수정 \(st.behind)개" : "새 버전 \(st.latestVersion ?? st.notes[0].version)")
+                        if !st.notes.isEmpty {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(st.notes, id: \.version) { n in
+                                        Text([n.version, n.date].compactMap { $0 }.joined(separator: " · "))
+                                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                        MarkdownText(markdown: n.body)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 220)
+                        }
                         if state.updating {
                             Text("업데이트 중… 끝나면 앱이 다시 열립니다").foregroundStyle(.secondary)
                         }
@@ -408,6 +418,11 @@ struct SettingsView: View {
                             .disabled(state.updating)
                     }
                 }
+            }
+            if !info.sourceDir.isEmpty {
+                let log = URL(fileURLWithPath: info.sourceDir).appendingPathComponent("CHANGELOG.md")
+                Button("전체 업데이트 노트") { NSWorkspace.shared.open(log) }
+                    .disabled(!FileManager.default.fileExists(atPath: log.path))
             }
             if let err = state.updateError {
                 HStack {

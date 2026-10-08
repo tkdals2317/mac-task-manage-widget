@@ -12,6 +12,7 @@ ATM (SwiftPM macOS 앱). 설치·빌드 시 AI 에이전트가 지킬 규칙.
 
 ## 규칙
 
+- 기능/버그 수정 PR 은 반드시 `VERSION` 을 올리고 `CHANGELOG.md` 에 항목을 추가한다.
 - 관련 없는 디렉터리를 만들지 않는다.
 - `/Library/Developer` 아래 파일을 직접 고치거나 지우지 않는다. 반드시 `scripts/fix-clt.sh` 를 쓴다.
 - `~/.claude/settings.json` 을 직접 수정하지 않는다. 앱의 설정 > Claude 연동이 백업과 함께 처리한다.

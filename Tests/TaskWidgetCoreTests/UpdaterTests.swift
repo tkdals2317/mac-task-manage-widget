@@ -44,6 +44,23 @@ final class UpdaterTests: XCTestCase {
         XCTAssertTrue(calls.contains { $0.contains("HEAD..origin/dev") })
     }
 
+    func testCheckReadsNotesNewerThanInstalled() throws {
+        let log = "## 1.6.0 — d\n- 새\n\n## 1.5.0 — d\n- 옛\n"
+        let u = updater(["--abbrev-ref": res("main\n"), "--count": res("1\n"),
+                         "origin/main:CHANGELOG.md": res(log), "origin/main:VERSION": res("1.6.0\n")])
+        let s = try u.check(installedVersion: "1.5.0")
+        XCTAssertEqual(s.latestVersion, "1.6.0")
+        XCTAssertEqual(s.notes.map(\.version), ["1.6.0"])
+    }
+
+    func testMissingChangelogIsNil() throws {
+        let u = updater(["--abbrev-ref": res("main\n"), "--count": res("1\n"),
+                         "origin/main:CHANGELOG.md": res(status: 128), "origin/main:VERSION": res(status: 128)])
+        let s = try u.check(installedVersion: "1.5.0")
+        XCTAssertNil(s.latestVersion)
+        XCTAssertEqual(s.notes, [])
+    }
+
     func testDetachedHeadUsesMain() throws {
         var calls: [[String]] = []
         let u = updater(["--abbrev-ref": res("HEAD\n"), "--count": res("0\n")], calls: &calls)

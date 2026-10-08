@@ -24,6 +24,14 @@ struct MarkdownText: View {
             Text(inline(String(line.dropFirst(3))))
                 .font(.system(size: 12.5 * scale, weight: .semibold))
                 .padding(.top, 8)
+        } else if line.hasPrefix("  - ") || line.hasPrefix("  * ") {
+            // 한 단계 들여쓴 하위 항목
+            HStack(alignment: .top, spacing: 6) {
+                Text("◦")
+                Text(inline(String(line.dropFirst(4))))
+            }
+            .font(.system(size: 12 * scale))
+            .padding(.leading, 18)
         } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
             HStack(alignment: .top, spacing: 6) {
                 Text("•")

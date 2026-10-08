@@ -31,9 +31,10 @@ app: doctor
 	  if [ -n "$$(git status --porcelain)" ]; then D=true; else D=false; fi; \
 	else N=unknown; C=unknown; SRC=""; D=false; fi; \
 	V=$$N; [ "$$N" = unknown ] && V=0; \
+	SV=$$(tr -d '[:space:]' < VERSION 2>/dev/null); [ -n "$$SV" ] || SV=0.0.0; \
 	set_key() { /usr/libexec/PlistBuddy -c "Delete :$$1" $$P 2>/dev/null; /usr/libexec/PlistBuddy -c "Add :$$1 string $$2" $$P; }; \
 	set_key ATMBuildNumber "$$N"; set_key ATMCommit "$$C"; set_key ATMBuildDate "$$(date '+%Y-%m-%d %H:%M')"; \
-	set_key ATMSourceDir "$$SRC"; set_key ATMDirty "$$D"; set_key CFBundleVersion "$$V"
+	set_key ATMSourceDir "$$SRC"; set_key ATMDirty "$$D"; set_key CFBundleVersion "$$V"; set_key CFBundleShortVersionString "$$SV"
 	codesign --force --timestamp=none --sign "$(SIGN_ID)" $(APP)
 	@echo "signed with: $(SIGN_ID)"
 

@@ -64,11 +64,11 @@ final class AppState: ObservableObject {
     }
 
     func checkForUpdates() async {
-        let dir = buildInfo.sourceDir
+        let dir = buildInfo.sourceDir, ver = buildInfo.version
         guard !dir.isEmpty, !checkingUpdates, !updating else { return }
         checkingUpdates = true
         defer { checkingUpdates = false }
-        let r = await Task.detached { Result { try Updater(sourceDir: dir).check() } }.value
+        let r = await Task.detached { Result { try Updater(sourceDir: dir).check(installedVersion: ver) } }.value
         switch r {
         case .success(let st):
             updateStatus = st
