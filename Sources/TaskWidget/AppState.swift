@@ -344,15 +344,13 @@ final class AppState: ObservableObject {
         return JiraClient(baseURL: url, email: s.jiraEmail, token: token)
     }
 
-    /// 가능한 전환 목록. 실패하면 jiraError 에 메시지를 남기고 빈 배열.
-    func loadTransitions(for key: String) async -> [JiraTransition] {
-        guard let c = await jiraClient() else { return [] }
+    /// 가능한 전환 목록. 실패하면 메시지를 담은 JiraError 를 던진다 (팝오버에서 인라인 표시).
+    func loadTransitions(for key: String) async throws -> [JiraTransition] {
+        guard let c = await jiraClient() else { throw JiraError.message("Jira 설정 필요") }
         do { return try await c.fetchTransitions(issueKey: key) }
         catch {
-            let m = (error as? JiraError)?.userMessage ?? error.localizedDescription
-            jiraError = "\(key): \(m)"
-            DiagLog.append("jira transitions error \(key): \(m)")
-            return []
+            DiagLog.append("jira transitions error \(key): \((error as? JiraError)?.userMessage ?? error.localizedDescription)")
+            throw error
         }
     }
 
