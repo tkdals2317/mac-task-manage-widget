@@ -36,7 +36,7 @@ final class TeleportSetupModel: ObservableObject {
     }
 
     var canNext: Bool {
-        !busy && !proxy.trimmed.isEmpty && !user.trimmed.isEmpty && !password.isEmpty && TOTP(input: otpKey) != nil
+        !busy && !TeleportConfig.cleanID(proxy).isEmpty && !TeleportConfig.cleanID(user).isEmpty && !password.isEmpty && TOTP(input: otpKey) != nil
     }
 
     var checked: [DBEntry] { entries.filter(\.checked) }
@@ -54,7 +54,7 @@ final class TeleportSetupModel: ObservableObject {
         guard canNext, let tsh = tp.tshPath, let totp = TOTP(input: otpKey) else { return }
         busy = true; error = nil; note = nil
         defer { busy = false }
-        var login = TeleportLogin(tsh: tsh, proxy: proxy.trimmed, user: user.trimmed)
+        var login = TeleportLogin(tsh: tsh, proxy: TeleportConfig.cleanID(proxy), user: TeleportConfig.cleanID(user))
         // 이미 로그인돼 있으면 tsh 가 비밀번호를 묻지 않아 검증이 안 된다. 임시 프로필로 따로 로그인해 확인한다.
         var tempHome: URL?
         if tp.loggedIn {
@@ -72,8 +72,8 @@ final class TeleportSetupModel: ObservableObject {
         } catch {
             self.error = "비밀 정보 저장 실패: \(error)"; return
         }
-        saved.proxy = proxy.trimmed
-        saved.user = user.trimmed
+        saved.proxy = TeleportConfig.cleanID(proxy)
+        saved.user = TeleportConfig.cleanID(user)
         try? saved.save()
         tp.reloadConfig()
         await loadDBs(tsh: tsh)
@@ -189,7 +189,7 @@ struct TeleportSetupView: View {
             field("사용자 ID") {
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("Teleport 계정 (DB 사용자 developer 아님)", text: $m.user)
-                    if let u = TOTP.accountUser(in: m.otpKey), u != m.user.trimmingCharacters(in: .whitespaces) {
+                    if let u = TOTP.accountUser(in: m.otpKey), u != TeleportConfig.cleanID(m.user) {
                         Text("OTP 키의 계정은 \(u) 이에요").font(.system(size: 10.5 * scale)).foregroundStyle(.orange)
                     }
                 }
@@ -199,7 +199,7 @@ struct TeleportSetupView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("base32 키 또는 otpauth:// URL", text: $m.otpKey)
                         .onChange(of: m.otpKey) { _, k in
-                            if m.user.trimmingCharacters(in: .whitespaces).isEmpty, let u = TOTP.accountUser(in: k) { m.user = u }
+                            if TeleportConfig.cleanID(m.user).isEmpty, let u = TOTP.accountUser(in: k) { m.user = u }
                         }
                     HStack {
                         Button("QR 이미지로 읽기") { m.readQR() }.controlSize(.small)

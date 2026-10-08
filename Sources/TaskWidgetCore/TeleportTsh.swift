@@ -118,6 +118,8 @@ public struct TeleportLogin {
         self.init(executable: tsh, arguments: ["login", "--proxy", proxy, "--user", user], timeout: timeout)
     }
 
+    static let sendDelayMicros: useconds_t = 300_000
+
     /// 프롬프트별 문구 후보. 보안키·Touch ID 도 등록된 계정은 OTP 를 다른 문구로 묻는다.
     private static let prompts: [[String]] = [
         ["Press [ENTER] to continue"],
@@ -174,6 +176,9 @@ public struct TeleportLogin {
                 case 1: answer = password
                 default: answer = otp(); secrets.append(answer)
                 }
+                // tsh 는 프롬프트를 찍은 뒤에 입력 모드(에코 끄기)를 바꾼다. 그 전에 보내면 앞 글자가 버려질 수 있어
+                // 잠깐 기다렸다 보낸다 (pexpect 의 delaybeforesend 와 같은 이유).
+                usleep(Self.sendDelayMicros)
                 _ = Array((answer + "\n").utf8).withUnsafeBufferPointer { write(master, $0.baseAddress, $0.count) }
                 buf = ""
                 break
