@@ -68,6 +68,23 @@ public enum TeleportTsh {
     // MARK: - 포트
 
     /// 127.0.0.1:port 에 TCP 연결이 되는가 (로컬이라 즉시 성공/거절).
+    /// 이전 ATM 실행이 남긴 같은 터널(`tsh proxy db --tunnel <name>`) 이 port 를 잡고 있으면 그 PID 들.
+    /// 다른 프로그램이 쓰는 포트는 돌려주지 않는다.
+    public static func leftoverTunnelPIDs(port: Int, name: String) -> [Int32] {
+        let r = ProcessRunner.run(executable: "/usr/sbin/lsof", arguments: ["-t", "-iTCP:\(port)", "-sTCP:LISTEN"], timeout: 5)
+        return r.stdout.split(separator: "\n").compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }.filter { pid in
+            let ps = ProcessRunner.run(executable: "/bin/ps", arguments: ["-o", "command=", "-p", String(pid)], timeout: 5)
+            return isTunnelCommand(ps.stdout, name: name)
+        }
+    }
+
+    static func isTunnelCommand(_ cmd: String, name: String) -> Bool {
+        let parts = cmd.split(separator: " ").map(String.init)
+        guard let exe = parts.first, exe.hasSuffix("tsh"), parts.contains("proxy"), parts.contains("db"),
+              let i = parts.firstIndex(of: "--tunnel"), i + 1 < parts.count else { return false }
+        return parts[i + 1] == name
+    }
+
     public static func isListening(port: Int) -> Bool {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }

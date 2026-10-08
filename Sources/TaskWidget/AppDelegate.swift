@@ -16,8 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: GlobalHotKey!
     private var todosSub: AnyCancellable?
     private var badgeTimer: Timer?
+    private var sigterm: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // make install / 업데이트의 pkill(SIGTERM) 도 정상 종료로 처리해 Teleport 터널을 정리한다.
+        signal(SIGTERM, SIG_IGN)
+        sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        sigterm?.setEventHandler { NSApp.terminate(nil) }
+        sigterm?.resume()
         installMainMenu()
         try? Paths.ensureDirectories()
 

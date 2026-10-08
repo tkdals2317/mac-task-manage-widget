@@ -117,8 +117,19 @@ final class TeleportManager: ObservableObject {
         await open(t)
     }
 
+    /// ATM 이 강제 종료돼 남은 같은 터널 프로세스는 정리하고 다시 띄운다.
+    private func reclaimLeftover(_ t: TeleportTunnel) async {
+        let pids = await Task.detached { TeleportTsh.leftoverTunnelPIDs(port: t.port, name: t.name) }.value
+        guard !pids.isEmpty else { return }
+        for pid in pids { kill(pid, SIGTERM) }
+        for _ in 0..<20 where TeleportTsh.isListening(port: t.port) {   // ~2초
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+    }
+
     private func open(_ t: TeleportTunnel) async {
         if let p = procs[t.name], p.isRunning { return }
+        await reclaimLeftover(t)
         if TeleportTsh.isListening(port: t.port) { states[t.name] = .portInUse; return }
         states[t.name] = .connecting
         guard await ensureLoggedIn(), let tsh = tshPath else {
@@ -193,7 +204,7 @@ final class TeleportManager: ObservableObject {
                     listening: Set(config.tunnels.filter { names.contains($0.name) && TeleportTsh.isListening(port: $0.port) }.map(\.name)),
                     failures: failures, loggedIn: loggedIn)
         }
-        var p = plan()
+        let p = plan()
         if p.relogin, !(await ensureLoggedIn(force: true)) {
             for n in names { fail(n) }
             return

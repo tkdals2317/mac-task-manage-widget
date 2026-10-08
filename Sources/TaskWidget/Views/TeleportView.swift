@@ -110,7 +110,7 @@ private struct TunnelRow: View {
             Circle().fill(color(st)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(tunnel.name).font(.system(size: 12.5 * scale, weight: .medium))
-                Text("localhost:\(tunnel.port) · \(label(st))")
+                Text("localhost:\(String(tunnel.port)) · \(label(st))")
                     .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
                     .lineLimit(1).help(label(st))
             }
@@ -119,7 +119,7 @@ private struct TunnelRow: View {
                 get: { st == .connected || st == .connecting },
                 set: { on in Task { if on { await tp.connect(tunnel) } else { tp.disconnect(tunnel) } } }
             ))
-            .toggleStyle(.switch).controlSize(.mini).labelsHidden()
+            .toggleStyle(PillSwitch()).labelsHidden()
             .disabled(st == .connecting)
         }
         .padding(.vertical, 3)
@@ -142,5 +142,23 @@ private struct TunnelRow: View {
         case .failed(let m): return m
         case .portInUse: return "포트 사용 중 (다른 프로그램)"
         }
+    }
+}
+
+/// 패널이 key 창이 아니면 기본 스위치가 회색(비활성)으로 그려진다. 상태가 늘 보이게 직접 그린다.
+private struct PillSwitch: ToggleStyle {
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        Capsule()
+            .fill(configuration.isOn ? Color.green : Color.secondary.opacity(0.3))
+            .frame(width: 26, height: 15)
+            .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                Circle().fill(.white).padding(2).shadow(radius: 0.5)
+            }
+            .opacity(enabled ? 1 : 0.6)
+            .animation(.easeOut(duration: 0.15), value: configuration.isOn)
+            .contentShape(Capsule())
+            .onTapGesture { if enabled { configuration.isOn.toggle() } }
     }
 }

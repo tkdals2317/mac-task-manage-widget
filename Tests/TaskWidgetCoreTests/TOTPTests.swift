@@ -55,3 +55,11 @@ final class TOTPAccountTests: XCTestCase {
         XCTAssertEqual(TeleportLogin.tail(out, redacting: [], status: 1), "tsh 로그인 실패 (exit 1): ERROR: invalid username, password or second factor")
     }
 }
+
+final class TeleportLeftoverTests: XCTestCase {
+    func testIsTunnelCommand() {
+        XCTAssertTrue(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy db --tunnel mrs-dv --db-user developer --port 4306\n", name: "mrs-dv"))
+        XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy db --tunnel mrs-dv2 --port 4306", name: "mrs-dv"))
+        XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/mysql/bin/mysqld --port 4306", name: "mrs-dv"))
+    }
+}
