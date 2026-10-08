@@ -197,13 +197,6 @@ struct SettingsView: View {
             if !isBundled {
                 Text("앱 번들로 실행했을 때만 가능 (make install)").font(.caption).foregroundStyle(.secondary)
             }
-            LabeledContent("할 일 추가 스킬 (atm-todo)") {
-                Text(todoSkillInstalled ? "설치됨" : "미설치").foregroundStyle(.secondary)
-                Button(todoSkillInstalled ? "제거" : "설치") { toggleTodoSkill() }
-            }
-            if !integrationError.isEmpty {
-                Text(integrationError).foregroundStyle(.red).font(.caption)
-            }
         }
         Section("비밀 정보 저장") {
             Picker("저장 위치", selection: Binding(
@@ -563,6 +556,10 @@ struct SettingsView: View {
             LabeledContent("/worklog 스킬") {
                 Text(skillInstalled ? "설치됨" : "미설치").foregroundStyle(.secondary)
                 Button(skillInstalled ? "제거" : "설치") { toggleSkill() }
+            }
+            LabeledContent("할 일 추가 스킬 (atm-todo)") {
+                Text(todoSkillInstalled ? "설치됨" : "미설치").foregroundStyle(.secondary)
+                Button(todoSkillInstalled ? "제거" : "설치") { toggleTodoSkill() }
             }
             if !integrationError.isEmpty {
                 Text(integrationError).foregroundStyle(.red).font(.caption)
