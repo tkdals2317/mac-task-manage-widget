@@ -38,6 +38,23 @@ public struct TOTP {
         return String(repeating: "0", count: max(0, digits - s.count)) + s
     }
 
+    /// 30초 구간 번호. 같은 구간이면 같은 코드가 나온다.
+    public static func counter(at date: Date = Date(), period: TimeInterval = 30) -> Int64 {
+        Int64(max(0, date.timeIntervalSince1970) / period)
+    }
+
+    /// 직전에 쓴 구간과 같으면 다음 구간까지 기다렸다가 코드를 만든다 (Teleport 는 같은 코드 재사용을 거부할 수 있다).
+    /// 실제로 쓴 구간 번호를 함께 돌려준다.
+    public func freshCode(after lastCounter: Int64?, now: () -> Date = Date.init,
+                          sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }) -> (code: String, counter: Int64) {
+        var d = now()
+        if let last = lastCounter, Self.counter(at: d) <= last {
+            sleep(Double(Self.secondsLeft(at: d)) + 0.5)
+            d = now()
+        }
+        return (code(at: d), Self.counter(at: d))
+    }
+
     public static func secondsLeft(at date: Date = Date(), period: TimeInterval = 30) -> Int {
         Int(period - date.timeIntervalSince1970.truncatingRemainder(dividingBy: period))
     }

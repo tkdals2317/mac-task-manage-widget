@@ -26,6 +26,8 @@ final class TeleportManager: ObservableObject {
     private var intentionalStop = Set<String>()
     /// 진행 중인 로그인. 여러 DB 를 동시에 켤 때 로그인은 한 번만 하고 나머지는 결과를 기다린다.
     private var loginTask: Task<Bool, Never>?
+    /// 마지막 로그인에 쓴 OTP 구간. 같은 코드를 두 번 보내지 않는다.
+    private static var lastOTPCounter: Int64?
     /// 사용자가 켜 둔 터널. 프로세스가 예기치 않게 죽어도 유지되고, 사용자가 끄거나 자동 재연결을 포기하면 빠진다.
     private var wanted = Set<String>() {
         didSet { UserDefaults.standard.set(wanted.sorted(), forKey: SettingsKey.teleportWanted) }   // 종료(shutdown)는 건드리지 않는다: 다음 실행에서 복원
@@ -109,7 +111,12 @@ final class TeleportManager: ObservableObject {
         busy = "로그인 중…"; message = nil
         defer { busy = nil }
         let login = TeleportLogin(tsh: tsh, proxy: config.proxy, user: config.user)
-        let res = await Task.detached { login.run(password: sec.password, otp: { totp.code() }) }.value
+        let last = Self.lastOTPCounter
+        let used = OTPBox()
+        let res = await Task.detached {
+            login.run(password: sec.password, otp: { let r = totp.freshCode(after: last); used.counter = r.counter; return r.code })
+        }.value
+        if let c = used.counter { Self.lastOTPCounter = c }
         switch res {
         case .success:
             touched = true
@@ -288,3 +295,6 @@ final class TeleportManager: ObservableObject {
         _ = ProcessRunner.run(executable: tsh, arguments: ["logout"], timeout: timeout)
     }
 }
+
+/// 로그인 중(백그라운드)에 실제로 쓴 OTP 구간을 넘겨받는 상자.
+private final class OTPBox: @unchecked Sendable { var counter: Int64? }
