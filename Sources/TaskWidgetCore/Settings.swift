@@ -18,6 +18,8 @@ public enum SettingsKey {
     public static let claudeModel = "claudeModel"
     public static let claudePath = "claudePath"
     public static let tshPath = "tshPath"
+    public static let teleportAutoConnect = "teleportAutoConnect"
+    public static let teleportWanted = "teleportWanted"
     public static let lastTab = "lastTab"
     public static let enabledTabs = "enabledTabs"
     public static let todoSectionCollapsed = "todoSectionCollapsed"
@@ -131,6 +133,10 @@ public final class Settings {
     public var sortTodosByTag: Bool {
         get { bool(SettingsKey.sortTodosByTag, true) }
         set { d.set(newValue, forKey: SettingsKey.sortTodosByTag) }
+    }
+    public var teleportAutoConnect: Bool {
+        get { bool(SettingsKey.teleportAutoConnect, true) }
+        set { d.set(newValue, forKey: SettingsKey.teleportAutoConnect) }
     }
     public var enabledTabs: String {
         get { string(SettingsKey.enabledTabs, "tasks,summary") }
