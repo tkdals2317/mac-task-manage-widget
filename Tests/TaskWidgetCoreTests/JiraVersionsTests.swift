@@ -20,7 +20,7 @@ final class JiraVersionsTests: XCTestCase {
 
     func testCounts() {
         let c = JiraVersions.counts(sample)
-        XCTAssertEqual(c.versions.map(\.name), ["15.10.0", "15.9.2"])
+        XCTAssertEqual(c.versions.map(\.name), ["15.9.2", "15.10.0"], "먼저 나갈 버전 먼저")
         XCTAssertEqual(c.versions.map(\.count), [2, 2])
         XCTAssertEqual(c.noneCount, 1)
     }
@@ -35,9 +35,9 @@ final class JiraVersionsTests: XCTestCase {
 
     func testGrouped() {
         let g = JiraVersions.grouped(sample)
-        XCTAssertEqual(g.map(\.title), ["15.10.0", "15.9.2", nil])
-        XCTAssertEqual(Set(g[0].issues.map(\.id)), ["B", "C"])
-        XCTAssertEqual(Set(g[1].issues.map(\.id)), ["A", "C"])
+        XCTAssertEqual(g.map(\.title), ["15.9.2", "15.10.0", nil])
+        XCTAssertEqual(Set(g[0].issues.map(\.id)), ["A", "C"])
+        XCTAssertEqual(Set(g[1].issues.map(\.id)), ["B", "C"])
         XCTAssertEqual(g[2].issues.map(\.id), ["D"])
         XCTAssertEqual(JiraVersions.grouped([issue("X", [])]).count, 1)
     }
@@ -45,7 +45,7 @@ final class JiraVersionsTests: XCTestCase {
     func testTag() {
         XCTAssertNil(JiraVersions.tag(for: issue("a", [])))
         XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0"])), "15.3.0")
-        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0", "15.2.1"])), "15.3.0 +1")
+        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["15.3.0", "15.2.1"])), "15.2.1 +1", "먼저 나갈 버전")
     }
 
     func testCommonPrefix() {
@@ -61,6 +61,6 @@ final class JiraVersionsTests: XCTestCase {
     func testDisplayAndTagWithPrefix() {
         XCTAssertEqual(JiraVersions.display("NMRS_v1", prefix: "NMRS_"), "v1")
         XCTAssertEqual(JiraVersions.display("ATS_v1", prefix: "NMRS_"), "ATS_v1")
-        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["NMRS_v15.6.0", "NMRS_v15.5.a"]), prefix: "NMRS_"), "v15.6.0 +1")
+        XCTAssertEqual(JiraVersions.tag(for: issue("a", ["NMRS_v15.6.0", "NMRS_v15.5.a"]), prefix: "NMRS_"), "v15.5.a +1", "여러 버전이면 먼저 나갈 버전")
     }
 }
