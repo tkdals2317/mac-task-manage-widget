@@ -29,7 +29,7 @@ public enum SettingsKey {
 
 public final class Settings {
     public static let shared = Settings()
-    public static let defaultJiraBaseURL = "https://midasitweb-jira.atlassian.net"
+    public static let defaultJiraBaseURL = ""
 
     private let d: UserDefaults
 
