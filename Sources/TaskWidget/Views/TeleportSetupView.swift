@@ -172,7 +172,7 @@ struct TeleportSetupView: View {
 
     private var account: some View {
         VStack(alignment: .leading, spacing: 8) {
-            field("프록시") { TextField("", text: $m.proxy) }
+            field("프록시") { TextField("", text: $m.proxy, prompt: Text("teleport.example.com")) }
             field("사용자 ID") {
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("Teleport 계정 (DB 사용자 developer 아님)", text: $m.user)

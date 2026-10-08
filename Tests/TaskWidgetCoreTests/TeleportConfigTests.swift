@@ -4,7 +4,9 @@ import XCTest
 final class TeleportConfigTests: XCTestCase {
     func testGroup() {
         XCTAssertEqual(TeleportTunnel.group(forName: "mrs-st2-rep"), "MRS")
-        XCTAssertEqual(TeleportTunnel.group(forName: "ats-llm-dv"), "Retention")
+        XCTAssertEqual(TeleportTunnel.group(forName: "ats-llm-dv"), "ATS")
+        let j = #"{"name":"ats-llm-dv","port":4310,"group":"Retention"}"#
+        XCTAssertEqual(try JSONDecoder().decode(TeleportTunnel.self, from: Data(j.utf8)).group, "Retention")
         XCTAssertEqual(TeleportTunnel.group(forName: "foo-bar"), "FOO")
         XCTAssertEqual(TeleportTunnel.group(forName: "solo"), "SOLO")
     }

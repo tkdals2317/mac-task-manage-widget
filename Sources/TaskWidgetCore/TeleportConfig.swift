@@ -4,7 +4,11 @@ public struct TeleportTunnel: Codable, Equatable, Identifiable {
     public var name: String
     public var dbUser: String
     public var port: Int
+    /// teleport.json 에 "group" 으로 적으면 그 이름으로 묶는다. 없으면 이름의 첫 토큰.
+    public var groupOverride: String?
     public var id: String { name }
+
+    enum CodingKeys: String, CodingKey { case name, dbUser, port, groupOverride = "group" }
 
     public init(name: String, dbUser: String = "developer", port: Int) {
         self.name = name
@@ -17,20 +21,22 @@ public struct TeleportTunnel: Codable, Equatable, Identifiable {
         name = try c.decode(String.self, forKey: .name)
         dbUser = try c.decodeIfPresent(String.self, forKey: .dbUser) ?? "developer"
         port = try c.decode(Int.self, forKey: .port)
+        groupOverride = try c.decodeIfPresent(String.self, forKey: .groupOverride)
     }
 
-    public var group: String { Self.group(forName: name) }
+    public var group: String {
+        let g = groupOverride?.trimmingCharacters(in: .whitespaces) ?? ""
+        return g.isEmpty ? Self.group(forName: name) : g
+    }
 
-    /// mrs-* → MRS, ats-llm-* → Retention, 그 외 첫 토큰 대문자.
+    /// 이름의 첫 토큰 대문자 (app-dv → APP).
     public static func group(forName name: String) -> String {
-        if name.hasPrefix("mrs-") { return "MRS" }
-        if name.hasPrefix("ats-llm-") { return "Retention" }
         return name.split(separator: "-").first.map { $0.uppercased() } ?? name.uppercased()
     }
 }
 
 public struct TeleportConfig: Codable, Equatable {
-    public static let defaultProxy = "teleport.devops.midasin.com"
+    public static let defaultProxy = ""
     public static let basePort = 4306
 
     public var proxy: String

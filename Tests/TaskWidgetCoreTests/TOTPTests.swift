@@ -7,7 +7,7 @@ final class TOTPTests: XCTestCase {
 
     /// 기존 파이썬 도구(pyotp)와 같은 코드가 나오는지. 기대값은 pyotp.TOTP(key).at(1700000000).
     func testMatchesPyotp() throws {
-        let url = "otpauth://totp/midas-teleport:fake%40teleport.devops.midasin.com?secret=JBSWY3DPEHPK3PXP&issuer=midas-teleport"
+        let url = "otpauth://totp/example:fake%40teleport.example.com?secret=JBSWY3DPEHPK3PXP&issuer=example"
         let t = try XCTUnwrap(TOTP(input: url))
         XCTAssertEqual(t.code(at: Date(timeIntervalSince1970: 1_700_000_000)), "324550")
     }
@@ -45,7 +45,7 @@ final class TOTPTests: XCTestCase {
 
 final class TOTPAccountTests: XCTestCase {
     func testAccountUser() {
-        XCTAssertEqual(TOTP.accountUser(in: "otpauth://totp/Teleport%3Alsm0506%40teleport.devops.midasin.com?secret=JBSWY3DPEHPK3PXP"), "lsm0506")
+        XCTAssertEqual(TOTP.accountUser(in: "otpauth://totp/Teleport%3Alsm0506%40teleport.example.com?secret=JBSWY3DPEHPK3PXP"), "lsm0506")
         XCTAssertEqual(TOTP.accountUser(in: "otpauth://totp/lsm0506?secret=JBSWY3DPEHPK3PXP"), "lsm0506")
         XCTAssertNil(TOTP.accountUser(in: "JBSWY3DPEHPK3PXP"))
     }
