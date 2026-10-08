@@ -19,6 +19,7 @@ public struct ClaudeIntegration {
 
     public var settingsURL: URL { claudeDir.appendingPathComponent("settings.json") }
     public var skillURL: URL { claudeDir.appendingPathComponent("skills/worklog/SKILL.md") }
+    public var todoSkillURL: URL { claudeDir.appendingPathComponent("skills/atm-todo/SKILL.md") }
     public var hookCommand: String { "\"\(executablePath)\" --hook" }
 
     static let events = ["UserPromptSubmit", "Stop"]
@@ -167,4 +168,53 @@ public struct ClaudeIntegration {
     - 기록 후 추가한 섹션을 그대로 보여준다.
 
     """
+
+    // MARK: atm-todo SKILL.md
+
+    public func todoSkillInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: todoSkillURL.path)
+    }
+
+    /// 바이너리 경로가 박히므로 앱을 옮기면 다시 설치해야 한다.
+    public func installTodoSkill() throws {
+        try FileManager.default.createDirectory(at: todoSkillURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try todoSkillMarkdown.write(to: todoSkillURL, atomically: true, encoding: .utf8)
+    }
+
+    public func removeTodoSkill() throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: todoSkillURL.path) { try fm.removeItem(at: todoSkillURL) }
+        let dir = todoSkillURL.deletingLastPathComponent()
+        if let rest = try? fm.contentsOfDirectory(atPath: dir.path), rest.isEmpty { try fm.removeItem(at: dir) }
+    }
+
+    public var todoSkillMarkdown: String {
+        let q = "\"" + executablePath.replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        return """
+        ---
+        name: atm-todo
+        description: ATM 위젯 할 일 목록에 할 일을 추가한다. '할 일에 추가해', 'ATM 에 넣어줘', 'todo 추가' 요청 시 사용.
+        ---
+
+        ATM 위젯의 할 일 목록에 할 일을 추가한다. 아래 명령을 Bash 로 실행한다 (할 일 하나당 한 번).
+
+        ```
+        \(q) --add-todo --title "<제목>" [--due YYYY-MM-DD] [--tag "<태그 이름>"]... [--memo "<메모>"]
+        ```
+
+        순서:
+        1. 사용자 요청에서 간결한 제목을 만든다 (한국어 가능, 한 줄).
+        2. 사용자가 날짜나 상대적인 날(내일, 금요일까지, 다음 주 월요일 등)을 말했을 때만 `--due YYYY-MM-DD` 를 붙인다. 기준 날짜는 `date +%F` 로 오늘을 확인해 계산한다.
+        3. 사용자가 태그 이름을 직접 말했을 때만 `--tag` 를 붙인다 (여러 개면 반복).
+        4. 제목에 못 담은 세부 내용이나 링크는 `--memo` 에 넣는다.
+        5. 인자는 쉘에서 안전하게 따옴표로 감싼다 (작은따옴표 등 특수문자 주의).
+        6. 출력된 한 줄 JSON 결과를 사용자에게 알린다. `"ok":false` 면 `error` 를 그대로 전달한다.
+        7. `unknownTags` 가 비어 있지 않으면 그 태그는 ATM 에 없어서 붙지 않았다고 알린다.
+
+        규칙:
+        - 마감일과 태그를 지어내지 않는다. 말하지 않았으면 붙이지 않는다.
+        - 앱이 꺼져 있어도 다음 실행 때 반영된다.
+
+        """
+    }
 }
