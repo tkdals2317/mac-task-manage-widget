@@ -39,6 +39,17 @@ public struct Todo: Codable, Identifiable, Equatable {
     }
 }
 
+public struct JiraTransition: Equatable, Identifiable {
+    public let id: String
+    public let name: String
+    public let toName: String
+    public let toCategory: String
+
+    public init(id: String, name: String, toName: String, toCategory: String) {
+        self.id = id; self.name = name; self.toName = toName; self.toCategory = toCategory
+    }
+}
+
 public struct JiraIssue: Codable, Identifiable, Equatable {
     public var id: String              // issue key
     public var summary: String

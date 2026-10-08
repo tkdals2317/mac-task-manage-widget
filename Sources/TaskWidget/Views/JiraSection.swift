@@ -90,7 +90,30 @@ struct JiraSection: View {
     }
 }
 
+/// 상태 변경 메뉴 항목. 열릴 때(onAppear) 전환 목록을 불러온다.
+struct JiraTransitionItems: View {
+    @EnvironmentObject var state: AppState
+    let issue: JiraIssue
+    @State private var items: [JiraTransition]?
+
+    var body: some View {
+        Group {
+            if let items {
+                let next = items.filter { $0.toName != issue.status }
+                if next.isEmpty { Text("가능한 전환 없음") }
+                ForEach(next) { t in
+                    Button("→ \(t.toName)") { Task { await state.transitionJira(issue.id, to: t) } }
+                }
+            } else {
+                Text("불러오는 중…")
+            }
+        }
+        .task { items = await state.loadTransitions(for: issue.id) }
+    }
+}
+
 struct JiraRow: View {
+    @EnvironmentObject var state: AppState
     let issue: JiraIssue
     let baseURL: String
     var prefix = ""
@@ -123,7 +146,17 @@ struct JiraRow: View {
                             .background(Capsule().fill(Color.primary.opacity(0.09)))
                     }
                 case .status:
-                    Text(issue.status).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                    if state.jiraBusyKeys.contains(issue.id) {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Menu { JiraTransitionItems(issue: issue) } label: {
+                            Text(issue.status).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("눌러서 상태 변경")
+                    }
                 case .none:
                     EmptyView()
                 }
@@ -133,6 +166,9 @@ struct JiraRow: View {
         }
         .buttonStyle(.plain)
         .help(issue.summary)
+        .contextMenu {
+            Menu("상태 변경") { JiraTransitionItems(issue: issue) }
+        }
         Divider()
     }
 
