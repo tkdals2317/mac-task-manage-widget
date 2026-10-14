@@ -243,8 +243,9 @@ final class TeleportManager: ObservableObject {
         p.standardInput = FileHandle.nullDevice
         let name = t.name
         p.terminationHandler = { [weak self] proc in
+            let me = self   // Swift 5.10: weak self(var)를 바깥 클로저에서 let 으로 옮겨야 넘길 수 있다
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.exited(name, proc) }
+                MainActor.assumeIsolated { me?.exited(name, proc) }
             }
         }
         do { try p.run() } catch {
