@@ -25,6 +25,8 @@ final class AppState: ObservableObject {
     @Published var checkingUpdates = false
     let buildInfo = BuildInfo(infoDictionary: Bundle.main.infoDictionary ?? [:])
     private var updateErrorFromCheck = false
+    // 마지막 업데이트 확인 시도 시각(성공/실패 무관). 패널을 열 때 너무 잦은 확인을 막는 데 쓴다.
+    private var lastUpdateCheckAt: Date?
     let todoStore: TodoStore
     let tagStore = TagStore()
     let teleport = TeleportManager()
@@ -70,6 +72,7 @@ final class AppState: ObservableObject {
         let dir = buildInfo.sourceDir, ver = buildInfo.version
         guard !dir.isEmpty, !checkingUpdates, !updating else { return }
         checkingUpdates = true
+        lastUpdateCheckAt = Date()
         defer { checkingUpdates = false }
         let r = await Task.detached { Result { try Updater(sourceDir: dir).check(installedVersion: ver) } }.value
         switch r {
@@ -81,6 +84,12 @@ final class AppState: ObservableObject {
             updateErrorFromCheck = true
             DiagLog.append("update check failed: \(updateError ?? "")")
         }
+    }
+
+    /// 마지막 확인 시도 후 minInterval 이상 지났을 때만 확인한다.
+    func checkForUpdatesIfStale(minInterval: TimeInterval) async {
+        if let last = lastUpdateCheckAt, Date().timeIntervalSince(last) < minInterval { return }
+        await checkForUpdates()
     }
 
     func startUpdate() async {
