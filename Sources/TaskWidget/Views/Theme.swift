@@ -46,6 +46,15 @@ extension View {
     func themedPanel() -> some View { modifier(ThemedPanel()) }
 }
 
+extension View {
+    /// 비밀번호 칸 자동완성 말풍선 막기. macOS 15 이상은 그냥 두면 "Passwords…" 말풍선이 떠서 oneTimeCode 로 막는다.
+    /// macOS 14 는 oneTimeCode 를 주면 빈 "보안 코드" 제안 창이 떠서 아무것도 지정하지 않는다.
+    @ViewBuilder
+    func noPasswordSuggestions() -> some View {
+        if #available(macOS 15, *) { textContentType(.oneTimeCode) } else { self }
+    }
+}
+
 /// 팝오버 배경을 패널 테마 배경과 맞춘다 (기본은 회색 시스템 팝오버).
 /// presentationBackground 는 말풍선 꼬리를 칠하지 못해서, 팝오버 창의 프레임 뷰(꼬리 포함) 맨 아래에 색 뷰를 깐다.
 struct ThemedPopover: ViewModifier {
@@ -107,7 +116,7 @@ struct ThemedTextField: View {
     var body: some View {
         Group {
             if secure {
-                SecureField(prompt, text: $text).textContentType(.oneTimeCode)
+                SecureField(prompt, text: $text).noPasswordSuggestions()
             } else {
                 TextField(prompt, text: $text)
             }

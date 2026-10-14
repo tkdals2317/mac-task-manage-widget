@@ -134,7 +134,7 @@ struct NotesSettingsSections: View {
     /// grouped Form 의 SecureField 는 prompt 가 없으면 입력칸이 보이지 않는다. 자동완성 말풍선도 막는다.
     private func pwField(_ label: String, _ text: Binding<String>) -> some View {
         SecureField(label, text: text, prompt: Text("입력"))
-            .textContentType(.oneTimeCode)
+            .noPasswordSuggestions()
     }
 
     /// 비동기 동작을 돌리고 결과/오류를 한 줄로 보여준다.
