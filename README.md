@@ -9,7 +9,7 @@ macOS 메뉴바에 상주하는 플로팅 위젯이다. 할 일(마감일 · 태
 
 ### 준비물
 
-- macOS 14 이상
+- macOS 14 이상, Command Line Tools 의 Swift 5.10 이상 (`swift --version` 으로 확인, `make doctor` 가 같이 점검)
 - Xcode 명령줄 도구 (이미 있으면 생략)
 
 ```bash
