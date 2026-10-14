@@ -21,15 +21,18 @@ final class Scheduler {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             // Timer(fire:) 데드라인은 잠자는 동안 멈춘다. 깨어나면 다시 걸어야 다음 날 요약이 일찍 생성되지 않는다.
+            // weak self(var)를 Task 안에서 바로 쓰면 Swift 5.10 이 막는다. let 으로 옮겨 넘긴다.
+            let me = self
             Task { @MainActor in
-                self?.reschedule()
-                self?.catchUp()
+                me?.reschedule()
+                me?.catchUp()
             }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.settingsChanged() }
+            let me = self
+            Task { @MainActor in me?.settingsChanged() }
         })
         catchUp()
     }
@@ -57,7 +60,8 @@ final class Scheduler {
         timer?.invalidate()
         let fire = Schedule.nextFireDate(after: Date(), hour: s.summaryHour, minute: s.summaryMinute)
         let t = Timer(fire: fire, interval: 0, repeats: false) { [weak self] _ in
-            Task { @MainActor in await self?.fire() }
+            let me = self
+            Task { @MainActor in await me?.fire() }
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t

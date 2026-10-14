@@ -19,12 +19,25 @@ struct TruncationHelp: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { shown = $0 }
+            .background(WidthReader { shown = $0 })
             .background(alignment: .leading) {
                 content.fixedSize().hidden()
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { ideal = $0 }
+                    .background(WidthReader { ideal = $0 })
             }
             .help(text ?? "")
+    }
+}
+
+/// 뷰의 폭을 알려준다. onGeometryChange 는 macOS 15 SDK(Xcode 16)에만 있어서 macOS 14 SDK 로도 빌드되게 GeometryReader 를 쓴다.
+private struct WidthReader: View {
+    let onWidth: (CGFloat) -> Void
+
+    var body: some View {
+        GeometryReader { g in
+            Color.clear
+                .onAppear { onWidth(g.size.width) }
+                .onChange(of: g.size.width) { _, w in onWidth(w) }
+        }
     }
 }
 

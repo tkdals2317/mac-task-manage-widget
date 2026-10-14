@@ -13,7 +13,14 @@ if [ -z "$DOCTOR_ONLY_CLT" ]; then
   v=$(sw_vers -productVersion 2>/dev/null)
   if [ "${v%%.*}" -ge 14 ] 2>/dev/null; then ok "macOS $v"; else bad "macOS 14 이상 필요 (현재 ${v:-알 수 없음})"; fi
 
-  if command -v swift >/dev/null 2>&1; then ok "$(swift --version 2>&1 | head -1)"
+  if command -v swift >/dev/null 2>&1; then
+    sv=$(swift --version 2>&1 | head -1)
+    # "Apple Swift version 5.10" → 5.10. 5.10 미만이면 빌드가 안 된다 (CI 의 build-compat 이 5.10 으로 확인).
+    num=$(echo "$sv" | sed -n 's/.*Swift version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
+    set -- $num
+    if [ -n "$1" ] && { [ "$1" -gt 5 ] || { [ "$1" -eq 5 ] && [ "$2" -ge 10 ]; }; }; then ok "$sv"
+    elif [ -n "$1" ]; then bad "Swift 5.10 이상 필요 ($sv) → 소프트웨어 업데이트에서 Command Line Tools 를 올리세요"
+    else warn "Swift 버전을 읽지 못함: $sv"; fi
   else bad "swift 없음 → xcode-select --install"; fi
 
   if command -v git >/dev/null 2>&1; then ok "git"; else bad "git 없음 → xcode-select --install"; fi

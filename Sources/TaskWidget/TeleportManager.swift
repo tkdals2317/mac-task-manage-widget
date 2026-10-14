@@ -172,8 +172,10 @@ final class TeleportManager: ObservableObject {
         defer { loginCancel = nil; loginStarted = nil }
         let last = Self.lastOTPCounter
         let used = OTPBox()
+        // Task.detached 안에서 var 를 쓰면 Swift 5.10 이 "captured var in concurrently-executing code" 로 막는다. 복사본을 넘긴다.
+        let runner = login
         var (res, report) = await Task.detached {
-            login.runReported(password: sec.password, otp: { let r = totp.freshCode(after: last); used.counter = r.counter; return r.code })
+            runner.runReported(password: sec.password, otp: { let r = totp.freshCode(after: last); used.counter = r.counter; return r.code })
         }.value
         TeleportLoginLog.append(kind: kind, user: config.user, proxy: config.proxy, tsh: tsh, report: report, result: res)
         // 빈 인증서 파일 때문에 tsh 가 바로 죽으면 그 파일만 지우고 한 번 더 시도한다.
@@ -182,7 +184,7 @@ final class TeleportManager: ObservableObject {
             if !removed.isEmpty {
                 DiagLog.append("teleport: 빈 tsh 인증서 파일 정리 후 재시도: \(removed.joined(separator: ", "))")
                 (res, report) = await Task.detached {
-                    login.runReported(password: sec.password, otp: { let r = totp.freshCode(after: used.counter ?? last); used.counter = r.counter; return r.code })
+                    runner.runReported(password: sec.password, otp: { let r = totp.freshCode(after: used.counter ?? last); used.counter = r.counter; return r.code })
                 }.value
                 TeleportLoginLog.append(kind: kind + "+repair", user: config.user, proxy: config.proxy, tsh: tsh, report: report, result: res)
             }
@@ -241,8 +243,9 @@ final class TeleportManager: ObservableObject {
         p.standardInput = FileHandle.nullDevice
         let name = t.name
         p.terminationHandler = { [weak self] proc in
+            let me = self   // Swift 5.10: weak self(var)를 바깥 클로저에서 let 으로 옮겨야 넘길 수 있다
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.exited(name, proc) }
+                MainActor.assumeIsolated { me?.exited(name, proc) }
             }
         }
         do { try p.run() } catch {

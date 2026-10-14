@@ -1,0 +1,19 @@
+name: build-compat
+
+# 팀원 Mac 에 깔린 가장 낮은 툴체인(macOS 14 + Command Line Tools Swift 5.10, SDK 14.x)에서도 빌드되는지 PR 마다 확인한다.
+# 개발 Mac 은 Swift 6 / SDK 15 라서 새 API(onGeometryChange 등)나 Swift 6 에서만 통과하는 코드를 로컬에서 못 잡는다.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  swift510:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 15.4 (Swift 5.10, macOS 14.5 SDK)
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - run: swift --version
+      - run: swift build
+      - run: swift test
