@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var onboardingObserver: Any?
+    private var panelKeyObserver: Any?
     private var scheduler: Scheduler!
     private var updateTask: Task<Void, Never>?
     private var hotKey: GlobalHotKey!
@@ -98,12 +99,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduler = Scheduler(state: state)
         scheduler.start()
 
-        // 시작 10초 후 한 번, 이후 6시간마다 업데이트 확인 (소스 폴더 정보가 없으면 checkForUpdates 가 무시)
+        // 시작 10초 후 한 번, 이후 30분마다 업데이트 확인 (소스 폴더 정보가 없으면 checkForUpdates 가 무시)
         updateTask = Task { [state] in
             try? await Task.sleep(nanoseconds: 10_000_000_000)
             while !Task.isCancelled {
                 await state.checkForUpdates()
-                try? await Task.sleep(nanoseconds: 6 * 3600 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 30 * 60 * 1_000_000_000)
+            }
+        }
+
+        // 패널을 열 때 최신 업데이트 상태를 보이도록 확인. 너무 잦은 fetch 를 막으려 10분 간격.
+        panelKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let state = self?.state else { return }
+                Task { await state.checkForUpdatesIfStale(minInterval: 10 * 60) }
             }
         }
 
