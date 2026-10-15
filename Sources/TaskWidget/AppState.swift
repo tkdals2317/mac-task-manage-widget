@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import TaskWidgetCore
 
@@ -31,6 +32,8 @@ final class AppState: ObservableObject {
     let tagStore = TagStore()
     let teleport = TeleportManager()
     let notes = NotesModel()
+    let pr = PRModel()
+    private var prSub: AnyCancellable?
 
     /// Jira 탭을 안 열어도 18시 자동 요약이 키를 알도록 마지막으로 본 프로젝트 접두사를 저장해 둔다.
     nonisolated static let jiraPrefixesKey = "jiraProjectPrefixes"
@@ -51,6 +54,9 @@ final class AppState: ObservableObject {
         enforceSingleSelect()
         consumeUpdateFailure()
         NotesModel.introduceTabIfNeeded()
+        PRModel.introduceTabIfNeeded()
+        // 탭 바 배지가 pr 의 변화를 따라가도록 (RootView 는 AppState 만 관찰한다)
+        prSub = pr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: - Update
@@ -166,9 +172,9 @@ final class AppState: ObservableObject {
         todos.filter(\.done).sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
 
-    func addTodo(_ raw: String) {
+    func addTodo(_ raw: String, memo: String = "") {
         guard let title = Todo.normalizedTitle(raw) else { return }
-        todos.append(Todo(title: title))
+        todos.append(Todo(title: title, memo: memo))
         persistTodos()
     }
 
@@ -364,14 +370,15 @@ final class AppState: ObservableObject {
     /// 비밀 정보 저장 위치를 바꾸고 기존 값을 옮긴다. 실패하면 설정은 그대로. 옮긴 개수를 돌려준다.
     func switchSecretStorage(to kind: SecretStorageKind) async throws -> Int {
         let s = Settings.shared
-        let email = s.jiraEmail
+        let email = s.jiraEmail, bbEmail = s.prBitbucketEmail
         let from = SecretStore.backend(for: SecretStorageKind(rawValue: s.secretStorage) ?? .keychain)
         let to = SecretStore.backend(for: kind)
         let moved = try await Task.detached {
-            try SecretStore.migrate(items: SecretStore.knownItems(jiraEmail: email), from: from, to: to)
+            try SecretStore.migrate(items: SecretStore.knownItems(jiraEmail: email, bitbucketEmail: bbEmail), from: from, to: to)
         }.value
         s.secretStorage = kind.rawValue
         cachedToken = nil
+        pr.resetCaches()
         teleport.reloadConfig()
         return moved
     }

@@ -122,6 +122,12 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
 - `ERROR: invalid username, password or second factor`: 사용자 ID 가 Teleport 계정인지(`developer` 아님), 비밀번호, OTP 키를 확인하고 설정 다시 하기.
 - 키체인 창이 뜨면 **항상 허용** (업데이트 직후 한 번). 매번 뜨는 게 싫으면 설정 > 창·일반 > 비밀 정보 저장 을 **파일**로 바꾼다.
 
+### PR
+
+- PR 탭: GitHub·Bitbucket 에서 나한테 온 **리뷰 요청**과 **내가 올린 PR**(승인 n/m, 변경 요청)을 모아 본다. 오래 기다린 PR, 내가 리뷰한 뒤 새 커밋이 올라온 PR 이 표시되고, 새 리뷰 요청·승인·변경 요청은 알림으로 온다.
+- GitHub: `gh` CLI 에 로그인돼 있으면 설정 > PR 에서 켜기만 하면 된다 (`brew install gh` → `gh auth login`).
+- Bitbucket: API 토큰(읽기 권한 4개)이 필요하다. [토큰 만드는 법](docs/bitbucket-token.md). 리뷰 요청을 볼 저장소를 고른다.
+
 ### Jira
 
 - 내게 할당된 미완료 이슈가 상태별로 나온다. 이슈를 누르면 브라우저에서 열린다. 설정 > Jira 에서 JQL 을 바꿀 수 있다.
@@ -157,6 +163,7 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
 | 창·일반 | 항상 위, Spaces, 전역 단축키(기본 ⌃⌥Space, 원하는 조합으로 변경), 탭 켜고 끄기, 로그인 시 실행 |
 | 태그 | 그룹/태그 관리, 색, 정렬 기준, 기본값 복원 |
 | Jira | 이메일·토큰, 연결 테스트, JQL |
+| PR | GitHub(gh)·Bitbucket 연결, 볼 저장소, 알림, 오래 대기 기준, Draft 숨김, 새로고침 주기 |
 | 요약 | 생성 시각, 완료 알림, 요약 프롬프트, claude 경로 |
 | Claude 연동 | 활동 훅과 `/worklog` 스킬 설치·제거, 데이터/요약 폴더 열기 |
 | 정보 | 버전·빌드, 업데이트 확인, 개발자 후원 |

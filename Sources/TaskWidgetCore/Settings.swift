@@ -41,6 +41,24 @@ public enum SettingsKey {
     public static let confluenceBaseURL = "confluenceBaseURL"
     public static let notesTouchID = "notesTouchID"
     public static let onboardingDone = "onboardingDone"
+    public static let prTabIntroduced = "prTabIntroduced"
+    public static let prGitHubEnabled = "prGitHubEnabled"
+    public static let prBitbucketEnabled = "prBitbucketEnabled"
+    public static let prBitbucketEmail = "prBitbucketEmail"
+    public static let prBitbucketWorkspace = "prBitbucketWorkspace"
+    public static let prBitbucketRepos = "prBitbucketRepos"
+    public static let prHiddenRepos = "prHiddenRepos"
+    public static let prStaleDays = "prStaleDays"
+    public static let prHideDrafts = "prHideDrafts"
+    public static let prRefreshMinutes = "prRefreshMinutes"
+    public static let prNotifyNewReview = "prNotifyNewReview"
+    public static let prNotifyApproved = "prNotifyApproved"
+    public static let prNotifyChanges = "prNotifyChanges"
+    public static let prSeenIDs = "prSeenIDs"
+    public static let prLastSnapshot = "prLastSnapshot"
+    public static let prFilter = "prFilter"
+    public static let prReviewCollapsed = "prReviewCollapsed"
+    public static let prMineCollapsed = "prMineCollapsed"
 }
 
 public final class Settings {
@@ -201,4 +219,77 @@ public final class Settings {
         get { string(SettingsKey.enabledTabs, "tasks,summary") }
         set { d.set(newValue, forKey: SettingsKey.enabledTabs) }
     }
+
+    // MARK: - PR 탭
+    public var prGitHubEnabled: Bool {
+        get { bool(SettingsKey.prGitHubEnabled, false) }
+        set { d.set(newValue, forKey: SettingsKey.prGitHubEnabled) }
+    }
+    public var prBitbucketEnabled: Bool {
+        get { bool(SettingsKey.prBitbucketEnabled, false) }
+        set { d.set(newValue, forKey: SettingsKey.prBitbucketEnabled) }
+    }
+    public var prBitbucketEmail: String {
+        get { string(SettingsKey.prBitbucketEmail, "") }
+        set { d.set(newValue, forKey: SettingsKey.prBitbucketEmail) }
+    }
+    public var prBitbucketWorkspace: String {
+        get { string(SettingsKey.prBitbucketWorkspace, "") }
+        set { d.set(newValue, forKey: SettingsKey.prBitbucketWorkspace) }
+    }
+    /// 쉼표로 구분한 slug 목록
+    public var prBitbucketRepos: String {
+        get { string(SettingsKey.prBitbucketRepos, "") }
+        set { d.set(newValue, forKey: SettingsKey.prBitbucketRepos) }
+    }
+    public var prHiddenRepos: String {
+        get { string(SettingsKey.prHiddenRepos, "") }
+        set { d.set(newValue, forKey: SettingsKey.prHiddenRepos) }
+    }
+    public var prStaleDays: Int {
+        get { int(SettingsKey.prStaleDays, 2) }
+        set { d.set(newValue, forKey: SettingsKey.prStaleDays) }
+    }
+    public var prHideDrafts: Bool {
+        get { bool(SettingsKey.prHideDrafts, false) }
+        set { d.set(newValue, forKey: SettingsKey.prHideDrafts) }
+    }
+    public var prRefreshMinutes: Int {
+        get { max(1, int(SettingsKey.prRefreshMinutes, 5)) }
+        set { d.set(newValue, forKey: SettingsKey.prRefreshMinutes) }
+    }
+    public var prNotifyNewReview: Bool {
+        get { bool(SettingsKey.prNotifyNewReview, true) }
+        set { d.set(newValue, forKey: SettingsKey.prNotifyNewReview) }
+    }
+    public var prNotifyApproved: Bool {
+        get { bool(SettingsKey.prNotifyApproved, true) }
+        set { d.set(newValue, forKey: SettingsKey.prNotifyApproved) }
+    }
+    public var prNotifyChanges: Bool {
+        get { bool(SettingsKey.prNotifyChanges, true) }
+        set { d.set(newValue, forKey: SettingsKey.prNotifyChanges) }
+    }
+    public var prBitbucketRepoList: [String] {
+        get { Self.csv(prBitbucketRepos) }
+        set { prBitbucketRepos = Self.joinCSV(newValue) }
+    }
+    /// 숨긴 저장소 키("provider:owner/slug") 목록. JSON 배열 문자열로 저장한다.
+    public var prHiddenRepoList: [String] {
+        get { Self.decodeList(prHiddenRepos) }
+        set { prHiddenRepos = Self.encodeList(newValue) }
+    }
+
+    public static func decodeList(_ raw: String) -> [String] {
+        (try? JSONDecoder().decode([String].self, from: Data(raw.utf8))) ?? []
+    }
+    public static func encodeList(_ items: [String]) -> String {
+        String(decoding: (try? JSONEncoder().encode(Array(Set(items)).sorted())) ?? Data("[]".utf8), as: UTF8.self)
+    }
+
+    public static func csv(_ raw: String) -> [String] {
+        raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+    /// 중복 제거, 정렬해서 쉼표로.
+    public static func joinCSV(_ items: [String]) -> String { Array(Set(items)).sorted().joined(separator: ",") }
 }

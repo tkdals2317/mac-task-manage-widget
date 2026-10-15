@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UserNotifications
 import TaskWidgetCore
 
 @MainActor
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var todosSub: AnyCancellable?
     private var badgeTimer: Timer?
     private var sigterm: DispatchSourceSignal?
+    private let notificationDelegate = NotificationDelegate()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // make install / 업데이트의 pkill(SIGTERM) 도 정상 종료로 처리해 Teleport 터널을 정리한다.
@@ -98,6 +100,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         scheduler = Scheduler(state: state)
         scheduler.start()
+        // 알림을 눌렀을 때 PR 주소를 열고, 앞에 떠 있을 때도 배너를 보여준다. 번들 없이 실행하면 UNUserNotificationCenter 가 죽는다.
+        if Bundle.main.bundleIdentifier != nil { UNUserNotificationCenter.current().delegate = notificationDelegate }
+        state.pr.startLoop()
 
         // 시작 10초 후 한 번, 이후 30분마다 업데이트 확인 (소스 폴더 정보가 없으면 checkForUpdates 가 무시)
         updateTask = Task { [state] in
@@ -339,5 +344,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         styleOnboardingWindow(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// 알림 클릭 → userInfo["url"] 열기 (PR 알림). 앱이 PR 알림은 앞에 있어도 배너를 띄운다.
+final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        if let s = response.notification.request.content.userInfo["url"] as? String,
+           let u = URL(string: s), u.scheme == "https" {
+            DispatchQueue.main.async { NSWorkspace.shared.open(u) }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // PR 알림(url 이 있는 것)만 앞에 떠 있을 때도 배너로. 요약 알림 등은 예전처럼 앞에서는 띄우지 않는다.
+        completionHandler(notification.request.content.userInfo["url"] != nil ? [.banner, .sound] : [])
     }
 }

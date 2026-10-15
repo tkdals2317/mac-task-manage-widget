@@ -48,14 +48,42 @@ struct TabSegmentedControl: NSViewRepresentable {
 struct PanelTabBar: View {
     let items: [(id: String, title: String)]
     @Binding var selection: String
+    /// 탭 id → 배지 숫자 (0 이면 숨김)
+    var badges: [String: Int] = [:]
     @Environment(\.atmThemed) private var themed
 
     var body: some View {
         if themed {
-            SoftAccentTabBar(items: items, selection: $selection)
+            SoftAccentTabBar(items: items, selection: $selection, badges: badges)
         } else {
             TabSegmentedControl(items: items, selection: $selection)
+                // NSSegmentedControl 안에는 못 그려서 각 칸의 오른쪽 위에 겹쳐 놓는다.
+                .overlay {
+                    GeometryReader { g in
+                        ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                            if let n = badges[item.id], n > 0 {
+                                TabBadge(count: n)
+                                    .position(x: g.size.width * CGFloat(i + 1) / CGFloat(items.count) - 14, y: g.size.height / 2)
+                            }
+                        }
+                    }
+                    .allowsHitTesting(false)
+                }
         }
+    }
+}
+
+/// 탭 제목 옆의 작은 빨간 알약.
+struct TabBadge: View {
+    let count: Int
+    @Environment(\.fontScale) private var scale
+
+    var body: some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 9.5 * scale, weight: .semibold)).monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4.5).frame(minWidth: 14 * scale, minHeight: 14 * scale)
+            .background(Capsule().fill(Color.red))
     }
 }
 
@@ -63,6 +91,7 @@ struct PanelTabBar: View {
 private struct SoftAccentTabBar: View {
     let items: [(id: String, title: String)]
     @Binding var selection: String
+    var badges: [String: Int] = [:]
     @Environment(\.atmAccent) private var accent
     @Environment(\.colorScheme) private var scheme
     @Environment(\.fontScale) private var scale
@@ -74,9 +103,12 @@ private struct SoftAccentTabBar: View {
             ForEach(items, id: \.id) { item in
                 let on = item.id == selection
                 Button { selection = item.id } label: {
-                    Text(item.title)
-                        .font(.system(size: 12.5 * scale, weight: on ? .medium : .regular))
-                        .foregroundStyle(on ? (dark ? Color.white : accent) : Color.secondary)
+                    HStack(spacing: 4) {
+                        Text(item.title)
+                            .font(.system(size: 12.5 * scale, weight: on ? .medium : .regular))
+                            .foregroundStyle(on ? (dark ? Color.white : accent) : Color.secondary)
+                        if let n = badges[item.id], n > 0 { TabBadge(count: n) }
+                    }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
                         .background(
