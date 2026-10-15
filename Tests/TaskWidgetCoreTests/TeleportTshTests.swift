@@ -169,4 +169,11 @@ final class TeleportLoginTests: XCTestCase {
     func testMissingExecutable() {
         guard case .failure = TeleportLogin(executable: "/nope/tsh", arguments: []).run(password: "p", otp: { "1" }) else { return XCTFail() }
     }
+
+    func testIsAuthFailure() {
+        XCTAssertTrue(TeleportTsh.isAuthFailure("tsh 로그인 실패 (exit 1): ERROR: invalid credentials"))
+        XCTAssertTrue(TeleportTsh.isAuthFailure("ERROR: invalid username, password or second factor"))
+        XCTAssertFalse(TeleportTsh.isAuthFailure("ERROR: Teleport proxy not available at proxy address x:443 ... no such host"))
+        XCTAssertFalse(TeleportTsh.isAuthFailure("ERROR: missing PEM encoded block"))
+    }
 }

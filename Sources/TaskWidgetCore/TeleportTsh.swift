@@ -97,6 +97,12 @@ public enum TeleportTsh {
         return v
     }
 
+    /// 비밀번호/OTP 거부. 네트워크·DNS 오류처럼 다시 시도하면 되는 실패와 구분한다 (자동 재시도로 계정이 잠기지 않게).
+    public static func isAuthFailure(_ message: String) -> Bool {
+        let m = message.lowercased()
+        return m.contains("invalid credentials") || m.contains("invalid username, password or second factor") || m.contains("access denied")
+    }
+
     public static func isListening(port: Int) -> Bool {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
