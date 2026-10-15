@@ -122,6 +122,7 @@ struct PRSettingsSections: View {
     @AppStorage(SettingsKey.prNotifyNewReview) private var notifyNew = true
     @AppStorage(SettingsKey.prNotifyApproved) private var notifyApproved = true
     @AppStorage(SettingsKey.prNotifyChanges) private var notifyChanges = true
+    @AppStorage(SettingsKey.prNotifyComments) private var notifyComments = true
     @AppStorage(SettingsKey.prStaleDays) private var staleDays = 2
     @AppStorage(SettingsKey.prHideDrafts) private var hideDrafts = false
     @AppStorage(SettingsKey.prRefreshMinutes) private var refreshMinutes = 5
@@ -184,8 +185,9 @@ struct PRSettingsSections: View {
         }
         Section("알림") {
             Toggle("새 리뷰 요청", isOn: $notifyNew)
-            Toggle("내 PR 승인됨", isOn: $notifyApproved)
+            Toggle("내 PR 승인 (한 명씩)", isOn: $notifyApproved)
             Toggle("내 PR 변경 요청", isOn: $notifyChanges)
+            Toggle("내 PR 새 댓글·리뷰", isOn: $notifyComments)
         }
         Section {
             Picker("오래 대기 표시", selection: $staleDays) {

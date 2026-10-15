@@ -12,6 +12,13 @@ public struct PRReviewer: Codable, Equatable, Sendable {
     }
 }
 
+/// 내 PR 에 다른 사람이 남긴 댓글·리뷰 한 건 (id 는 제공자 안에서 유일).
+public struct PRActivity: Codable, Equatable, Sendable {
+    public var id: String
+    public var author: String
+    public init(id: String, author: String) { self.id = id; self.author = author }
+}
+
 public struct PullRequest: Codable, Identifiable, Equatable, Sendable {
     /// "github:owner/repo#12" / "bitbucket:ws/slug#34"
     public var id: String
@@ -38,19 +45,22 @@ public struct PullRequest: Codable, Identifiable, Equatable, Sendable {
     public var myReviewAt: Date?
     /// 나한테 리뷰가 요청된 PR 인가. GitHub 의 "내가 리뷰함" 검색에서만 나온 PR 은 false (알림·배지에서 제외).
     public var reviewRequested: Bool
+    /// 내 PR 에 다른 사람이 최근 남긴 댓글·COMMENTED 리뷰 (내가 쓴 것 제외). 모르면 빈 배열.
+    public var recentActivity: [PRActivity]
 
     public init(id: String, provider: PRProvider, repo: String, number: Int, title: String, url: String,
                 author: String, isDraft: Bool = false, createdAt: Date, updatedAt: Date, lastCommitAt: Date? = nil,
                 sourceBranch: String = "", targetBranch: String = "",
                 additions: Int? = nil, deletions: Int? = nil, changedFiles: Int? = nil,
                 reviewers: [PRReviewer] = [], commentCount: Int? = nil, myReviewAt: Date? = nil,
-                reviewRequested: Bool = true) {
+                reviewRequested: Bool = true, recentActivity: [PRActivity] = []) {
         self.id = id; self.provider = provider; self.repo = repo; self.number = number; self.title = title; self.url = url
         self.author = author; self.isDraft = isDraft; self.createdAt = createdAt; self.updatedAt = updatedAt
         self.lastCommitAt = lastCommitAt; self.sourceBranch = sourceBranch; self.targetBranch = targetBranch
         self.additions = additions; self.deletions = deletions; self.changedFiles = changedFiles
         self.reviewers = reviewers; self.commentCount = commentCount; self.myReviewAt = myReviewAt
         self.reviewRequested = reviewRequested
+        self.recentActivity = recentActivity
     }
 }
 
@@ -58,23 +68,65 @@ public enum PRApproval: Equatable, Sendable {
     case approved(Int, Int), changesRequested, waiting(Int, Int), noReviewers
 }
 
+/// 내 PR 하나의 직전 상태 (알림 비교용).
+public struct PRMineState: Codable, Equatable, Sendable {
+    public var approvers: Set<String>
+    public var changers: Set<String>
+    /// 이미 본 댓글·리뷰 id (최근 것부터, 최대 50)
+    public var activity: [String]
+    public var commentCount: Int?
+    public init(approvers: Set<String> = [], changers: Set<String> = [], activity: [String] = [], commentCount: Int? = nil) {
+        self.approvers = approvers; self.changers = changers; self.activity = activity; self.commentCount = commentCount
+    }
+}
+
 /// 알림 판단에 쓰는 직전 목록의 요약. 전체 PR 을 저장하지 않는다.
 public struct PRSnapshot: Codable, Equatable, Sendable {
     /// 나한테 요청된 PR 만
     public var reviewRequestIDs: Set<String>
-    /// id → "approved" / "changes" / "waiting"
-    public var mineApproval: [String: String]
+    public var mine: [String: PRMineState]
     /// 이미 한 번 성공적으로 받아 본 제공자 ("github"/"bitbucket"). 처음 켠 제공자는 알림 없이 기준만 잡는다.
     public var providers: Set<String>
-    public init(reviewRequestIDs: Set<String> = [], mineApproval: [String: String] = [:], providers: Set<String> = []) {
-        self.reviewRequestIDs = reviewRequestIDs; self.mineApproval = mineApproval; self.providers = providers
+    public init(reviewRequestIDs: Set<String> = [], mine: [String: PRMineState] = [:], providers: Set<String> = []) {
+        self.reviewRequestIDs = reviewRequestIDs; self.mine = mine; self.providers = providers
     }
 }
 
 public enum PRNotice: Equatable, Sendable {
     case newReviewRequest(PullRequest)
-    case approved(PullRequest)
-    case changesRequested(PullRequest)
+    /// 승인한 사람 한 명. count/total = 이 승인까지 반영한 승인 수 / 리뷰어 수. complete = 이 승인으로 모두 승인됨.
+    case approved(PullRequest, by: String, count: Int, total: Int, complete: Bool)
+    case changesRequested(PullRequest, by: String)
+    /// 새 댓글·리뷰. authors 는 중복 없이 등장 순서, count 는 새 건수.
+    case comments(PullRequest, authors: [String], count: Int)
+
+    public var pr: PullRequest {
+        switch self {
+        case .newReviewRequest(let p), .approved(let p, _, _, _, _), .changesRequested(let p, _), .comments(let p, _, _): return p
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .newReviewRequest: return "리뷰 요청"
+        case .approved(_, _, let n, let m, let done): return done ? "PR 승인 완료 · 머지할 수 있어요" : "PR 승인 (\(n)/\(m))"
+        case .changesRequested: return "PR 변경 요청"
+        case .comments: return "PR 새 댓글·리뷰"
+        }
+    }
+
+    public var body: String {
+        let tail = "\(pr.repo) · \(pr.title)"
+        switch self {
+        case .newReviewRequest: return tail
+        case .approved(_, let by, _, _, _): return "\(by) 님이 승인 · \(tail)"
+        case .changesRequested(_, let by): return "\(by) 님이 변경 요청 · \(tail)"
+        case .comments(_, let authors, let count):
+            let first = authors.first ?? "(알 수 없음)"
+            if authors.count > 1 { return "\(first) 외 \(authors.count - 1)명 · 댓글 \(count)개 · \(tail)" }
+            return count > 1 ? "\(first) 님이 댓글 \(count)개 · \(tail)" : "\(first) 님이 댓글 · \(tail)"
+        }
+    }
 }
 
 public enum PRLogic {
@@ -136,14 +188,6 @@ public enum PRLogic {
         return "\(Int(s / 86400))일 전"
     }
 
-    public static func code(_ a: PRApproval) -> String {
-        switch a {
-        case .approved: return "approved"
-        case .changesRequested: return "changes"
-        case .waiting, .noReviewers: return "waiting"
-        }
-    }
-
     /// id 앞의 제공자 ("github:o/r#1" → .github).
     public static func provider(of id: String) -> PRProvider? {
         PRProvider(rawValue: String(id.prefix(while: { $0 != ":" })))
@@ -154,9 +198,28 @@ public enum PRLogic {
         String(id.prefix(while: { $0 != "#" }))
     }
 
-    public static func snapshot(reviewRequests: [PullRequest], mine: [PullRequest]) -> PRSnapshot {
-        PRSnapshot(reviewRequestIDs: Set(reviewRequests.filter(\.reviewRequested).map(\.id)),
-                   mineApproval: Dictionary(mine.map { ($0.id, code(approval($0))) }, uniquingKeysWith: { a, _ in a }))
+    static let activityCap = 50
+    /// 직전 상태 was 와 비교해 아직 못 본 다른 사람의 댓글·리뷰. was 가 없으면(처음 보는 PR) 이미 있던 것으로 보고 빈 배열.
+    static func newActivity(_ pr: PullRequest, _ was: PRMineState?) -> [PRActivity] {
+        guard let was else { return [] }
+        let seen = Set(was.activity)
+        var ids = Set<String>()
+        return pr.recentActivity.filter { !seen.contains($0.id) && ids.insert($0.id).inserted }
+    }
+
+    /// 지금 목록의 요약. old 가 있으면 이미 본 댓글 id 를 이어받는다 (이번에 못 가져온 Bitbucket 댓글 id 를 잃지 않게).
+    public static func snapshot(reviewRequests: [PullRequest], mine: [PullRequest], old: PRSnapshot? = nil) -> PRSnapshot {
+        var states: [String: PRMineState] = [:]
+        for pr in mine {
+            let o = old?.mine[pr.id]
+            let current = pr.recentActivity.map(\.id)
+            states[pr.id] = PRMineState(
+                approvers: Set(pr.reviewers.filter { $0.state == .approved }.map(\.name)),
+                changers: Set(pr.reviewers.filter { $0.state == .changesRequested }.map(\.name)),
+                activity: Array((current + (o?.activity ?? []).filter { !current.contains($0) }).prefix(activityCap)),
+                commentCount: pr.commentCount ?? o?.commentCount)
+        }
+        return PRSnapshot(reviewRequestIDs: Set(reviewRequests.filter(\.reviewRequested).map(\.id)), mine: states)
     }
 
     /// 이번에 성공한 제공자의 항목은 fresh 로 바꾸고, 실패·꺼짐·건너뜀 제공자는 직전 항목을 그대로 둔다
@@ -164,12 +227,12 @@ public enum PRLogic {
     public static func mergedSnapshot(old: PRSnapshot?, fresh: PRSnapshot, succeeded: Set<PRProvider>) -> PRSnapshot {
         func ok(_ id: String) -> Bool { provider(of: id).map(succeeded.contains) ?? false }
         var ids = fresh.reviewRequestIDs.filter(ok)
-        var mine = fresh.mineApproval.filter { ok($0.key) }
+        var mine = fresh.mine.filter { ok($0.key) }
         if let old {
             ids.formUnion(old.reviewRequestIDs.filter { !ok($0) })
-            for (k, v) in old.mineApproval where !ok(k) { mine[k] = v }
+            for (k, v) in old.mine where !ok(k) { mine[k] = v }
         }
-        return PRSnapshot(reviewRequestIDs: ids, mineApproval: mine,
+        return PRSnapshot(reviewRequestIDs: ids, mine: mine,
                           providers: (old?.providers ?? []).union(succeeded.map(\.rawValue)))
     }
 
@@ -179,7 +242,10 @@ public enum PRLogic {
     }
 
     /// 직전 요약과 비교해 알릴 것. 첫 실행(old == nil)과, old 에 아직 없던 제공자(처음 켠 것)는 알리지 않는다.
-    /// 새 리뷰 요청은 "나한테 요청된" PR 만. 내 PR 은 직전에도 있던 것의 상태가 바뀐 경우만 알린다.
+    /// - 새 리뷰 요청: "나한테 요청된" PR 만.
+    /// - 내 PR: 새 승인자·새 변경 요청자는 한 명씩, 다른 사람의 새 댓글·리뷰는 PR 당 하나로 묶어서.
+    ///   직전에 없던 내 PR 은 승인·변경 요청은 빈 상태에서 비교하고, 댓글은 이미 있던 것으로 보고 알리지 않는다.
+    /// - 내가 한 행동은 알리지 않는다 (댓글은 가져올 때 내 것을 이미 뺐고, 내 PR 의 리뷰어에는 내가 없다).
     /// reviewRequests/mine 에는 이번에 성공한 제공자의 PR 만 넘긴다.
     public static func notifications(old: PRSnapshot?, new: PRSnapshot,
                                      reviewRequests: [PullRequest], mine: [PullRequest]) -> [PRNotice] {
@@ -190,9 +256,28 @@ public enum PRLogic {
             out.append(.newReviewRequest(pr))
         }
         for pr in mine where old.providers.contains(pr.provider.rawValue) {
-            guard let was = old.mineApproval[pr.id], let now = new.mineApproval[pr.id], was != now else { continue }
-            if now == "approved" { out.append(.approved(pr)) }
-            else if now == "changes" { out.append(.changesRequested(pr)) }
+            let was = old.mine[pr.id]
+            let total = pr.reviewers.count
+            let wasApprovers = was?.approvers ?? []
+            let fresh = pr.reviewers.filter { $0.state == .approved && !wasApprovers.contains($0.name) }
+            let allDone = approval(pr) == .approved(total, total)
+            var n = wasApprovers.count
+            for (i, r) in fresh.enumerated() {
+                n += 1
+                out.append(.approved(pr, by: r.name, count: n, total: total, complete: allDone && i == fresh.count - 1))
+            }
+            let wasChangers = was?.changers ?? []
+            for r in pr.reviewers where r.state == .changesRequested && !wasChangers.contains(r.name) {
+                out.append(.changesRequested(pr, by: r.name))
+            }
+            if let was {
+                let new = newActivity(pr, was)
+                if !new.isEmpty {
+                    var authors: [String] = []
+                    for a in new where !authors.contains(a.author) { authors.append(a.author) }
+                    out.append(.comments(pr, authors: authors, count: new.count))
+                }
+            }
         }
         return out
     }

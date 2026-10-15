@@ -45,6 +45,19 @@ final class GitHubClientTests: XCTestCase {
         XCTAssertEqual(PRLogic.approval(m), .changesRequested)
     }
 
+    func testMineActivityExcludesMe() throws {
+        let extra = """
+        ,"recentComments": {"nodes": [{"id": "C1", "author": {"login": "bob"}}, {"id": "C2", "author": {"login": "me"}}]},
+         "recentReviews": {"nodes": [{"id": "R1", "author": {"login": "cat"}, "state": "COMMENTED"}, {"id": "R2", "author": {"login": "dan"}, "state": "APPROVED"}]},
+         "threads": {"nodes": [{"comments": {"nodes": [{"id": "T1", "author": {"login": "eve"}}]}}, {"comments": {"nodes": []}}]}
+        """
+        var n = node(5, repo: "x", author: "me")
+        n.removeLast()   // 마지막 "}" 앞에 필드를 덧붙인다
+        let json = #"{"data": {"viewer": {"login": "me"}, "requested": {"nodes": []}, "reviewed": {"nodes": []}, "mine": {"nodes": ["# + n + extra + "}]}}}"
+        let r = try GitHubClient.decode(Data(json.utf8), me: "me")
+        XCTAssertEqual(r.mine[0].recentActivity, [PRActivity(id: "C1", author: "bob"), PRActivity(id: "R1", author: "cat"), PRActivity(id: "T1", author: "eve")])
+    }
+
     func testGraphQLError() {
         XCTAssertThrowsError(try GitHubClient.decode(Data(#"{"errors":[{"message":"Bad credentials"}]}"#.utf8), me: "x")) {
             XCTAssertEqual($0 as? PRError, .message("Bad credentials"))

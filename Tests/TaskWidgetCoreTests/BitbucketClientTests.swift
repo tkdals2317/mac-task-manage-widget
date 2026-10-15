@@ -59,6 +59,11 @@ final class BitbucketClientTests: XCTestCase {
         XCTAssertTrue(BitbucketClient.url("/workspaces/w/pullrequests/{abc}")!.absoluteString.contains("%7Babc%7D"))
     }
 
+    func testDecodeComments() throws {
+        let json = #"{"values":[{"id":11,"user":{"uuid":"{bbbb}","display_name":"Park"}},{"id":12,"user":{"uuid":"{aaaa-1111}","display_name":"Kim"}},{"id":13,"deleted":true,"user":{"uuid":"{cccc}"}}]}"#
+        XCTAssertEqual(try BitbucketClient.decodeComments(Data(json.utf8), me: me), [PRActivity(id: "bb:11", author: "Park")])
+    }
+
     func testSafeNext() {
         XCTAssertNotNil(BitbucketClient.safeNext("https://api.bitbucket.org/2.0/repositories/x?page=2"))
         XCTAssertNil(BitbucketClient.safeNext("http://api.bitbucket.org/2.0/x"))

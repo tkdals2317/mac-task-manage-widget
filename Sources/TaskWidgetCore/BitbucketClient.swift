@@ -47,6 +47,7 @@ public struct BitbucketClient: Sendable {
         static func mine(_ ws: String, _ uuid: String) -> String { "/workspaces/\(ws)/pullrequests/\(uuid)" }
         static func repoPRs(_ ws: String, _ slug: String) -> String { "/repositories/\(ws)/\(slug)/pullrequests" }
         static func repos(_ ws: String) -> String { "/repositories/\(ws)" }
+        static func comments(_ ws: String, _ slug: String, _ id: Int) -> String { "/repositories/\(ws)/\(slug)/pullrequests/\(id)/comments" }
     }
 
     static func url(_ path: String, _ items: [URLQueryItem] = []) -> URL? {
@@ -155,6 +156,12 @@ public struct BitbucketClient: Sendable {
             }
         }
         return (prs, errors, failed, gone)
+    }
+
+    /// 내 PR 의 최근 댓글 20개 중 내가 쓰지 않은 것. comment_count 가 늘었을 때만 부른다.
+    public func recentComments(workspace: String, slug: String, id: Int, me: String) async throws -> [PRActivity] {
+        let items: [URLQueryItem] = [.init(name: "sort", value: "-created_on"), .init(name: "pagelen", value: "20")]
+        return try Self.decodeComments(try await get(Self.url(Endpoint.comments(workspace, slug, id), items)!), me: me)
     }
 
     public func repositories(workspace: String) async throws -> [BBRepo] {
@@ -270,6 +277,18 @@ public struct BitbucketClient: Sendable {
         do {
             let r = try JSONDecoder().decode(R.self, from: data)
             return (r.values.map { BBRepo(slug: $0.slug, name: $0.name ?? $0.slug, updatedOn: PRLogic.parseDate($0.updated_on)) }, r.next)
+        } catch { throw PRError.decode("\(error)") }
+    }
+
+    static func decodeComments(_ data: Data, me: String) throws -> [PRActivity] {
+        struct U: Decodable { let uuid: String?; let display_name: String?; let nickname: String? }
+        struct C: Decodable { let id: Int; let user: U?; let deleted: Bool? }
+        struct R: Decodable { let values: [C] }
+        do {
+            return try JSONDecoder().decode(R.self, from: data).values.compactMap { c in
+                guard c.deleted != true, c.user?.uuid != me else { return nil }
+                return PRActivity(id: "bb:\(c.id)", author: c.user?.display_name ?? c.user?.nickname ?? "(알 수 없음)")
+            }
         } catch { throw PRError.decode("\(error)") }
     }
 

@@ -84,15 +84,22 @@ public struct GitHubClient: Sendable {
     latestOpinionatedReviews(first: 20) { nodes { author { login } state submittedAt } }
     """
 
-    static func search(_ q: String) -> String {
-        "search(query: \"\(q)\", type: ISSUE, first: 50) { nodes { ... on PullRequest { \(fields) } } }"
+    /// 내 PR 에만 붙이는 필드: 다른 사람의 댓글·리뷰·인라인 댓글. comments 는 위의 totalCount 와 겹치지 않게 별칭을 쓴다.
+    static let activityFields = """
+    recentComments: comments(last: 20) { nodes { id author { login } } } \
+    recentReviews: reviews(last: 20) { nodes { id author { login } state } } \
+    threads: reviewThreads(last: 20) { nodes { comments(first: 1) { nodes { id author { login } } } } }
+    """
+
+    static func search(_ q: String, extra: String = "") -> String {
+        "search(query: \"\(q)\", type: ISSUE, first: 50) { nodes { ... on PullRequest { \(fields) \(extra) } } }"
     }
 
     public static let query = """
     query { viewer { login } \
     requested: \(search("is:pr is:open review-requested:@me archived:false")) \
     reviewed: \(search("is:pr is:open reviewed-by:@me -author:@me archived:false")) \
-    mine: \(search("is:pr is:open author:@me archived:false")) }
+    mine: \(search("is:pr is:open author:@me archived:false", extra: activityFields)) }
     """
 
     public struct Fetched: Equatable, Sendable {
@@ -169,6 +176,18 @@ public struct GitHubClient: Sendable {
             let commits: Commits?
             let reviewRequests: Requests?
             let latestOpinionatedReviews: Reviews?
+            let recentComments: Items?
+            let recentReviews: Items?
+            let threads: Threads?
+        }
+        struct Item: Decodable {
+            struct A: Decodable { let login: String? }
+            let id: String?; let author: A?; let state: String?
+        }
+        struct Items: Decodable { let nodes: [Item?]? }
+        struct Threads: Decodable {
+            struct T: Decodable { let comments: Items? }
+            let nodes: [T?]?
         }
         struct DataBox: Decodable {
             let viewer: Login?
@@ -229,6 +248,16 @@ public struct GitHubClient: Sendable {
                   !reviewers.contains(where: { $0.name == name }) else { continue }
             reviewers.append(PRReviewer(name: name, state: .pending, at: nil))
         }
+        // 내 PR 에 다른 사람이 남긴 댓글·COMMENTED 리뷰·인라인 댓글 (내 것 제외)
+        var activity: [PRActivity] = []
+        var ids = Set<String>()
+        func add(_ i: Envelope.Item?) {
+            guard let i, let id = i.id, i.author?.login != me, ids.insert(id).inserted else { return }
+            activity.append(PRActivity(id: id, author: i.author?.login ?? "(알 수 없음)"))
+        }
+        (n.recentComments?.nodes ?? []).forEach(add)
+        (n.recentReviews?.nodes ?? []).forEach { if $0?.state == "COMMENTED" { add($0) } }
+        (n.threads?.nodes ?? []).forEach { add($0?.comments?.nodes?.compactMap { $0 }.first) }
         let commit = n.commits?.nodes?.compactMap { $0 }.last?.commit?.committedDate
         return PullRequest(
             id: "github:\(repo.nameWithOwner)#\(number)", provider: .github, repo: repo.name, number: number,
@@ -237,6 +266,7 @@ public struct GitHubClient: Sendable {
             lastCommitAt: PRLogic.parseDate(commit),
             sourceBranch: n.headRefName ?? "", targetBranch: n.baseRefName ?? "",
             additions: n.additions, deletions: n.deletions, changedFiles: n.changedFiles,
-            reviewers: reviewers, commentCount: n.comments?.totalCount, myReviewAt: myReviewAt)
+            reviewers: reviewers, commentCount: n.comments?.totalCount, myReviewAt: myReviewAt,
+            recentActivity: activity)
     }
 }

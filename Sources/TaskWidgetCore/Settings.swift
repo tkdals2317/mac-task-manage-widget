@@ -54,6 +54,7 @@ public enum SettingsKey {
     public static let prNotifyNewReview = "prNotifyNewReview"
     public static let prNotifyApproved = "prNotifyApproved"
     public static let prNotifyChanges = "prNotifyChanges"
+    public static let prNotifyComments = "prNotifyComments"
     public static let prSeenIDs = "prSeenIDs"
     public static let prLastSnapshot = "prLastSnapshot"
     public static let prFilter = "prFilter"
@@ -269,6 +270,10 @@ public final class Settings {
     public var prNotifyChanges: Bool {
         get { bool(SettingsKey.prNotifyChanges, true) }
         set { d.set(newValue, forKey: SettingsKey.prNotifyChanges) }
+    }
+    public var prNotifyComments: Bool {
+        get { bool(SettingsKey.prNotifyComments, true) }
+        set { d.set(newValue, forKey: SettingsKey.prNotifyComments) }
     }
     public var prBitbucketRepoList: [String] {
         get { Self.csv(prBitbucketRepos) }

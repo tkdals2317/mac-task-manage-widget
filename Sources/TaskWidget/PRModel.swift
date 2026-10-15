@@ -247,7 +247,7 @@ final class PRModel: ObservableObject {
             let (m, r) = try await (mine, rr)
             // 워크스페이스 경로가 404 였으면 기억해서 다음부터 바로 대체 경로로 간다.
             if m.usedFallback && !skip { known404.insert(ws); UserDefaults.standard.set(known404.sorted(), forKey: Self.mine404Key) }
-            bbMine = m.prs
+            bbMine = await withNewComments(m.prs, client: c, workspace: ws, uuid: user.uuid)
             // 못 읽은 저장소는 직전 PR 을 유지한다 (일시 오류로 목록·기준이 줄지 않게)
             let failed = r.failed.map { "bitbucket:\(ws)/\($0)#" }
             bbRR = r.prs + bbRR.filter { p in failed.contains { p.id.hasPrefix($0) } }
@@ -273,6 +273,32 @@ final class PRModel: ObservableObject {
         }
     }
 
+    private func loadSnapshot() -> PRSnapshot? {
+        UserDefaults.standard.data(forKey: SettingsKey.prLastSnapshot).flatMap { try? JSONDecoder().decode(PRSnapshot.self, from: $0) }
+    }
+
+    /// Bitbucket 은 목록에 댓글 내용이 없어서, comment_count 가 직전보다 늘어난 내 PR 만 댓글을 따로 가져온다(한 번에 10개까지).
+    /// 못 가져오면(한도·오류·초과) commentCount 를 직전 값으로 되돌려 다음 새로고침에서 다시 시도하게 한다.
+    private func withNewComments(_ prs: [PullRequest], client: BitbucketClient, workspace: String, uuid: String) async -> [PullRequest] {
+        let old = loadSnapshot()
+        var out = prs
+        var fetched = 0
+        for i in out.indices {
+            guard let cnt = out[i].commentCount, let was = old?.mine[out[i].id]?.commentCount, cnt > was else { continue }
+            let blocked = (nextAllowed[.bitbucket].map { $0 > Date() } ?? false) || fetched >= 10
+            if blocked { out[i].commentCount = was; continue }
+            fetched += 1
+            do {
+                let slug = PRLogic.repoKey(out[i].id).split(separator: "/").last.map(String.init) ?? ""
+                out[i].recentActivity = try await client.recentComments(workspace: workspace, slug: slug, id: out[i].number, me: uuid)
+            } catch {
+                noteRateLimit(.bitbucket, error)
+                out[i].commentCount = was
+            }
+        }
+        return out
+    }
+
     /// 원본에서 숨긴 저장소·Draft 를 거르고 정렬해 화면 목록을 만든다.
     /// succeeded: 이번에 성공한 제공자. 본 목록·알림 기준은 (거르기 전) 원본으로, 성공한 제공자 것만 갱신한다. 비면 화면만 다시 거른다.
     private func apply(succeeded: Set<PRProvider>) {
@@ -294,7 +320,7 @@ final class PRModel: ObservableObject {
             old?.providers.remove(PRProvider.bitbucket.rawValue)
             d.set(repoKey, forKey: Self.repoKeyKey)
         }
-        let new = PRLogic.mergedSnapshot(old: old, fresh: PRLogic.snapshot(reviewRequests: rawRR, mine: rawMine), succeeded: succeeded)
+        let new = PRLogic.mergedSnapshot(old: old, fresh: PRLogic.snapshot(reviewRequests: rawRR, mine: rawMine, old: old), succeeded: succeeded)
         let notices = PRLogic.notifications(old: old, new: new,
                                             reviewRequests: rawRR.filter { succeeded.contains($0.provider) && keep($0) },
                                             mine: rawMine.filter { succeeded.contains($0.provider) && keep($0) })
@@ -307,17 +333,17 @@ final class PRModel: ObservableObject {
 
     private func post(_ n: PRNotice) {
         let s = Settings.shared
-        let title: String, pr: PullRequest
         switch n {
-        case .newReviewRequest(let p): guard s.prNotifyNewReview else { return }; title = "리뷰 요청"; pr = p
-        case .approved(let p): guard s.prNotifyApproved else { return }; title = "PR 승인됨"; pr = p
-        case .changesRequested(let p): guard s.prNotifyChanges else { return }; title = "PR 변경 요청"; pr = p
+        case .newReviewRequest: guard s.prNotifyNewReview else { return }
+        case .approved: guard s.prNotifyApproved else { return }
+        case .changesRequested: guard s.prNotifyChanges else { return }
+        case .comments: guard s.prNotifyComments else { return }
         }
         guard Bundle.main.bundleIdentifier != nil else { return }
         let c = UNMutableNotificationContent()
-        c.title = title
-        c.body = "\(pr.repo) · \(pr.title)"
-        c.userInfo = ["url": pr.url]
+        c.title = n.title
+        c.body = n.body
+        c.userInfo = ["url": n.pr.url]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
     }
 
@@ -353,7 +379,7 @@ final class PRModel: ObservableObject {
     private func tick() async {
         let s = Settings.shared
         guard TabConfig.enabled(from: s.enabledTabs, all: allTabs.map(\.id)).contains("pr"), anyEnabled else { return }
-        let notifies = s.prNotifyNewReview || s.prNotifyApproved || s.prNotifyChanges
+        let notifies = s.prNotifyNewReview || s.prNotifyApproved || s.prNotifyChanges || s.prNotifyComments
         guard Self.panelVisible || notifies else { return }
         if let last = lastRefresh, Date().timeIntervalSince(last) < Double(s.prRefreshMinutes) * 60 - 5 { return }
         await refresh(interactive: false, background: !Self.panelVisible)
