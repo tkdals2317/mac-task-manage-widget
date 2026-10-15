@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import TaskWidgetCore
 
 /// Bitbucket 연결 입력·확인. 설정 > PR 과 설정 도우미가 함께 쓴다. 값은 같은 곳(Settings·SecretStore)에 저장한다.
@@ -127,6 +128,7 @@ struct PRSettingsSections: View {
     @AppStorage(SettingsKey.prHideDrafts) private var hideDrafts = false
     @AppStorage(SettingsKey.prRefreshMinutes) private var refreshMinutes = 5
     @State private var editRepos = false
+    @State private var notifDenied = false
     @State private var draftRepos: Set<String> = []
 
     init(pr: PRModel) {
@@ -188,6 +190,21 @@ struct PRSettingsSections: View {
             Toggle("내 PR 승인 (한 명씩)", isOn: $notifyApproved)
             Toggle("내 PR 변경 요청", isOn: $notifyChanges)
             Toggle("내 PR 새 댓글·리뷰", isOn: $notifyComments)
+            // macOS 에서 ATM 알림이 꺼져 있으면 위 설정이 켜져 있어도 아무것도 안 뜬다.
+            if notifDenied {
+                HStack {
+                    Text("macOS 에서 ATM 알림이 꺼져 있어요").font(.caption).foregroundStyle(.orange)
+                    Spacer()
+                    Button("시스템 설정 열기") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
+                    }
+                }
+            }
+        }
+        .task {
+            guard Bundle.main.bundleIdentifier != nil else { return }
+            let st = await UNUserNotificationCenter.current().notificationSettings()
+            notifDenied = st.authorizationStatus == .denied
         }
         Section {
             Picker("오래 대기 표시", selection: $staleDays) {

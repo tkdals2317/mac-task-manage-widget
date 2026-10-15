@@ -344,7 +344,9 @@ final class PRModel: ObservableObject {
         c.title = n.title
         c.body = n.body
         c.userInfo = ["url": n.pr.url]
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil)) { err in
+            DiagLog.append("pr notice \(c.title)\(err.map { " failed: \($0.localizedDescription)" } ?? " sent")")
+        }
     }
 
     // MARK: - 본 것

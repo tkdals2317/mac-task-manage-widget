@@ -142,7 +142,9 @@ final class Scheduler {
 
     private func requestNotificationPermission() {
         guard Bundle.main.bundleIdentifier != nil else { return }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { ok, err in
+            DiagLog.append("notification permission: \(ok ? "granted" : "denied")\(err.map { " · \($0.localizedDescription)" } ?? "")")
+        }
     }
 
     private func notify(_ title: String, body: String) {
