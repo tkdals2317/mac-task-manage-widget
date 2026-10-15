@@ -38,7 +38,11 @@ final class TeleportManager: ObservableObject {
     /// 진행 중인 로그인. 여러 DB 를 동시에 켤 때 로그인은 한 번만 하고 나머지는 결과를 기다린다.
     private var loginTask: Task<Bool, Never>?
     /// 마지막 로그인에 쓴 OTP 구간. 같은 코드를 두 번 보내지 않는다.
-    private static var lastOTPCounter: Int64?
+    /// 마지막으로 쓴 OTP 카운터. 같은 30초 구간 코드를 두 번 쓰면 Teleport 가 거부해서, 설정 화면의 검증 로그인도 이 값을 갱신한다.
+    static var lastOTPCounter: Int64?
+    /// 비밀번호/OTP 가 틀려 로그인이 거부됐다. 자동 재시도가 계정 잠금으로 이어지지 않게, 사용자가 다시 입력하거나
+    /// "다시 로그인"을 누르기 전까지 자동 로그인(watchdog·자동 연결)을 멈춘다.
+    @Published private(set) var authFailed = false
     /// 사용자가 켜 둔 터널. 프로세스가 예기치 않게 죽어도 유지되고, 사용자가 끄면 빠진다 (자동 재연결은 포기하지 않는다).
     private var wanted = Set<String>() {
         didSet { UserDefaults.standard.set(wanted.sorted(), forKey: SettingsKey.teleportWanted) }   // 종료(shutdown)는 건드리지 않는다: 다음 실행에서 복원
@@ -87,11 +91,13 @@ final class TeleportManager: ObservableObject {
     func reloadConfig() {
         config = TeleportConfig.load()
         hasSecrets = TeleportSecrets.load() != nil
+        authFailed = false   // 비밀 정보를 다시 넣었을 수 있으니 자동 로그인을 다시 허용
     }
 
     func setupFinished(_ c: TeleportConfig) {
         config = c
         hasSecrets = TeleportSecrets.load() != nil
+        authFailed = false
         setupRequested = false
         for t in c.tunnels where states[t.name] == nil { states[t.name] = .disconnected }
         Task { await refreshStatus() }
@@ -156,6 +162,10 @@ final class TeleportManager: ObservableObject {
 
     private func performLogin(force: Bool, kind: String) async -> Bool {
         guard let tsh = tshPath else { message = "tsh 가 설치되어 있지 않아요"; return false }
+        if authFailed && kind != "manual" && kind != "setup" {
+            message = Self.authFailedMessage
+            return false
+        }
         if !force {
             await refreshStatus()
             if loggedIn { return true }
@@ -193,15 +203,26 @@ final class TeleportManager: ObservableObject {
         switch res {
         case .success:
             touched = true
+            authFailed = false
             lastLogin = Date()
             UserDefaults.standard.set(lastLogin, forKey: Self.lastLoginKey)
             await refreshStatus()
             return loggedIn
         case .failure(let e):
-            message = e.message
+            if TeleportTsh.isAuthFailure(e.message) {
+                authFailed = true
+                message = Self.authFailedMessage
+                DiagLog.append("teleport: 인증 실패로 자동 로그인 중지 (\(kind))")
+            } else {
+                message = e.message
+            }
             return false
         }
     }
+
+    static let authFailedMessage = "비밀번호나 OTP 키가 맞지 않아 자동 로그인을 멈췄어요. 설정 > Teleport > 설정 다시 하기에서 다시 입력해 주세요."
+
+
 
     // MARK: - 터널
 

@@ -13,6 +13,9 @@ struct DBEntry: Identifiable {
     var id: String { name }
 }
 
+/// OTP 콜백(백그라운드)에서 쓴 카운터를 받아 오는 상자.
+final class SetupOTPBox: @unchecked Sendable { var counter: Int64? }
+
 @MainActor
 final class TeleportSetupModel: ObservableObject {
     @Published var step = 1
@@ -55,16 +58,20 @@ final class TeleportSetupModel: ObservableObject {
         busy = true; error = nil; note = nil
         defer { busy = false }
         var login = TeleportLogin(tsh: tsh, proxy: TeleportConfig.cleanID(proxy), user: TeleportConfig.cleanID(user))
-        // 이미 로그인돼 있으면 tsh 가 비밀번호를 묻지 않아 검증이 안 된다. 임시 프로필로 따로 로그인해 확인한다.
-        var tempHome: URL?
-        if tp.loggedIn {
-            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atm-tsh-verify-\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            login.extraEnvironment["TELEPORT_HOME"] = dir.path
-            tempHome = dir
-        }
+        // 늘 빈 임시 프로필로 로그인해 비밀번호·OTP 를 실제로 확인한다. ~/.tsh 에 유효한 세션이 남아 있으면
+        // (터미널에서 로그인해 둔 경우 등) tsh 가 비밀번호를 묻지 않아, 틀린 비밀번호가 검증 없이 저장됐다.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atm-tsh-verify-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        login.extraEnvironment["TELEPORT_HOME"] = dir.path
+        let tempHome: URL? = dir
         let pw = password
-        let (res, report) = await Task.detached { [login] in login.runReported(password: pw, otp: { totp.code() }) }.value
+        let last = TeleportManager.lastOTPCounter
+        let used = SetupOTPBox()
+        let (res, report) = await Task.detached { [login] in
+            login.runReported(password: pw, otp: { let r = totp.freshCode(after: last); used.counter = r.counter; return r.code })
+        }.value
+        // 이어지는 실제 로그인이 같은 코드를 다시 쓰지 않게 (Teleport 는 재사용 코드를 거부한다)
+        if let c = used.counter { TeleportManager.lastOTPCounter = c }
         TeleportLoginLog.append(kind: "setup", user: TeleportConfig.cleanID(user), proxy: TeleportConfig.cleanID(proxy), tsh: tsh, report: report, result: res)
         if let d = tempHome { try? FileManager.default.removeItem(at: d) }
         if case .failure(let e) = res { error = e.message; return }
@@ -77,6 +84,8 @@ final class TeleportSetupModel: ObservableObject {
         saved.user = TeleportConfig.cleanID(user)
         try? saved.save()
         tp.reloadConfig()
+        // 검증은 임시 프로필에서 했으니, 실제 프로필이 로그인돼 있지 않으면 여기서 로그인한다.
+        guard await tp.ensureLoggedIn(kind: "setup") else { error = tp.message ?? "로그인 실패"; return }
         await loadDBs(tsh: tsh)
     }
 

@@ -91,7 +91,7 @@ struct TeleportView: View {
             } else {
                 // 지금 눌러야 할 버튼 하나만 진하게: 로그아웃이면 "다시 로그인", 아니면 "모두 연결".
                 if !tp.loggedIn {
-                    chip("arrow.right.circle.fill", "다시 로그인", .solid) { await tp.ensureLoggedIn(force: true) }
+                    chip("arrow.right.circle.fill", "다시 로그인", .solid) { await tp.ensureLoggedIn(force: true, kind: "manual") }
                 }
                 chip("link", "모두 연결", tp.loggedIn ? .solid : .soft) { await tp.connectAll() }
                 chip("xmark", "모두 끊기", .plain) { await tp.disconnectAll() }
