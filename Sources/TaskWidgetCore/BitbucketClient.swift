@@ -133,9 +133,9 @@ public struct BitbucketClient: Sendable {
     }
 
     /// 선택한 저장소들에서 내가 리뷰어로 지정된 열린 PR. 일반 실패는 저장소별로 모아 돌려주고(failed = 못 읽은 slug),
-    /// 인증 실패·한도 초과는 전체 오류로 던진다.
+    /// 인증 실패·한도 초과는 전체 오류로 던진다. 404(삭제·이름 변경·권한 회수)는 gone 으로 따로 돌려준다.
     public func reviewRequests(workspace: String, repos: [String], uuid: String) async throws
-        -> (prs: [PullRequest], errors: [String], failed: Set<String>) {
+        -> (prs: [PullRequest], errors: [String], failed: Set<String>, gone: Set<String>) {
         let q = "state=\"OPEN\" AND reviewers.uuid=\"\(uuid)\""
         let me = self
         let results = await Self.mapConcurrent(repos, limit: 6) { slug -> (slug: String, prs: [PullRequest], error: PRError?) in
@@ -144,17 +144,17 @@ public struct BitbucketClient: Sendable {
                 return (slug, try Self.decodePullRequests(data, me: uuid).prs, nil)
             } catch let e as PRError { return (slug, [], e) } catch { return (slug, [], .network(error.localizedDescription)) }
         }
-        var prs: [PullRequest] = [], errors: [String] = [], failed = Set<String>()
+        var prs: [PullRequest] = [], errors: [String] = [], failed = Set<String>(), gone = Set<String>()
         for r in results {
             switch r.error {
             case nil: prs += r.prs
             case .some(.unauthorized): throw PRError.unauthorized
             case .some(.rateLimited(let a, let m)): throw PRError.rateLimited(a, m)
-            case .some(.http(404)): errors.append("\(r.slug): 저장소를 찾을 수 없어요")   // 사라진 저장소는 이전 목록을 남기지 않는다
+            case .some(.http(404)): gone.insert(r.slug)   // 사라진 저장소는 이전 목록을 남기지 않는다
             case .some(let e): errors.append("\(r.slug): \(e.userMessage)"); failed.insert(r.slug)
             }
         }
-        return (prs, errors, failed)
+        return (prs, errors, failed, gone)
     }
 
     public func repositories(workspace: String) async throws -> [BBRepo] {

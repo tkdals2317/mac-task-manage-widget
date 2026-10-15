@@ -251,6 +251,11 @@ final class PRModel: ObservableObject {
             // 못 읽은 저장소는 직전 PR 을 유지한다 (일시 오류로 목록·기준이 줄지 않게)
             let failed = r.failed.map { "bitbucket:\(ws)/\($0)#" }
             bbRR = r.prs + bbRR.filter { p in failed.contains { p.id.hasPrefix($0) } }
+            // 없어진 저장소는 매번 오류를 띄우는 대신 선택 목록에서 조용히 뺀다.
+            if !r.gone.isEmpty {
+                s.prBitbucketRepoList = s.prBitbucketRepoList.filter { !r.gone.contains($0) }
+                DiagLog.append("bitbucket repos removed (404): \(r.gone.sorted().joined(separator: ","))")
+            }
             lastBBRefresh = Date()
             bitbucketStatus = .ok(user.displayName)
             bitbucketError = r.errors.isEmpty ? nil : "저장소 \(r.errors.count)개를 못 읽었어요 · \(r.errors[0])"
