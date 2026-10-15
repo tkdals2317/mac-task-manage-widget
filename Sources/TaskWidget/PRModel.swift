@@ -31,6 +31,11 @@ final class PRModel: ObservableObject {
     @Published private(set) var githubError: String?
     @Published private(set) var bitbucketError: String?
     @Published private(set) var seen: Set<String>
+    /// 승인·승인 취소 요청 중인 PR id
+    @Published private(set) var acting: Set<String> = []
+    @Published private(set) var actionError: [String: String] = [:]
+    /// Bitbucket 토큰에 쓰기 권한이 없다고 확인됨 (토큰을 바꾸면 해제)
+    @Published private(set) var bbNoWrite = UserDefaults.standard.bool(forKey: SettingsKey.prBitbucketNoWrite)
 
     // 제공자별 원본 (숨긴 저장소·Draft 거르기 전)
     private var ghRR: [PullRequest] = [], ghMine: [PullRequest] = []
@@ -145,13 +150,75 @@ final class PRModel: ObservableObject {
     func commitBitbucket(email: String, token: String?) async throws {
         let s = Settings.shared
         let old = s.prBitbucketEmail
-        if let token { try await setBitbucketToken(token, email: email) }
+        if let token {
+            try await setBitbucketToken(token, email: email)
+            setNoWrite(false)   // 새 토큰은 쓰기 권한이 있을 수 있다
+        }
         if !old.isEmpty, old != email {
             await Task.detached { SecretStore.delete(service: BitbucketSecrets.service, account: old) }.value
             if bbToken?.email == old { bbToken = nil }
         }
         s.prBitbucketEmail = email
         bbUser = nil
+    }
+
+    private func setNoWrite(_ v: Bool) {
+        bbNoWrite = v
+        UserDefaults.standard.set(v, forKey: SettingsKey.prBitbucketNoWrite)
+    }
+
+    // MARK: - 승인 (사용자가 확인 팝오버에서 누른 경우에만 호출된다)
+
+    /// 이 PR 에 대한 "나"의 이름 (reviewers 의 name 과 같은 형태: GitHub 로그인 / Bitbucket 표시 이름).
+    func myName(_ p: PRProvider) -> String? {
+        switch p {
+        case .github: if case .ok(let l) = githubStatus { return l } else { return nil }
+        case .bitbucket: if case .ok(let n) = bitbucketStatus { return n } else { return nil }
+        }
+    }
+
+    func approvedByMe(_ pr: PullRequest) -> Bool { PRLogic.approvedBy(pr, me: myName(pr.provider)) }
+
+    func approve(_ pr: PullRequest) async { await act(pr, undo: false) }
+    /// Bitbucket 만 (GitHub 는 되돌리기 없음)
+    func unapprove(_ pr: PullRequest) async { await act(pr, undo: true) }
+
+    private func act(_ pr: PullRequest, undo: Bool) async {
+        guard !acting.contains(pr.id), !(undo && pr.provider == .github), !(pr.provider == .bitbucket && bbNoWrite && !undo) else { return }
+        acting.insert(pr.id); actionError[pr.id] = nil
+        defer { acting.remove(pr.id) }
+        do {
+            switch pr.provider {
+            case .github:
+                guard let p = PRLogic.githubParts(pr.id) else { throw PRError.message("PR 주소를 해석하지 못했어요") }
+                guard let gh = await resolveGh(force: false), let t = await Task.detached(operation: { GhCLI.token(path: gh) }).value
+                else { throw PRError.message("gh 로그인이 필요해요") }
+                try await GitHubClient(token: t).approve(owner: p.owner, repo: p.repo, number: p.number)
+            case .bitbucket:
+                guard let p = PRLogic.bitbucketParts(pr.id) else { throw PRError.message("PR 주소를 해석하지 못했어요") }
+                guard let c = await bitbucketClient() else { throw PRError.message("Bitbucket 토큰이 필요해요") }
+                if undo { try await c.unapprove(workspace: p.workspace, slug: p.slug, id: p.number) }
+                else { try await c.approve(workspace: p.workspace, slug: p.slug, id: p.number) }
+            }
+        } catch {
+            if case .noWritePermission = error as? PRError { setNoWrite(true) }
+            noteRateLimit(pr.provider, error)
+            actionError[pr.id] = (error as? PRError)?.userMessage ?? error.localizedDescription
+            return
+        }
+        // 성공: 화면에 바로 반영하고(내 행동이라 알림은 없다), 곧 실제 값을 다시 받는다.
+        if let me = myName(pr.provider) {
+            let now = Date()
+            func change(_ p: PullRequest) -> PullRequest {
+                p.id != pr.id ? p : (undo ? PRLogic.markUnapproved(p, by: me) : PRLogic.markApproved(p, by: me, at: now))
+            }
+            ghRR = ghRR.map(change); bbRR = bbRR.map(change)
+            apply(succeeded: [])
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await self?.refresh()
+        }
     }
 
     // MARK: - 새로고침

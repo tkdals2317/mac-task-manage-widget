@@ -838,7 +838,7 @@ private struct PROnboardingBody: View {
                         ThemedTextField(prompt: bb.hasToken ? "저장됨 · 바꾸려면 입력" : "API 토큰을 붙여넣으세요 (⌘V)", text: $bb.token, secure: true)
                         Link("토큰 만드는 법 ↗", destination: Links.bitbucketToken).font(.system(size: 11 * scale))
                     }
-                    Text("Atlassian 계정 > 보안 > 범위가 있는 API 토큰 만들기 → 앱 Bitbucket → 읽기 권한 4개 (저장소·PR·계정·워크스페이스)")
+                    Text("Atlassian 계정 > 보안 > 범위가 있는 API 토큰 만들기 → 앱 Bitbucket → 읽기 권한 4개 (저장소·PR·계정·워크스페이스). 승인 버튼을 쓰려면 write:pullrequest:bitbucket 도 체크")
                         .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
                         Button { Task { await bb.test() } } label: { AccentChip(icon: "bolt.horizontal", text: "연결 확인", style: .soft) }

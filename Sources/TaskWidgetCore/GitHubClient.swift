@@ -4,6 +4,8 @@ public enum PRError: Error, Equatable, Sendable {
     case unauthorized
     /// 요청 한도. retryAfter(초)는 모르면 nil.
     case rateLimited(TimeInterval?, String)
+    /// Bitbucket 토큰에 쓰기(승인) 권한이 없음
+    case noWritePermission
     case http(Int)
     case network(String)
     case decode(String)
@@ -20,6 +22,22 @@ public enum PRError: Error, Equatable, Sendable {
         return code == 401 || code == 403 ? .unauthorized : .http(code)
     }
 
+    /// 쓰기(승인) 요청 실패. Bitbucket 의 401/403 은 읽기 전용 토큰이라는 뜻이다.
+    public static func bitbucketWriteError(code: Int, retryAfter: String? = nil) -> PRError {
+        if code == 401 || code == 403 { return .noWritePermission }
+        return classify(code: code, remaining: nil, retryAfter: retryAfter, reset: nil, provider: "Bitbucket")
+    }
+
+    /// GitHub 승인 실패: 422(내 PR·닫힌 PR 등)와 403/404(권한 없음)는 사람이 읽을 메시지로.
+    public static func githubApproveError(code: Int, remaining: String?, retryAfter: String?, reset: String?) -> PRError {
+        let e = classify(code: code, remaining: remaining, retryAfter: retryAfter, reset: reset, provider: "GitHub")
+        switch (e, code) {
+        case (_, 422): return .message("승인할 수 없는 PR 이에요 (이미 닫혔거나 내가 올린 PR)")
+        case (.unauthorized, _), (_, 404): return .message("이 저장소에서 승인할 권한이 없어요")
+        default: return e
+        }
+    }
+
     static func classify(_ resp: HTTPURLResponse?, provider: String) -> PRError {
         classify(code: resp?.statusCode ?? 0, remaining: resp?.value(forHTTPHeaderField: "x-ratelimit-remaining"),
                  retryAfter: resp?.value(forHTTPHeaderField: "retry-after"),
@@ -30,6 +48,7 @@ public enum PRError: Error, Equatable, Sendable {
         switch self {
         case .unauthorized: return "인증 실패 (401/403)"
         case .rateLimited(_, let m): return m
+        case .noWritePermission: return "Bitbucket 토큰에 PR 쓰기 권한(write:pullrequest:bitbucket)이 필요해요"
         case .http(let c): return "HTTP \(c)"
         case .network(let m): return "네트워크: \(m)"
         case .decode(let m): return "응답 해석 실패: \(m)"
@@ -133,6 +152,37 @@ public struct GitHubClient: Sendable {
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(code) else { throw PRError.classify(resp as? HTTPURLResponse, provider: "GitHub") }
         return data
+    }
+
+    // MARK: - 승인 (쓰기)
+
+    /// 실제 요청을 만들기만 한다 (테스트는 이것만 확인하고 네트워크를 타지 않는다).
+    public static func approveRequest(owner: String, repo: String, number: Int, token: String) -> URLRequest {
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(owner)/\(repo)/pulls/\(number)/reviews")!)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 25
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("ATM", forHTTPHeaderField: "User-Agent")
+        req.httpBody = Data(#"{"event":"APPROVE"}"#.utf8)
+        return req
+    }
+
+    /// PR 을 승인한다. 사용자가 확인 팝오버에서 누른 경우에만 부른다.
+    public func approve(owner: String, repo: String, number: Int) async throws {
+        let req = Self.approveRequest(owner: owner, repo: repo, number: number, token: token)
+        let data: Data, resp: URLResponse
+        do { (data, resp) = try await session.data(for: req) } catch { throw PRError.network(error.localizedDescription) }
+        _ = data
+        let http = resp as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
+        DiagLog.append("github POST /repos/\(owner)/\(repo)/pulls/\(number)/reviews -> HTTP \(code)")
+        guard (200...299).contains(code) else {
+            throw PRError.githubApproveError(code: code, remaining: http?.value(forHTTPHeaderField: "x-ratelimit-remaining"),
+                                             retryAfter: http?.value(forHTTPHeaderField: "retry-after"),
+                                             reset: http?.value(forHTTPHeaderField: "x-ratelimit-reset"))
+        }
     }
 
     // MARK: - 해석 (순수)

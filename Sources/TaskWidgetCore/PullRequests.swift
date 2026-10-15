@@ -193,6 +193,49 @@ public enum PRLogic {
         PRProvider(rawValue: String(id.prefix(while: { $0 != ":" })))
     }
 
+    /// "github:owner/repo#12" → (owner, repo, 12)
+    public static func githubParts(_ id: String) -> (owner: String, repo: String, number: Int)? {
+        guard let (path, n) = idParts(id, prefix: "github:") else { return nil }
+        let p = path.split(separator: "/").map(String.init)
+        return p.count == 2 ? (p[0], p[1], n) : nil
+    }
+
+    /// "bitbucket:ws/slug#34" → (ws, slug, 34)
+    public static func bitbucketParts(_ id: String) -> (workspace: String, slug: String, number: Int)? {
+        guard let (path, n) = idParts(id, prefix: "bitbucket:") else { return nil }
+        let p = path.split(separator: "/").map(String.init)
+        return p.count == 2 ? (p[0], p[1], n) : nil
+    }
+
+    private static func idParts(_ id: String, prefix: String) -> (String, Int)? {
+        guard id.hasPrefix(prefix), let hash = id.lastIndex(of: "#"),
+              let n = Int(id[id.index(after: hash)...]) else { return nil }
+        return (String(id[id.index(id.startIndex, offsetBy: prefix.count)..<hash]), n)
+    }
+
+    /// 내가(me) 이 PR 을 승인했는가.
+    public static func approvedBy(_ pr: PullRequest, me: String?) -> Bool {
+        guard let me else { return false }
+        return pr.reviewers.contains { $0.name == me && $0.state == .approved }
+    }
+
+    /// 승인 직후 화면에 바로 반영하려고 내 승인을 로컬 PR 에 적는다 (다음 새로고침이 실제 값으로 덮어쓴다).
+    public static func markApproved(_ pr: PullRequest, by me: String, at: Date) -> PullRequest {
+        var p = pr
+        if let i = p.reviewers.firstIndex(where: { $0.name == me }) { p.reviewers[i].state = .approved; p.reviewers[i].at = at }
+        else { p.reviewers.append(PRReviewer(name: me, state: .approved, at: at)) }
+        p.myReviewAt = at
+        return p
+    }
+
+    /// 승인 취소: 내 리뷰어 상태를 대기로 되돌린다.
+    public static func markUnapproved(_ pr: PullRequest, by me: String) -> PullRequest {
+        var p = pr
+        if let i = p.reviewers.firstIndex(where: { $0.name == me }) { p.reviewers[i].state = .pending; p.reviewers[i].at = nil }
+        p.myReviewAt = nil
+        return p
+    }
+
     /// "github:o/r#1" → "github:o/r" (저장소 숨김의 키)
     public static func repoKey(_ id: String) -> String {
         String(id.prefix(while: { $0 != "#" }))

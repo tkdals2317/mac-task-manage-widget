@@ -47,6 +47,7 @@ public struct BitbucketClient: Sendable {
         static func mine(_ ws: String, _ uuid: String) -> String { "/workspaces/\(ws)/pullrequests/\(uuid)" }
         static func repoPRs(_ ws: String, _ slug: String) -> String { "/repositories/\(ws)/\(slug)/pullrequests" }
         static func repos(_ ws: String) -> String { "/repositories/\(ws)" }
+        static func approve(_ ws: String, _ slug: String, _ id: Int) -> String { "/repositories/\(ws)/\(slug)/pullrequests/\(id)/approve" }
         static func comments(_ ws: String, _ slug: String, _ id: Int) -> String { "/repositories/\(ws)/\(slug)/pullrequests/\(id)/comments" }
     }
 
@@ -206,6 +207,30 @@ public struct BitbucketClient: Sendable {
     }
 
     // MARK: - 네트워크
+
+    /// 승인(POST)·승인 취소(DELETE) 요청을 만들기만 한다.
+    func approveRequest(workspace: String, slug: String, id: Int, undo: Bool) -> URLRequest {
+        var req = URLRequest(url: Self.url(Endpoint.approve(workspace, slug, id))!)
+        req.httpMethod = undo ? "DELETE" : "POST"
+        req.timeoutInterval = 20
+        req.setValue("Basic " + Data("\(email):\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        return req
+    }
+
+    /// 사용자가 확인 팝오버에서 누른 경우에만 부른다. 401/403 은 토큰에 쓰기 권한이 없다는 뜻(noWritePermission).
+    public func approve(workspace: String, slug: String, id: Int) async throws { try await write(workspace, slug, id, undo: false) }
+    public func unapprove(workspace: String, slug: String, id: Int) async throws { try await write(workspace, slug, id, undo: true) }
+
+    private func write(_ ws: String, _ slug: String, _ id: Int, undo: Bool) async throws {
+        let req = approveRequest(workspace: ws, slug: slug, id: id, undo: undo)
+        let resp: URLResponse
+        do { (_, resp) = try await session.data(for: req) } catch { throw PRError.network(error.localizedDescription) }
+        let http = resp as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
+        DiagLog.append("bitbucket \(req.httpMethod ?? "") \(req.url?.path ?? "") -> HTTP \(code)")
+        guard (200...299).contains(code) else { throw PRError.bitbucketWriteError(code: code, retryAfter: http?.value(forHTTPHeaderField: "retry-after")) }
+    }
 
     func get(_ url: URL) async throws -> Data {
         var req = URLRequest(url: url)

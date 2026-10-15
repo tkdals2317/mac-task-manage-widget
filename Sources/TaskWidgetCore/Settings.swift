@@ -55,6 +55,7 @@ public enum SettingsKey {
     public static let prNotifyApproved = "prNotifyApproved"
     public static let prNotifyChanges = "prNotifyChanges"
     public static let prNotifyComments = "prNotifyComments"
+    public static let prBitbucketNoWrite = "prBitbucketNoWrite"
     public static let prSeenIDs = "prSeenIDs"
     public static let prLastSnapshot = "prLastSnapshot"
     public static let prFilter = "prFilter"

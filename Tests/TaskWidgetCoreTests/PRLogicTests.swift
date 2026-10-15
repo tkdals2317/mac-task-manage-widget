@@ -200,3 +200,64 @@ final class PRLogicTests: XCTestCase {
         XCTAssertEqual(PRLogic.todoTitle(pr("a"), isReviewRequest: true), "[PR 리뷰] t")
     }
 }
+
+/// 승인(쓰기) 관련. 요청을 만들기만 하고 네트워크는 타지 않는다.
+final class PRApproveTests: XCTestCase {
+    func testIdParsers() {
+        let g = PRLogic.githubParts("github:midas/task-widget#12")
+        XCTAssertEqual([g?.owner, g?.repo], ["midas", "task-widget"]); XCTAssertEqual(g?.number, 12)
+        let b = PRLogic.bitbucketParts("bitbucket:ws/mrs-cms#34")
+        XCTAssertEqual([b?.workspace, b?.slug], ["ws", "mrs-cms"]); XCTAssertEqual(b?.number, 34)
+        XCTAssertNil(PRLogic.githubParts("bitbucket:ws/s#1"))
+        XCTAssertNil(PRLogic.githubParts("github:o/r"))
+        XCTAssertNil(PRLogic.githubParts("github:o/r/x#1"))
+        XCTAssertNil(PRLogic.bitbucketParts("bitbucket:ws#1"))
+    }
+
+    func testGitHubApproveRequest() {
+        let r = GitHubClient.approveRequest(owner: "o", repo: "r", number: 7, token: "T")
+        XCTAssertEqual(r.httpMethod, "POST")
+        XCTAssertEqual(r.url?.absoluteString, "https://api.github.com/repos/o/r/pulls/7/reviews")
+        XCTAssertEqual(r.value(forHTTPHeaderField: "Authorization"), "Bearer T")
+        XCTAssertEqual(String(decoding: r.httpBody ?? Data(), as: UTF8.self), #"{"event":"APPROVE"}"#)
+    }
+
+    func testBitbucketApproveRequests() {
+        let c = BitbucketClient(email: "a@b.c", token: "T")
+        let a = c.approveRequest(workspace: "ws", slug: "s", id: 5, undo: false)
+        XCTAssertEqual(a.httpMethod, "POST")
+        XCTAssertEqual(a.url?.absoluteString, "https://api.bitbucket.org/2.0/repositories/ws/s/pullrequests/5/approve")
+        XCTAssertEqual(c.approveRequest(workspace: "ws", slug: "s", id: 5, undo: true).httpMethod, "DELETE")
+        XCTAssertEqual(a.value(forHTTPHeaderField: "Authorization"), "Basic " + Data("a@b.c:T".utf8).base64EncodedString())
+    }
+
+    func testErrorMapping() {
+        XCTAssertEqual(PRError.bitbucketWriteError(code: 403), .noWritePermission)
+        XCTAssertEqual(PRError.bitbucketWriteError(code: 401), .noWritePermission)
+        XCTAssertEqual(PRError.bitbucketWriteError(code: 500), .http(500))
+        if case .rateLimited = PRError.bitbucketWriteError(code: 429, retryAfter: "20") {} else { XCTFail("429") }
+        XCTAssertEqual(PRError.noWritePermission.userMessage, "Bitbucket 토큰에 PR 쓰기 권한(write:pullrequest:bitbucket)이 필요해요")
+        XCTAssertEqual(PRError.githubApproveError(code: 422, remaining: nil, retryAfter: nil, reset: nil),
+                       .message("승인할 수 없는 PR 이에요 (이미 닫혔거나 내가 올린 PR)"))
+        XCTAssertEqual(PRError.githubApproveError(code: 403, remaining: "5", retryAfter: nil, reset: nil),
+                       .message("이 저장소에서 승인할 권한이 없어요"))
+        if case .rateLimited = PRError.githubApproveError(code: 403, remaining: "0", retryAfter: nil, reset: nil) {} else { XCTFail("rate") }
+    }
+
+    func testOptimisticMarking() {
+        let t = Date(timeIntervalSince1970: 100)
+        var p = PullRequest(id: "github:o/r#1", provider: .github, repo: "r", number: 1, title: "t", url: "u", author: "a",
+                            createdAt: t, updatedAt: t, reviewers: [PRReviewer(name: "bob", state: .approved)])
+        XCTAssertFalse(PRLogic.approvedBy(p, me: "me"))
+        p = PRLogic.markApproved(p, by: "me", at: t)
+        XCTAssertTrue(PRLogic.approvedBy(p, me: "me"))
+        XCTAssertEqual(p.myReviewAt, t)
+        XCTAssertEqual(p.reviewers.count, 2)
+        p = PRLogic.markApproved(p, by: "me", at: t)   // 두 번 눌러도 중복되지 않는다
+        XCTAssertEqual(p.reviewers.count, 2)
+        p = PRLogic.markUnapproved(p, by: "me")
+        XCTAssertFalse(PRLogic.approvedBy(p, me: "me"))
+        XCTAssertNil(p.myReviewAt)
+        XCTAssertFalse(PRLogic.approvedBy(p, me: nil))
+    }
+}

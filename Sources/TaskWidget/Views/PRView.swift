@@ -212,13 +212,15 @@ private struct PRRow: View {
     let staleDays: Int
     let isNew: Bool
     let expanded: Bool
-    let model: PRModel
+    @ObservedObject var model: PRModel
     let toggle: () -> Void
     @EnvironmentObject var state: AppState
     @Environment(\.fontScale) private var scale
     @Environment(\.atmAccent) private var accent
     @State private var hovering = false
     @State private var copied: String?
+    @State private var confirmApprove = false
+    @State private var confirmUndo = false
 
     private var approval: PRApproval { PRLogic.approval(pr) }
     private var reviewedQuiet: Bool { review && pr.myReviewAt != nil && !PRLogic.hasNewCommitsSinceMyReview(pr) }
@@ -263,6 +265,7 @@ private struct PRRow: View {
             Button("브랜치 복사") { model.copyBranch(pr) }
             Button("체크아웃 명령 복사") { model.copyCheckout(pr) }
             Button("할 일로 보내기") { sendToTodo() }
+            if review, canApprove { Button("승인…") { if !expanded { toggle() }; confirmApprove = true } }
             Divider()
             Button("이 저장소 숨기기") { model.hideRepo(pr) }
         }
@@ -358,6 +361,7 @@ private struct PRRow: View {
             info("올린 지") { Text(PRLogic.relative(pr.createdAt, now: now)).font(.system(size: 11 * scale)) }
             HStack(spacing: 6) {
                 Button { model.open(pr) } label: { AccentChip(icon: "arrow.up.right.square", text: "열기", style: .solid) }.buttonStyle(.plain)
+                if review { approveControls }
                 Button { model.copyBranch(pr); flash("branch") } label: {
                     AccentChip(icon: "doc.on.doc", text: copied == "branch" ? "복사됨" : "브랜치 복사", style: .soft)
                 }.buttonStyle(.plain)
@@ -366,6 +370,43 @@ private struct PRRow: View {
                 }.buttonStyle(.plain)
             }
             .padding(.top, 2)
+            if let e = model.actionError[pr.id] { Text(e).font(.system(size: 10.5 * scale)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+        }
+    }
+
+    /// 승인 버튼을 보여도 되는가 (이미 승인했거나, Bitbucket 쓰기 권한이 없으면 아니오)
+    private var canApprove: Bool {
+        !model.approvedByMe(pr) && !(pr.provider == .bitbucket && model.bbNoWrite) && !model.acting.contains(pr.id)
+    }
+
+    @ViewBuilder
+    private var approveControls: some View {
+        if model.acting.contains(pr.id) {
+            ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 16, height: 16)
+        } else if model.approvedByMe(pr) {
+            pill("✓ 승인함", .green)
+            if pr.provider == .bitbucket && !model.bbNoWrite {
+                Button { confirmUndo = true } label: { AccentChip(icon: "arrow.uturn.backward", text: "승인 취소", style: .plain) }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $confirmUndo, arrowEdge: .bottom) {
+                        ConfirmPopover(heading: "승인을 취소할까요?", pr: pr, primary: "승인 취소") {
+                            confirmUndo = false; Task { await model.unapprove(pr) }
+                        } cancel: { confirmUndo = false }
+                    }
+            }
+        } else if pr.provider == .bitbucket && model.bbNoWrite {
+            Text("승인하려면 토큰에 쓰기 권한이 필요해요").font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+            Button { NotificationCenter.default.post(name: .openSettings, object: "pr") } label: {
+                Text("설정").font(.system(size: 10.5 * scale)).foregroundStyle(accent)
+            }.buttonStyle(.plain)
+        } else {
+            Button { confirmApprove = true } label: { AccentChip(icon: "checkmark.circle", text: "✓ 승인", style: .soft) }
+                .buttonStyle(.plain)
+                .popover(isPresented: $confirmApprove, arrowEdge: .bottom) {
+                    ConfirmPopover(heading: "이 PR 을 승인할까요?", pr: pr, primary: "승인") {
+                        confirmApprove = false; Task { await model.approve(pr) }
+                    } cancel: { confirmApprove = false }
+                }
         }
     }
 
@@ -388,5 +429,26 @@ private struct PRRow: View {
 
     private func sendToTodo() {
         state.addTodo(PRLogic.todoTitle(pr, isReviewRequest: review), memo: pr.url)
+    }
+}
+
+/// 승인·승인 취소 확인 팝오버. 사용자가 "승인" 을 눌러야만 요청이 나간다.
+private struct ConfirmPopover: View {
+    let heading: String
+    let pr: PullRequest
+    let primary: String
+    let confirm: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(heading).font(.system(size: 12.5, weight: .semibold))
+            Text(pr.title).font(.system(size: 11.5)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            Text("\(pr.repo) · #\(pr.number)").font(.system(size: 10.5)).foregroundStyle(.secondary)
+            PopoverButtons(primary: primary, cancel: cancel, submit: confirm).padding(.top, 4)
+        }
+        .padding(12)
+        .frame(width: 280, alignment: .leading)
+        .themedPopover()
     }
 }

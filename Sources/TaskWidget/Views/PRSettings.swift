@@ -162,7 +162,7 @@ struct PRSettingsSections: View {
                     .noPasswordSuggestions()
                 Link("토큰 만드는 법 ↗", destination: Links.bitbucketToken)
             }
-            note("Atlassian 계정 > 보안 > 범위가 있는 API 토큰 만들기 → 앱 Bitbucket → 읽기 권한 4개 (저장소·PR·계정·워크스페이스)")
+            note("Atlassian 계정 > 보안 > 범위가 있는 API 토큰 만들기 → 앱 Bitbucket → 읽기 권한 4개 (저장소·PR·계정·워크스페이스). 승인 버튼을 쓰려면 write:pullrequest:bitbucket 도 체크")
             HStack {
                 Button("연결 확인") { Task { await bb.test() } }.disabled(bb.busy)
                 Text(bb.status).foregroundStyle(bb.ok ? Color.green : Color.secondary).lineLimit(2)
