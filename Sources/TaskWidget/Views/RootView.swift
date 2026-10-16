@@ -16,7 +16,8 @@ struct RootView: View {
                 HStack(spacing: 8) {
                     PanelTabBar(
                         items: allTabs.filter { enabled.contains($0.id) }.map { ($0.id, $0.title) },
-                        selection: Binding(get: { current }, set: { tab = $0 })
+                        selection: Binding(get: { current }, set: { tab = $0 }),
+                        badges: ["pr": state.pr.badge]
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -54,6 +55,7 @@ struct RootView: View {
         switch id {
         case "summary": SummaryView()
         case "notes": NotesView()
+        case "pr": PRView(pr: state.pr)
         case "teleport": TeleportView(tp: state.teleport)
         default: TasksView()
         }

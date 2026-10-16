@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 import TaskWidgetCore
 
-private enum OStep { case features, storage, atlassian, notes, claude, teleport, finish }
+private enum OStep { case features, storage, atlassian, notes, pr, prRepos, claude, teleport, finish }
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -30,6 +30,7 @@ struct OnboardingView: View {
     @State private var useNotes = false
     @State private var useSummary = true
     @State private var useTeleport = false
+    @State private var usePR = false
     // 2 저장 위치
     @State private var storage = Settings.shared.secretStorage
     @State private var storageErr = ""
@@ -57,6 +58,12 @@ struct OnboardingView: View {
     @State private var hookInstalled = false
     @State private var todoInstalled = false
     @State private var claudeErr = ""
+    // PR
+    @State private var prGitHubOn = false
+    @State private var prBitbucketOn = false
+    @State private var bb: BitbucketSetup?
+    @State private var prRepos: Set<String> = []
+    @State private var prErr = ""
     // 6 Teleport
     @State private var tp: TeleportSetupModel?
     @State private var tshVersion = ""
@@ -75,9 +82,14 @@ struct OnboardingView: View {
     /// 고른 기능에 해당하는 단계만.
     private var steps: [OStep] {
         var s: [OStep] = [.features]
-        if useJira || useNotes || useTeleport { s.append(.storage) }
+        if useJira || useNotes || useTeleport || usePR { s.append(.storage) }
         if useJira || useNotes { s.append(.atlassian) }
         if useNotes { s.append(.notes) }
+        if usePR {
+            s.append(.pr)
+            // 저장소 고르기는 Bitbucket 이 켜져 있고 연결이 확인된 뒤에만
+            if prBitbucketOn, bb?.ok == true { s.append(.prRepos) }
+        }
         if useSummary { s.append(.claude) }
         if useTeleport { s.append(.teleport) }
         s.append(.finish)
@@ -95,6 +107,8 @@ struct OnboardingView: View {
                     case .storage: storageStep
                     case .atlassian: atlassianStep
                     case .notes: notesStep
+                    case .pr: prStep
+                    case .prRepos: prReposStep
                     case .claude: claudeStep
                     case .teleport: teleportStep
                     case .finish: finishStep
@@ -207,6 +221,10 @@ struct OnboardingView: View {
             case .notes:
                 if !state.notes.hasLock { chip("forward", "잠금 안 씀", .plain, !busy) { advance() } }
                 chip("chevron.right", "다음", .solid, !busy) { Task { await nextNotes() } }
+            case .pr:
+                chip("chevron.right", "다음", .solid, !busy) { Task { await nextPR() } }
+            case .prRepos:
+                chip("chevron.right", "다음", .solid, !busy) { savePRRepos(); advance() }
             case .claude:
                 chip(claudePathFound == nil ? "chevron.right" : "arrow.down.circle", claudePathFound == nil ? "다음" : "설치하고 다음", .solid, !busy && claudeSearched) { installClaude() }
             case .teleport:
@@ -241,6 +259,17 @@ struct OnboardingView: View {
                 let p = await Task.detached { ClaudeRunner.locateWithSource(configured: Settings.shared.claudePath)?.path }.value
                 claudePathFound = p; claudeSearched = true
             }
+        case .pr where bb == nil:
+            bb = BitbucketSetup(pr: state.pr)
+            prGitHubOn = Settings.shared.prGitHubEnabled
+            prBitbucketOn = Settings.shared.prBitbucketEnabled
+            Task {
+                await bb?.load()
+                await state.pr.probeGitHub()
+                if case .ok = state.pr.githubStatus, !Settings.shared.prGitHubEnabled { prGitHubOn = true }
+            }
+        case .prRepos:
+            prRepos = Set(Settings.shared.prBitbucketRepoList)
         case .teleport where tp == nil:
             tp = TeleportSetupModel(tp: state.teleport)
             if let path = state.teleport.tshPath {
@@ -258,6 +287,7 @@ struct OnboardingView: View {
         useSummary = tabs.contains("summary")
         useNotes = tabs.contains("notes")
         useTeleport = tabs.contains("teleport")
+        usePR = tabs.contains("pr")
         email = s.jiraEmail
         jiraURL = s.jiraBaseURL
         confURL = s.confluenceBaseURL
@@ -279,6 +309,9 @@ struct OnboardingView: View {
             }.buttonStyle(.plain)
             Button { useSummary.toggle() } label: {
                 choice(useSummary ? "checkmark.square.fill" : "square", on: useSummary, "요약", "Claude Code 로 한 작업·커밋·할 일을 모아 저녁에 하루 업무 요약을 만들어요. Claude Code 가 설치돼 있어야 해요.")
+            }.buttonStyle(.plain)
+            Button { usePR.toggle() } label: {
+                choice(usePR ? "checkmark.square.fill" : "square", on: usePR, "PR", "GitHub·Bitbucket 에서 나한테 온 리뷰 요청과 내가 올린 PR 의 승인 상태를 모아 봐요. 승인되면 알려줘요.")
             }.buttonStyle(.plain)
             Button { useTeleport.toggle() } label: {
                 choice(useTeleport ? "checkmark.square.fill" : "square", on: useTeleport, "Teleport", "개발·스테이징 DB 에 로그인하고 터널을 자동으로 열어 둬요. DB 툴에서 localhost 포트로 접속하면 돼요.")
@@ -440,6 +473,45 @@ struct OnboardingView: View {
         advance()
     }
 
+    // MARK: - PR 연결
+
+    private var prStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header("PR 연결", "GitHub 는 gh CLI 로그인을 그대로 써요. Bitbucket 은 API 토큰이 필요해요. 둘 다 읽기만 해요.")
+            if let bb {
+                PROnboardingBody(pr: state.pr, bb: bb, github: $prGitHubOn, bitbucket: $prBitbucketOn, card: { c in AnyView(card { c }) })
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            if !prErr.isEmpty { line(prErr, .red) }
+        }
+        .disabled(busy)
+    }
+
+    private func nextPR() async {
+        busy = true; defer { busy = false }
+        prErr = ""
+        let s = Settings.shared
+        // Bitbucket 은 연결 확인이 성공해야 켠다 (확인 전에는 이메일·켜짐 상태를 저장하지 않는다).
+        if prBitbucketOn, let bb, !bb.ok {
+            await bb.test()
+            if !bb.ok { prErr = "Bitbucket 연결을 확인하지 못했어요. 이메일·토큰을 고치거나 Bitbucket 을 끄고 다음으로 가세요."; return }
+        }
+        s.prGitHubEnabled = prGitHubOn
+        s.prBitbucketEnabled = prBitbucketOn
+        advance()
+    }
+
+    private var prReposStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header("리뷰 요청 볼 저장소", "Bitbucket 은 저장소 단위로 리뷰 요청을 찾아요. 이 Mac 에 클론된 저장소와 최근 리뷰어로 들어간 저장소를 미리 골라 뒀어요.")
+            BitbucketRepoPicker(pr: state.pr, workspace: Settings.shared.prBitbucketWorkspace, selection: $prRepos)
+                .frame(height: 300)
+        }
+    }
+
+    private func savePRRepos() { Settings.shared.prBitbucketRepoList = Array(prRepos) }
+
     // MARK: - 5 Claude 연동
 
     private var claudeStep: some View {
@@ -532,7 +604,7 @@ struct OnboardingView: View {
     }
 
     private var summaryItems: [String] {
-        var r = ["탭: " + allTabs.filter { Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport).split(separator: ",").contains(Substring($0.id)) }.map(\.title).joined(separator: " · ")]
+        var r = ["탭: " + allTabs.filter { Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR).split(separator: ",").contains(Substring($0.id)) }.map(\.title).joined(separator: " · ")]
         if useJira || useNotes {
             r.append(atlOK ? "Atlassian 연결됨" : (hasToken ? "Atlassian 토큰 저장됨 (연결은 확인 안 함)" : "Atlassian 토큰 없음 — 설정 > Jira 에서 입력"))
         }
@@ -540,6 +612,12 @@ struct OnboardingView: View {
         if useSummary {
             let ig = integration
             r.append("Claude 훅 \(ig.hookStatus() == .installed ? "설치됨" : "미설치") · 할 일 스킬 \(ig.todoSkillInstalled() ? "설치됨" : "미설치")")
+        }
+        if usePR {
+            var parts: [String] = []
+            if prGitHubOn { if case .ok = state.pr.githubStatus { parts.append("GitHub ✓") } else { parts.append("GitHub (로그인 필요)") } }
+            if prBitbucketOn { parts.append(bb?.ok == true ? "Bitbucket 저장소 \(Settings.shared.prBitbucketRepoList.count)개" : "Bitbucket 미연결") }
+            r.append("PR: " + (parts.isEmpty ? "연결 안 함 — 설정 > PR 에서" : parts.joined(separator: " / ")))
         }
         if useTeleport { r.append(tpCount > 0 ? "Teleport DB \(tpCount)개" : "Teleport 미설정 — 탭에서 이어서 할 수 있어요") }
         return r
@@ -560,12 +638,13 @@ struct OnboardingView: View {
 
     private func finish() {
         let s = Settings.shared
-        s.enabledTabs = Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport)
+        s.enabledTabs = Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR)
         s.onboardingDone = true
         onClose()
         onFinish()
         if useJira { Task { await state.refreshJira() } }
         if useNotes { Task { await state.refreshConfluence() } }
+        if usePR { Task { await state.pr.refresh() } }
     }
 }
 
@@ -731,6 +810,51 @@ private struct TeleportFooter: View {
                 } label: { AccentChip(icon: "chevron.right", text: "다음", style: .solid) }
                     .buttonStyle(.plain).disabled(!m.canSave || m.busy)
             }
+        }
+    }
+}
+
+// MARK: - PR 단계 본문 (GitHub·Bitbucket 카드)
+
+private struct PROnboardingBody: View {
+    @ObservedObject var pr: PRModel
+    @ObservedObject var bb: BitbucketSetup
+    @Binding var github: Bool
+    @Binding var bitbucket: Bool
+    let card: (AnyView) -> AnyView
+    @Environment(\.fontScale) private var scale
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            card(AnyView(VStack(alignment: .leading, spacing: 6) {
+                Toggle("GitHub", isOn: $github).font(.system(size: 12.5 * scale, weight: .semibold))
+                GitHubStatusLine(pr: pr)
+            }))
+            card(AnyView(VStack(alignment: .leading, spacing: 6) {
+                Toggle("Bitbucket", isOn: $bitbucket).font(.system(size: 12.5 * scale, weight: .semibold))
+                if bitbucket {
+                    ThemedTextField(prompt: "이메일 (Atlassian 계정)", text: $bb.email)
+                    HStack(spacing: 8) {
+                        ThemedTextField(prompt: bb.hasToken ? "저장됨 · 바꾸려면 입력" : "API 토큰을 붙여넣으세요 (⌘V)", text: $bb.token, secure: true)
+                        Link("토큰 만드는 법 ↗", destination: Links.bitbucketToken).font(.system(size: 11 * scale))
+                    }
+                    Text("Atlassian 계정 > 보안 > 범위가 있는 API 토큰 만들기 → 앱 Bitbucket → 읽기 권한 4개 (저장소·PR·계정·워크스페이스). 승인 버튼을 쓰려면 write:pullrequest:bitbucket 도 체크")
+                        .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button { Task { await bb.test() } } label: { AccentChip(icon: "bolt.horizontal", text: "연결 확인", style: .soft) }
+                            .buttonStyle(.plain).disabled(bb.busy)
+                        if !bb.status.isEmpty {
+                            Text(bb.status).font(.system(size: 11 * scale)).foregroundStyle(bb.ok ? Color.green : Color.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if bb.workspaces.count > 1 {
+                        Picker("워크스페이스", selection: Binding(get: { bb.workspace }, set: { bb.selectWorkspace($0) })) {
+                            ForEach(bb.workspaces) { Text($0.name).tag($0.slug) }
+                        }
+                    }
+                }
+            }))
         }
     }
 }

@@ -60,3 +60,13 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(SettingsKey.jiraJQL, "jiraJQL")
     }
 }
+
+final class PRSettingsTests: XCTestCase {
+    func testHiddenReposJSONRoundTrip() {
+        let d = UserDefaults(suiteName: "pr-settings-\(UUID().uuidString)")!
+        let s = Settings(defaults: d)
+        XCTAssertEqual(s.prHiddenRepoList, [])
+        s.prHiddenRepoList = ["github:o/r", "bitbucket:w/a,b", "github:o/r"]
+        XCTAssertEqual(s.prHiddenRepoList, ["bitbucket:w/a,b", "github:o/r"], "쉼표가 들어 있어도 안전, 중복 제거")
+    }
+}

@@ -19,7 +19,7 @@ public enum Onboarding {
     }
 
     /// 고른 기능 → `enabledTabs` 저장 문자열 (할 일은 항상, 순서는 앱 탭 순서와 같다).
-    public static func enabledTabs(summary: Bool, notes: Bool, teleport: Bool) -> String {
-        (["tasks"] + (summary ? ["summary"] : []) + (notes ? ["notes"] : []) + (teleport ? ["teleport"] : [])).joined(separator: ",")
+    public static func enabledTabs(summary: Bool, notes: Bool, teleport: Bool, pr: Bool = false) -> String {
+        (["tasks"] + (summary ? ["summary"] : []) + (notes ? ["notes"] : []) + (pr ? ["pr"] : []) + (teleport ? ["teleport"] : [])).joined(separator: ",")
     }
 }
