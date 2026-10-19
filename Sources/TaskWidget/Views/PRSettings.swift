@@ -111,6 +111,28 @@ struct GitHubStatusLine: View {
     }
 }
 
+/// Bitbucket 클론을 찾을 폴더 고르기 (설정 > PR 과 저장소 고르기 공용).
+enum CloneFolders {
+    /// 설정 창·비활성 패널 어디서든 뜨도록 앱을 앞으로 가져온 뒤 모달로 연다.
+    @MainActor static func pick() -> [String] {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "추가"
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK else { return [] }
+        return panel.urls.map(\.path)
+    }
+
+    /// 고른 폴더를 저장 목록에 합친다 (중복은 encodeList 가 지운다).
+    @MainActor static func add(_ paths: [String]) {
+        Settings.shared.prCloneRootList = Settings.shared.prCloneRootList + paths
+    }
+
+    static func short(_ path: String) -> String { (path as NSString).abbreviatingWithTildeInPath }
+}
+
 /// 설정 > PR. Form 안에서 Section 들로 펼쳐진다.
 struct PRSettingsSections: View {
     @ObservedObject var pr: PRModel
@@ -127,6 +149,9 @@ struct PRSettingsSections: View {
     @AppStorage(SettingsKey.prStaleDays) private var staleDays = 2
     @AppStorage(SettingsKey.prHideDrafts) private var hideDrafts = false
     @AppStorage(SettingsKey.prRefreshMinutes) private var refreshMinutes = 5
+    /// 값이 바뀌면 화면을 다시 그리게 하려는 용도 (실제 목록은 Settings.prCloneRootList).
+    @AppStorage(SettingsKey.prCloneRoots) private var cloneRootsRaw: String?
+    @State private var cloneCounts: [String: Int] = [:]
     @State private var editRepos = false
     @State private var notifDenied = false
     @State private var draftRepos: Set<String> = []
@@ -140,6 +165,34 @@ struct PRSettingsSections: View {
     private func note(_ s: String) -> some View {
         Text(s).font(.caption).foregroundStyle(.secondary)
             .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 클론 찾을 폴더: 폴더별로 찾은 저장소 수를 보여주고 추가·삭제한다.
+    @ViewBuilder
+    private var cloneFolders: some View {
+        let roots = Settings.shared.prCloneRootList
+        Text("클론 찾을 폴더").font(.subheadline.weight(.semibold)).padding(.top, 4)
+        ForEach(roots, id: \.self) { r in
+            HStack(spacing: 6) {
+                Image(systemName: "folder").foregroundStyle(.secondary)
+                Text(CloneFolders.short(r)).font(.system(.caption, design: .monospaced))
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                let n = cloneCounts[r] ?? 0
+                Text(n > 0 ? "저장소 \(n)개" : "0개").font(.caption)
+                    .foregroundStyle(n > 0 ? Color.green : Color.secondary)
+                Button { Settings.shared.prCloneRootList = roots.filter { $0 != r } } label: { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless).help("목록에서 빼기")
+            }
+        }
+        Button("폴더 추가…") { CloneFolders.add(CloneFolders.pick()) }
+        note("고른 폴더 아래 두 단계까지 Bitbucket 클론을 찾아요. 찾은 저장소는 저장소 고르기에서 자동으로 선택돼요.")
+            .task(id: roots.joined(separator: "\n") + "|" + workspace) {
+                let ws = workspace
+                cloneCounts = await Task.detached {
+                    Dictionary(uniqueKeysWithValues: roots.map { ($0, LocalRepos.count(workspace: ws, root: URL(fileURLWithPath: $0))) })
+                }.value
+            }
     }
 
     var body: some View {
@@ -179,6 +232,7 @@ struct PRSettingsSections: View {
                         Button("편집") { draftRepos = Set(Settings.csv(reposCSV)); editRepos = true }
                     }
                 }
+                cloneFolders
             }
         } header: {
             Text("Bitbucket")
@@ -256,6 +310,8 @@ struct BitbucketRepoPicker: View {
     @State private var query = ""
     @State private var all: [BBRepo] = []
     @State private var local: [String] = []
+    @State private var roots: [String] = Settings.shared.prCloneRootList
+    @State private var scanned = false
     @State private var recent: Set<String> = []
     @State private var loading = true
     @State private var progress: (done: Int, total: Int)?
@@ -277,7 +333,7 @@ struct BitbucketRepoPicker: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if let error { Text(error).font(.system(size: 11 * scale)).foregroundStyle(.red) }
                     if loading && all.isEmpty { ProgressView().controlSize(.small) }
-                    section("이 Mac 에 클론된 저장소", localList, tag: nil)
+                    localSection
                     section(progress.map { "최근 30일 내 리뷰어로 들어간 저장소 · 찾는 중… \($0.done)/\($0.total)" } ?? "최근 30일 내 리뷰어로 들어간 저장소",
                             recentList, tag: "추천")
                     section("그 밖의 저장소 (\(others.count))", others, tag: nil)
@@ -288,30 +344,84 @@ struct BitbucketRepoPicker: View {
         .task(id: workspace) { await load() }
     }
 
+    /// 클론이 있으면 목록(+폴더 추가), 없으면 폴더를 바로 추가할 수 있는 카드.
+    @ViewBuilder
+    private var localSection: some View {
+        if !local.isEmpty {
+            HStack {
+                Text("이 Mac 에 클론된 저장소 (\(local.count))").font(.system(size: 10.5 * scale, weight: .semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Button("폴더 추가…") { addFolder() }
+                    .buttonStyle(.plain).font(.system(size: 10.5 * scale)).foregroundStyle(accent)
+            }
+            .padding(.top, 6)
+            ForEach(localList, id: \.self) { row($0, tag: nil) }
+        } else if scanned && !workspace.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("클론 폴더를 못 찾았어요").font(.system(size: 12 * scale, weight: .semibold))
+                Text(roots.isEmpty ? "찾을 폴더가 없어요" : roots.map(CloneFolders.short).joined(separator: " · ") + " 에서 찾아봤어요")
+                    .font(.system(size: 11 * scale)).foregroundStyle(.secondary)
+                Button("폴더 추가…") { addFolder() }
+                    .buttonStyle(.plain).font(.system(size: 11 * scale, weight: .medium)).foregroundStyle(accent)
+                    .padding(.horizontal, 8).padding(.vertical, 3).background(Capsule().fill(accent.opacity(0.15)))
+                    .padding(.top, 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4])))
+            .padding(.top, 6)
+        }
+    }
+
+    /// 목록은 Bitbucket 에서 불러온 저장소가 있을 때만 거른다 (불러오기 실패·빈 목록이면 클론을 그대로 보여준다).
+    private func existing(_ slugs: [String]) -> [String] {
+        all.isEmpty ? slugs : slugs.filter(allSlugs.contains)
+    }
+
+    /// 폴더를 고르면 다시 훑고, 새로 찾은 저장소만 선택에 더한다 (기존 선택은 건드리지 않는다).
+    private func addFolder() {
+        let picked = CloneFolders.pick()
+        guard !picked.isEmpty else { return }
+        CloneFolders.add(picked)
+        roots = Settings.shared.prCloneRootList
+        Task { await rescan(selectNew: true) }
+    }
+
+    private func rescan(selectNew: Bool) async {
+        let ws = workspace
+        let urls = roots.map { URL(fileURLWithPath: $0) }
+        let l = existing(await Task.detached { LocalRepos.bitbucketSlugs(workspace: ws, roots: urls) }.value)
+        let added = Set(l).subtracting(local)
+        local = l
+        scanned = true
+        if selectNew { selection.formUnion(added) }
+    }
+
     @ViewBuilder
     private func section(_ title: String, _ slugs: [String], tag: String?) -> some View {
         if !slugs.isEmpty {
             Text(title).font(.system(size: 10.5 * scale, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 6)
-            ForEach(slugs, id: \.self) { slug in
-                let on = selection.contains(slug)
-                Button {
-                    touched.insert(slug)
-                    if on { selection.remove(slug) } else { selection.insert(slug) }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? accent : .secondary)
-                        Text(slug).font(.system(size: 12 * scale))
-                        if let tag, recent.contains(slug) {
-                            Text(tag).font(.system(size: 9.5 * scale, weight: .medium)).foregroundStyle(accent)
-                                .padding(.horizontal, 5).padding(.vertical, 1).background(Capsule().fill(accent.opacity(0.15)))
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
+            ForEach(slugs, id: \.self) { row($0, tag: tag) }
         }
+    }
+
+    private func row(_ slug: String, tag: String?) -> some View {
+        let on = selection.contains(slug)
+        return Button {
+            touched.insert(slug)
+            if on { selection.remove(slug) } else { selection.insert(slug) }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? accent : .secondary)
+                Text(slug).font(.system(size: 12 * scale))
+                if let tag, recent.contains(slug) {
+                    Text(tag).font(.system(size: 9.5 * scale, weight: .medium)).foregroundStyle(accent)
+                        .padding(.horizontal, 5).padding(.vertical, 1).background(Capsule().fill(accent.opacity(0.15)))
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func load() async {
@@ -319,14 +429,16 @@ struct BitbucketRepoPicker: View {
         loading = true; error = nil
         autoPick = selection.isEmpty
         let ws = workspace
-        let l = await Task.detached { LocalRepos.bitbucketSlugs(workspace: ws) }.value
+        roots = Settings.shared.prCloneRootList
+        let urls = roots.map { URL(fileURLWithPath: $0) }
+        let l = await Task.detached { LocalRepos.bitbucketSlugs(workspace: ws, roots: urls) }.value
         local = l
+        scanned = true
         if autoPick { selection.formUnion(l.filter { !touched.contains($0) }) }
         do {
             all = try await pr.repositories(workspace: ws).sorted { ($0.updatedOn ?? .distantPast) > ($1.updatedOn ?? .distantPast) }
             // 클론은 남아 있어도 Bitbucket 에서 없어진 저장소는 빼고 보여준다.
-            let exists = Set(all.map(\.slug))
-            local = l.filter(exists.contains)
+            local = existing(l)
         } catch {
             self.error = "저장소 목록을 못 불러왔어요 · \((error as? PRError)?.userMessage ?? error.localizedDescription)"
             loading = false
