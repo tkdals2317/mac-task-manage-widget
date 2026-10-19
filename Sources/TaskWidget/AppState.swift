@@ -512,6 +512,7 @@ final class AppState: ObservableObject {
         do {
             let s = try await Task.detached { try service.generate(for: day, force: force) }.value
             if Calendar.current.isDate(day, inSameDayAs: summaryDay) { summary = s }
+            if force { SummaryEdits.clear(summaryService.summaryURL(for: day).lastPathComponent) }  // 다시 만들었으니 직접 수정 표시 해제
             return true
         } catch let e as SummaryError {
             summaryError = e.userMessage
@@ -538,6 +539,7 @@ final class AppState: ObservableObject {
         let service = summaryService
         do {
             weeklySummary = try await Task.detached { try service.generateWeekly(weekContaining: day, force: force) }.value
+            if force { SummaryEdits.clear(service.weeklyURL(for: day).lastPathComponent) }
             return true
         } catch let e as SummaryError {
             summaryError = e.userMessage
@@ -547,5 +549,28 @@ final class AppState: ObservableObject {
             DiagLog.append("summary error: \(error.localizedDescription)")
         }
         return false
+    }
+
+    // MARK: - 직접 수정
+
+    func summaryFileName(for day: Date, weekly: Bool) -> String {
+        (weekly ? summaryService.weeklyURL(for: day) : summaryService.summaryURL(for: day)).lastPathComponent
+    }
+
+    /// 고친 요약을 파일에 쓰고 수정 시각을 남긴다. 화면에 떠 있는 요약이면 상태도 갱신.
+    @discardableResult
+    func saveSummaryEdit(_ markdown: String, for day: Date, weekly: Bool) -> Bool {
+        do {
+            let old = weekly ? weeklySummary : summary
+            let s = try summaryService.save(markdown: markdown, for: day, weekly: weekly, generatedAt: old?.generatedAt)
+            SummaryEdits.mark(summaryFileName(for: day, weekly: weekly))
+            if weekly { weeklySummary = s }
+            else if Calendar.current.isDate(day, inSameDayAs: summaryDay) { summary = s }
+            return true
+        } catch {
+            summaryError = error.localizedDescription
+            DiagLog.append("summary save error: \(error.localizedDescription)")
+            return false
+        }
     }
 }

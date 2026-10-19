@@ -188,3 +188,30 @@ final class SummaryServiceTests: XCTestCase {
         XCTAssertFalse(called)
     }
 }
+
+final class SummaryEditTests: XCTestCase {
+    func testSaveOverwritesFileAndKeepsGeneratedAt() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let svc = SummaryService(dataDir: dir) { _ in "x" }
+        let day = DayKey.date(from: "2026-10-02")!
+        let gen = Date(timeIntervalSince1970: 1_700_000_000)
+        let s = try svc.save(markdown: "# 고침", for: day, weekly: false, generatedAt: gen)
+        XCTAssertEqual(s.markdown, "# 고침")
+        XCTAssertEqual(svc.existing(for: day)?.markdown, "# 고침")
+        XCTAssertEqual(svc.existing(for: day)?.generatedAt.timeIntervalSince1970 ?? 0, gen.timeIntervalSince1970, accuracy: 1)
+        let w = try svc.save(markdown: "주간", for: day, weekly: true, generatedAt: nil)
+        XCTAssertEqual(svc.existingWeekly(for: day)?.markdown, "주간")
+        XCTAssertEqual(w.dayKey, svc.weekDays(containing: day).key)
+    }
+
+    func testEditMarkRoundTrip() {
+        let d = UserDefaults(suiteName: "SummaryEditTests-\(UUID().uuidString)")!
+        XCTAssertNil(SummaryEdits.editedAt("a.md", defaults: d))
+        let t = Date(timeIntervalSince1970: 1_700_000_000)
+        SummaryEdits.mark("a.md", at: t, defaults: d)
+        XCTAssertEqual(SummaryEdits.editedAt("a.md", defaults: d), t)
+        SummaryEdits.clear("a.md", defaults: d)
+        XCTAssertNil(SummaryEdits.editedAt("a.md", defaults: d))
+    }
+}

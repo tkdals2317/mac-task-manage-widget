@@ -180,6 +180,18 @@ public final class SummaryService {
         return Summary(dayKey: key, markdown: markdown, generatedAt: Date())
     }
 
+    /// 직접 고친 요약을 생성 때와 같은 파일에 쓴다. 원자적 쓰기 뒤 수정 시각을 원래 생성 시각으로 되돌려
+    /// 다시 읽어도 "생성" 시각이 수정 시각으로 바뀌지 않게 한다.
+    @discardableResult
+    public func save(markdown: String, for day: Date, weekly: Bool, generatedAt: Date?) throws -> Summary {
+        let url = weekly ? weeklyURL(for: day) : summaryURL(for: day)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try markdown.write(to: url, atomically: true, encoding: .utf8)
+        if let generatedAt { try? FileManager.default.setAttributes([.modificationDate: generatedAt], ofItemAtPath: url.path) }
+        let key = weekly ? weekDays(containing: day).key : DayKey.string(from: day, calendar: calendar)
+        return Summary(dayKey: key, markdown: markdown, generatedAt: generatedAt ?? Date())
+    }
+
     private func writeLog(_ key: String, _ text: String) {
         let url = dataDir.appendingPathComponent("logs/summary-\(key).log")
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
