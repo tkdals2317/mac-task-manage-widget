@@ -327,7 +327,6 @@ struct BitbucketRepoPicker: View {
             // 클론은 남아 있어도 Bitbucket 에서 없어진 저장소는 빼고 보여준다.
             let exists = Set(all.map(\.slug))
             local = l.filter(exists.contains)
-            selection = selection.filter(exists.contains)
         } catch {
             self.error = "저장소 목록을 못 불러왔어요 · \((error as? PRError)?.userMessage ?? error.localizedDescription)"
             loading = false
