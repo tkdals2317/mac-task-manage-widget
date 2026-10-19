@@ -167,8 +167,9 @@ public struct BitbucketClient: Sendable {
 
     public func repositories(workspace: String) async throws -> [BBRepo] {
         var out: [BBRepo] = []
+        // role=member 는 직접 멤버로 추가된 저장소만 준다. 그룹·프로젝트 권한으로 보이는 저장소까지 받으려면 빼야 한다.
         var next: URL? = Self.url(Endpoint.repos(workspace), [
-            .init(name: "role", value: "member"), .init(name: "pagelen", value: "100"),
+            .init(name: "pagelen", value: "100"), .init(name: "sort", value: "-updated_on"),
             .init(name: "fields", value: "values.slug,values.name,values.updated_on,next"),
         ])
         var pages = 0

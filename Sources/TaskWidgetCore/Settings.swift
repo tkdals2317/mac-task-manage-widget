@@ -48,6 +48,7 @@ public enum SettingsKey {
     public static let prBitbucketWorkspace = "prBitbucketWorkspace"
     public static let prBitbucketRepos = "prBitbucketRepos"
     public static let prHiddenRepos = "prHiddenRepos"
+    public static let prCloneRoots = "prCloneRoots"
     public static let prStaleDays = "prStaleDays"
     public static let prHideDrafts = "prHideDrafts"
     public static let prRefreshMinutes = "prRefreshMinutes"
@@ -284,6 +285,15 @@ public final class Settings {
     public var prHiddenRepoList: [String] {
         get { Self.decodeList(prHiddenRepos) }
         set { prHiddenRepos = Self.encodeList(newValue) }
+    }
+
+    /// Bitbucket 클론을 찾을 폴더(절대 경로). 한 번도 안 고쳤으면 있는 기본 폴더를 보여주고, 고친 뒤에는 저장된 목록 그대로(비어도 됨).
+    public var prCloneRootList: [String] {
+        get {
+            if let raw = d.string(forKey: SettingsKey.prCloneRoots) { return Self.decodeList(raw) }
+            return LocalRepos.uniqueDirs(LocalRepos.defaultRoots().map(\.path).filter { FileManager.default.fileExists(atPath: $0) })
+        }
+        set { d.set(Self.encodeList(LocalRepos.uniqueDirs(newValue)), forKey: SettingsKey.prCloneRoots) }
     }
 
     public static func decodeList(_ raw: String) -> [String] {

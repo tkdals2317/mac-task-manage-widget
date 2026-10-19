@@ -384,6 +384,17 @@ public enum LocalRepos {
             .map { home.appendingPathComponent($0, isDirectory: true) }
     }
 
+    /// 같은 폴더를 가리키는 경로를 하나로 줄인다. 기본 APFS 는 대소문자를 안 가려서 ~/projects 와 ~/Projects 가 같은 폴더다.
+    public static func uniqueDirs(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.filter { p in
+            let u = URL(fileURLWithPath: p)
+            let key = (try? u.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier).map { "\($0)" }
+                ?? u.standardizedFileURL.path.lowercased()
+            return seen.insert(key).inserted
+        }
+    }
+
     /// 이 Mac 에 클론된 저장소 중 workspace 에 속한 slug. git 을 실행하지 않고 .git/config 만 읽는다.
     public static func bitbucketSlugs(workspace: String, roots: [URL] = LocalRepos.defaultRoots()) -> [String] {
         let fm = FileManager.default
@@ -409,6 +420,11 @@ public enum LocalRepos {
             }
         }
         return found.sorted()
+    }
+
+    /// 폴더 하나에서 찾은 클론 수 (폴더별 "저장소 N개" 표시용).
+    public static func count(workspace: String, root: URL) -> Int {
+        bitbucketSlugs(workspace: workspace, roots: [root]).count
     }
 
     private static func hasGit(_ dir: URL) -> Bool {

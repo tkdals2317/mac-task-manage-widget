@@ -31,4 +31,26 @@ final class LocalReposTests: XCTestCase {
         let slugs = LocalRepos.bitbucketSlugs(workspace: "midas", roots: [root, root.appendingPathComponent("missing")])
         XCTAssertEqual(slugs, ["alpha", "beta", "epsilon"])
     }
+
+    func testCountPerRoot() {
+        write("one/a/.git/config", config("git@bitbucket.org:midas/alpha.git"))
+        write("one/g/b/.git/config", config("git@bitbucket.org:midas/beta.git"))
+        write("two/c/.git/config", config("git@bitbucket.org:other/gamma.git"))
+        XCTAssertEqual(LocalRepos.count(workspace: "midas", root: root.appendingPathComponent("one")), 2)
+        XCTAssertEqual(LocalRepos.count(workspace: "midas", root: root.appendingPathComponent("two")), 0)
+        XCTAssertEqual(LocalRepos.count(workspace: "midas", root: root.appendingPathComponent("missing")), 0)
+    }
+
+    func testUniqueDirsMergesSameFolder() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let a = base.appendingPathComponent("Projects"), b = base.appendingPathComponent("dev")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let lower = base.appendingPathComponent("projects").path
+        let caseInsensitive = FileManager.default.fileExists(atPath: lower)
+        let r = LocalRepos.uniqueDirs([a.path, lower, b.path, b.path + "/"])
+        XCTAssertEqual(r.count, caseInsensitive ? 2 : 3)
+        XCTAssertEqual(r.first, a.path)
+    }
 }
