@@ -7,18 +7,20 @@ struct AccentChip: View {
     let icon: String
     let text: String?
     var style: Style = .soft
+    /// 자주 누르는 하단 버튼용 큰 크기 (요약 탭)
+    var large = false
     @Environment(\.fontScale) private var scale
     @Environment(\.atmAccent) private var accent
     @Environment(\.isEnabled) private var enabled
     @State private var hover = false
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon).font(.system(size: (text == nil ? 12 : 9.5) * scale, weight: .semibold))
-            if let text { Text(text).font(.system(size: 11 * scale, weight: .medium)).lineLimit(1) }
+        HStack(spacing: large ? 4 : 3) {
+            Image(systemName: icon).font(.system(size: (text == nil ? 12 : (large ? 11 : 9.5)) * scale, weight: .semibold))
+            if let text { Text(text).font(.system(size: (large ? 12.5 : 11) * scale, weight: .medium)).lineLimit(1) }
         }
         .foregroundStyle(foreground)
-        .padding(.horizontal, text == nil ? 6 : 8).padding(.vertical, 3)
+        .padding(.horizontal, text == nil ? 6 : (large ? 11 : 8)).padding(.vertical, large ? 5 : 3)
         .background(Capsule().fill(background))
         .opacity(enabled ? 1 : 0.5)
         .contentShape(Capsule())

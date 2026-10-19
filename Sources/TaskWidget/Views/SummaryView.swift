@@ -6,19 +6,25 @@ struct SummaryView: View {
     @Environment(\.fontScale) private var scale
     @State private var day = Date()
     @State private var weekly = UserDefaults.standard.bool(forKey: "summaryWeekly")
+    @Environment(\.atmAccent) private var accent
+    /// 수정 중인 요약. 날짜·주간 토글이 바뀐 뒤에도 원래 파일에 저장하려고 시작 시점을 기억한다.
+    private struct Editing { let day: Date; let weekly: Bool; let original: String }
+    @State private var editing: Editing?
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+    @State private var confirmDiscard = false
+    @State private var confirmRegenerate = false
 
     private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Picker("", selection: $weekly) {
-                    Text("일간").tag(false)
-                    Text("주간").tag(true)
+                HStack(spacing: 3) {
+                    modeChip("일간", false)
+                    modeChip("주간", true)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 80)
+                .frame(width: 80, alignment: .leading)
                 Spacer()
                 Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                 Spacer()
@@ -31,23 +37,39 @@ struct SummaryView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             Divider()
-            ScrollView {
-                content
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if editing != nil {
+                editor
+            } else {
+                ScrollView {
+                    content
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             Divider()
             footer
         }
         .onAppear { reload() }
-        .onChange(of: day) { _, _ in reload() }
+        .onChange(of: day) { _, _ in finishEditing(save: true); reload() }
         .onChange(of: weekly) { _, w in
+            finishEditing(save: true)
             UserDefaults.standard.set(w, forKey: "summaryWeekly")
             state.summaryError = nil
             reload()
         }
         .onReceive(refreshTimer) { _ in
-            if Calendar.current.isDateInToday(day) && !state.summaryGenerating { reload() }
+            if Calendar.current.isDateInToday(day) && !state.summaryGenerating && editing == nil { reload() }
+        }
+        // 탭이 바뀌거나 패널이 숨겨져도 고치던 내용은 잃지 않게 조용히 저장
+        .onDisappear { finishEditing(save: true) }
+        .onReceive(NotificationCenter.default.publisher(for: .panelDidHide)) { _ in finishEditing(save: true) }
+        .confirmationDialog("수정한 내용을 버릴까요?", isPresented: $confirmDiscard) {
+            Button("버리기", role: .destructive) { finishEditing(save: false) }
+            Button("계속 수정", role: .cancel) {}
+        }
+        .confirmationDialog("직접 수정한 내용이 사라져요. 다시 생성할까요?", isPresented: $confirmRegenerate) {
+            Button("다시 생성") { regenerate() }
+            Button("취소", role: .cancel) {}
         }
     }
 
@@ -69,42 +91,130 @@ struct SummaryView: View {
         }
     }
 
-    private var footer: some View {
-        HStack(spacing: 8) {
-            if state.summaryGenerating {
-                ProgressView().controlSize(.small)
-                Text("생성 중…")
-            } else if let e = state.summaryError {
-                Text(e).foregroundStyle(.red).lineLimit(1)
-                if e == SummaryError.claudeNotFound.userMessage {
-                    Button("설정 열기") { NotificationCenter.default.post(name: .openSettings, object: "summary") }.controlSize(.mini)
-                }
-                Button("로그") { openLog() }.controlSize(.mini)
-            } else if let s = shown {
-                Text("\(s.generatedAt.formatted(date: .omitted, time: .shortened)) 생성")
-            }
-            Spacer()
-            Button("복사") { copy() }
-                .controlSize(.mini)
-                .disabled(currentMarkdown == nil)
-            Button(shown == nil ? "생성" : "다시 생성") {
-                Task {
-                    if weekly { await state.generateWeekly(for: day, force: shown != nil) }
-                    else { await state.generateSummary(for: day, force: shown != nil) }
-                }
-            }
-            .controlSize(.mini)
-            .disabled(state.summaryGenerating)
-            if !weekly {
-                Button("일지") { NSWorkspace.shared.open(Worklog.fileURL(for: day)) }
-                    .controlSize(.mini)
-                    .disabled(state.worklogRaw == nil)
-            }
+    /// 노트 링크 필터와 같은 모양: 선택은 강조색 알약 + 흰 글씨, 나머지는 옅은 알약.
+    private func modeChip(_ title: String, _ value: Bool) -> some View {
+        Button { weekly = value } label: {
+            Text(title)
+                .font(.system(size: 11.5 * scale, weight: weekly == value ? .semibold : .regular))
+                .lineLimit(1).fixedSize()
+                .padding(.horizontal, 10).padding(.vertical, 3)
+                .foregroundStyle(weekly == value ? Color.white : Color.secondary)
+                .background(Capsule().fill(weekly == value ? accent : Color.primary.opacity(0.08)))
         }
-        .font(.system(size: 10.5 * scale))
-        .foregroundStyle(.secondary)
+        .buttonStyle(.plain)
+    }
+
+    /// 원본 Markdown 을 그대로 고치는 고정폭 입력칸. 영역을 가득 채우고 안에서 스크롤한다.
+    private var editor: some View {
+        TextEditor(text: $draft)
+            .font(.system(size: 11.5 * scale, design: .monospaced))
+            .scrollContentBackground(.hidden)
+            .focused($focused)
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(focused ? accent : Color.primary.opacity(0.12), lineWidth: focused ? 1.5 : 0.5))
+            .padding(10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if editing != nil { editFooter } else { viewFooter }
+    }
+
+    private func chip(_ icon: String, _ text: String, _ style: AccentChip.Style = .soft, action: @escaping () -> Void) -> some View {
+        Button(action: action) { AccentChip(icon: icon, text: text, style: style, large: true) }
+            .buttonStyle(.plain)
+    }
+
+    private var editFooter: some View {
+        HStack(spacing: 6) {
+            Text("⌘↩ 저장 · esc 취소")
+                .font(.system(size: 10.5 * scale))
+                .foregroundStyle(.secondary)
+            Spacer()
+            chip("xmark", "취소", .plain) { cancelEdit() }
+                .keyboardShortcut(.cancelAction)
+            chip("checkmark", "저장", .solid) { finishEditing(save: true) }
+                .keyboardShortcut(.return, modifiers: .command)
+        }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    private var viewFooter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                if shown != nil && !state.summaryGenerating {
+                    chip("pencil", "수정") { startEdit() }
+                        .keyboardShortcut("e", modifiers: .command)
+                }
+                chip("doc.on.doc", "복사") { copy() }
+                    .disabled(currentMarkdown == nil)
+                chip("arrow.clockwise", shown == nil ? "생성" : "다시 생성") {
+                    if editedAt != nil { confirmRegenerate = true } else { regenerate() }
+                }
+                .disabled(state.summaryGenerating)
+                if !weekly {
+                    chip("book.closed", "일지") { NSWorkspace.shared.open(Worklog.fileURL(for: day)) }
+                        .disabled(state.worklogRaw == nil)
+                }
+                Spacer()
+            }
+            HStack(spacing: 8) {
+                if state.summaryGenerating {
+                    ProgressView().controlSize(.small)
+                    Text("생성 중…")
+                } else if let e = state.summaryError {
+                    Text(e).foregroundStyle(.red).lineLimit(1)
+                    if e == SummaryError.claudeNotFound.userMessage {
+                        Button("설정 열기") { NotificationCenter.default.post(name: .openSettings, object: "summary") }.controlSize(.mini)
+                    }
+                    Button("로그") { openLog() }.controlSize(.mini)
+                } else if let s = shown {
+                    Text("\(s.generatedAt.formatted(date: .omitted, time: .shortened)) 생성"
+                         + (editedAt.map { " · \($0.formatted(date: .omitted, time: .shortened)) 수정" } ?? ""))
+                }
+            }
+            .font(.system(size: 10.5 * scale))
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+    }
+
+    private var editedAt: Date? {
+        shown == nil ? nil : SummaryEdits.editedAt(state.summaryFileName(for: day, weekly: weekly))
+    }
+
+    private func regenerate() {
+        let d = day, w = weekly, force = shown != nil
+        Task {
+            if w { await state.generateWeekly(for: d, force: force) }
+            else { await state.generateSummary(for: d, force: force) }
+        }
+    }
+
+    private func startEdit() {
+        guard let md = shown?.markdown else { return }
+        draft = md
+        editing = Editing(day: day, weekly: weekly, original: md)
+        DispatchQueue.main.async { focused = true }
+    }
+
+    private func cancelEdit() {
+        if let e = editing, draft != e.original { confirmDiscard = true } else { finishEditing(save: false) }
+    }
+
+    /// 수정 모드를 끝낸다. 바뀐 게 있을 때만 저장 (저장 실패하면 내용을 잃지 않게 수정 모드 유지).
+    private func finishEditing(save: Bool) {
+        guard let e = editing else { return }
+        if save && draft != e.original {
+            guard state.saveSummaryEdit(draft, for: e.day, weekly: e.weekly) else { return }
+        }
+        editing = nil
     }
 
     private var shown: Summary? { weekly ? state.weeklySummary : state.summary }
