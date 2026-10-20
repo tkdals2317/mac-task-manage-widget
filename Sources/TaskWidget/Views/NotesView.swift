@@ -67,6 +67,7 @@ private struct NotesBody: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
         }
+        .themedScrollbar()
         // JiraSection 과 같은 방식: 나타날 때 한 번, 이후 갱신 주기마다 (패널이 보일 때만)
         .task(id: refreshMinutes) {
             // 패널이 숨겨져 있으면 요청하지 않는다. 주소는 요청 시점에 Settings 에서 읽는다.

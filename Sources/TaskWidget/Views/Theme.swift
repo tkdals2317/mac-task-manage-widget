@@ -153,3 +153,107 @@ struct PopoverButtons: View {
         }
     }
 }
+
+// MARK: - 스크롤 막대
+
+/// macOS 설정이 "스크롤 막대 항상 보기"면 흰 트랙과 회색 막대가 늘 보여 패널이 지저분하다.
+/// 패널의 스크롤 막대를 평소엔 숨기고(오버레이), 스크롤하거나 마우스를 올렸을 때만 테마 강조색 막대로 보인다.
+/// ScrollView 에 `.themedScrollbar()` 를 붙인다 (옆에 둔 빈 뷰가 바로 옆 NSScrollView 를 찾아 바꾼다).
+extension View {
+    func themedScrollbar() -> some View { modifier(ThemedScrollbarModifier()) }
+}
+
+private struct ThemedScrollbarModifier: ViewModifier {
+    @Environment(\.atmAccent) private var accent
+    func body(content: Content) -> some View {
+        content.background(ScrollerHook(color: NSColor(accent)))
+    }
+}
+
+private struct ScrollerHook: NSViewRepresentable {
+    let color: NSColor
+    func makeNSView(context: Context) -> ScrollerHookView { ScrollerHookView() }
+    func updateNSView(_ v: ScrollerHookView, context: Context) {
+        v.color = color
+        v.apply()
+    }
+}
+
+final class ScrollerHookView: NSView {
+    var color: NSColor = .controlAccentColor
+    private var observer: NSObjectProtocol?
+    private var tracking: NSTrackingArea?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // SwiftUI 가 NSScrollView 에 붙인 뒤라야 찾을 수 있다
+        DispatchQueue.main.async { [weak self] in self?.apply() }
+        if observer == nil {
+            // 시스템 스크롤 막대 설정이 바뀌면 NSScrollView 가 기본값으로 되돌리므로 다시 건다
+            observer = NotificationCenter.default.addObserver(
+                forName: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                DispatchQueue.main.async { self?.apply() }
+            }
+        }
+    }
+
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
+    func apply() {
+        guard let sv = enclosingScrollView ?? siblingScrollView() else { return }
+        if sv.scrollerStyle != .overlay { sv.scrollerStyle = .overlay }
+        let scroller: AccentScroller
+        if let s = sv.verticalScroller as? AccentScroller { scroller = s } else {
+            scroller = AccentScroller()
+            sv.verticalScroller = scroller
+        }
+        if scroller.knobColor != color { scroller.knobColor = color; scroller.needsDisplay = true }
+        // 마우스를 올리면 막대를 잠깐 보여준다 (오버레이 막대는 원래 스크롤할 때만 보인다)
+        if tracking == nil {
+            let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                   owner: self, userInfo: nil)
+            sv.addTrackingArea(t)
+            tracking = t
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) { (enclosingScrollView ?? siblingScrollView())?.flashScrollers() }
+
+    /// background 로 붙으면 ScrollView 와 형제가 된다. 가까운 조상부터 올라가며 같은 자리의 NSScrollView 를 찾는다.
+    private func siblingScrollView() -> NSScrollView? {
+        var node = superview
+        for _ in 0..<4 {
+            guard let n = node else { return nil }
+            if let sv = Self.firstScrollView(in: n, near: convert(bounds, to: n)) { return sv }
+            node = n.superview
+        }
+        return nil
+    }
+
+    private static func firstScrollView(in v: NSView, near r: NSRect) -> NSScrollView? {
+        for sub in v.subviews {
+            if let sv = sub as? NSScrollView, sv.frame.intersects(r) { return sv }
+            if !(sub is NSScrollView), let found = firstScrollView(in: sub, near: v.convert(r, to: sub)) { return found }
+        }
+        return nil
+    }
+}
+
+/// 트랙(바탕)은 그리지 않고 막대만 강조색으로 그린다.
+final class AccentScroller: NSScroller {
+    var knobColor: NSColor = .controlAccentColor
+
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        let r = rect(for: .knob).insetBy(dx: 3, dy: 2)
+        guard r.width > 0, r.height > 0 else { return }
+        let w = min(r.width, 6)
+        let knob = NSRect(x: r.maxX - w, y: r.minY, width: w, height: r.height)
+        knobColor.withAlphaComponent(0.55).setFill()
+        NSBezierPath(roundedRect: knob, xRadius: w / 2, yRadius: w / 2).fill()
+    }
+}

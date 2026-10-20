@@ -81,6 +81,7 @@ struct PRView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
         }
+        .themedScrollbar()
         .task {
             if !ghOn && !bbOn { await pr.probeGitHub() }
             await pr.refreshIfStale()

@@ -35,6 +35,7 @@ struct TasksView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
         }
+        .themedScrollbar()
         .onAppear(perform: consumeFocusRequest)
         .onChange(of: state.focusNewTodo) { _, _ in consumeFocusRequest() }
     }

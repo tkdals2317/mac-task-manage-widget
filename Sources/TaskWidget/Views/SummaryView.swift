@@ -53,6 +53,7 @@ struct SummaryView: View {
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .themedScrollbar()
                     .id(weekly)
                     .transition(.move(edge: weekly ? .trailing : .leading))
                 }
