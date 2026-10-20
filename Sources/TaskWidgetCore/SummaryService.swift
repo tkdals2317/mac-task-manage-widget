@@ -132,6 +132,32 @@ public final class SummaryService {
         return "\(key) (\(md(days[0]))~\(md(days[6])))"
     }
 
+    /// 화면용 주 이름. ("10월 4주차", "10/19(월) ~ 10/25(일)")
+    /// 두 달에 걸친 주는 목요일이 있는 달로 센다 (ISO 주와 같은 규칙). 올해가 아니면 앞에 연도를 붙인다.
+    public func weekTitle(containing day: Date, now: Date = Date()) -> (title: String, range: String) {
+        let days = weekDays(containing: day).days
+        let thu = calendar.dateComponents([.year, .month, .day], from: days[3])
+        let nth = (thu.day! - 1) / 7 + 1
+        let year = thu.year == calendar.component(.year, from: now) ? "" : "\(thu.year!)년 "
+        return ("\(year)\(thu.month!)월 \(nth)주차", "\(Self.short(days[0], calendar)) ~ \(Self.short(days[6], calendar))")
+    }
+
+    /// 화면용 날짜. "10월 20일 (화)", 올해가 아니면 "2025년 10월 20일 (월)".
+    public func dayTitle(_ day: Date, now: Date = Date()) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: day)
+        let year = c.year == calendar.component(.year, from: now) ? "" : "\(c.year!)년 "
+        return "\(year)\(c.month!)월 \(c.day!)일 (\(Self.weekday(day, calendar)))"
+    }
+
+    private static func short(_ d: Date, _ cal: Calendar) -> String {
+        let c = cal.dateComponents([.month, .day], from: d)
+        return "\(c.month!)/\(c.day!)(\(weekday(d, cal)))"
+    }
+
+    private static func weekday(_ d: Date, _ cal: Calendar) -> String {
+        ["일", "월", "화", "수", "목", "금", "토"][cal.component(.weekday, from: d) - 1]
+    }
+
     public func weeklyURL(for day: Date) -> URL {
         dataDir.appendingPathComponent("summaries/week-\(weekDays(containing: day).key).md")
     }

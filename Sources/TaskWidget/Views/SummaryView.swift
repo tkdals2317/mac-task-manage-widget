@@ -12,6 +12,7 @@ struct SummaryView: View {
     @State private var editing: Editing?
     @State private var draft = ""
     @FocusState private var focused: Bool
+    @Namespace private var modeNS
     @State private var confirmDiscard = false
     @State private var confirmRegenerate = false
 
@@ -19,19 +20,24 @@ struct SummaryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                HStack(spacing: 3) {
+            // 전환 버튼은 한 줄을 다 쓰고, 날짜는 아래 줄 정가운데 (한 줄에 두면 날짜가 한쪽으로 치우친다)
+            VStack(spacing: 6) {
+                HStack(spacing: 0) {
                     modeChip("일간", false)
                     modeChip("주간", true)
                 }
-                .frame(width: 80, alignment: .leading)
-                Spacer()
-                Button { shift(-1) } label: { Image(systemName: "chevron.left") }
-                Spacer()
-                Text(dayLabel).font(.system(size: 12.5 * scale, weight: .medium))
-                Spacer()
-                Button { shift(1) } label: { Image(systemName: "chevron.right") }
-                Spacer().frame(width: 80)
+                .padding(2)
+                .background(Capsule().fill(Color.primary.opacity(0.06)))
+                HStack(spacing: 10) {
+                    Button { shift(-1) } label: { Image(systemName: "chevron.left").frame(width: 20, height: 20).contentShape(Rectangle()) }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(dayLabel.title).font(.system(size: 13 * scale, weight: .semibold))
+                        if let r = dayLabel.range { Text(r).font(.system(size: 11 * scale)).foregroundStyle(.secondary) }
+                    }
+                    .lineLimit(1)
+                    Button { shift(1) } label: { Image(systemName: "chevron.right").frame(width: 20, height: 20).contentShape(Rectangle()) }
+                }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
@@ -93,13 +99,18 @@ struct SummaryView: View {
 
     /// 노트 링크 필터와 같은 모양: 선택은 강조색 알약 + 흰 글씨, 나머지는 옅은 알약.
     private func modeChip(_ title: String, _ value: Bool) -> some View {
-        Button { weekly = value } label: {
+        Button { withAnimation(.snappy(duration: 0.25)) { weekly = value } } label: {
             Text(title)
-                .font(.system(size: 11.5 * scale, weight: weekly == value ? .semibold : .regular))
-                .lineLimit(1).fixedSize()
-                .padding(.horizontal, 10).padding(.vertical, 3)
+                .font(.system(size: 12 * scale, weight: weekly == value ? .semibold : .regular))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
                 .foregroundStyle(weekly == value ? Color.white : Color.secondary)
-                .background(Capsule().fill(weekly == value ? accent : Color.primary.opacity(0.08)))
+                .background {
+                    // 선택 표시가 다른 칸으로 미끄러져 가게 한 몸으로 둔다
+                    if weekly == value { Capsule().fill(accent).matchedGeometryEffect(id: "modePill", in: modeNS) }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -239,11 +250,11 @@ struct SummaryView: View {
         NSWorkspace.shared.open(Paths.logsDir.appendingPathComponent("summary-\(name).log"))
     }
 
-    private var dayLabel: String {
-        if weekly { return state.summaryService.weekLabel(containing: day) }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.dateFormat = "yyyy-MM-dd (E)"
-        return f.string(from: day)
+    private var dayLabel: (title: String, range: String?) {
+        if weekly {
+            let w = state.summaryService.weekTitle(containing: day)
+            return (w.title, w.range)
+        }
+        return (state.summaryService.dayTitle(day), nil)
     }
 }
