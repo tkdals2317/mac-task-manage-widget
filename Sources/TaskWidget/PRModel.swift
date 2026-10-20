@@ -467,18 +467,16 @@ final class PRModel: ObservableObject {
         NSWorkspace.shared.open(u)
     }
 
-    private func copy(_ s: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(s, forType: .string)
+    func copyBranch(_ pr: PullRequest) {
+        CopyFeedback.shared.copy(pr.sourceBranch, message: "브랜치 이름을 복사했어요")
     }
-
-    func copyBranch(_ pr: PullRequest) { copy(pr.sourceBranch) }
 
     func copyCheckout(_ pr: PullRequest) {
         // 브랜치 이름은 셸에 그대로 붙는다. 안전한 문자만 아니면 따옴표로 감싼다.
         let b = pr.sourceBranch
         let safe = b.allSatisfy { $0.isLetter || $0.isNumber || "/_-.".contains($0) }
-        copy("git fetch origin && git checkout " + (safe ? b : Updater.shellQuote(b)))
+        CopyFeedback.shared.copy("git fetch origin && git checkout " + (safe ? b : Updater.shellQuote(b)),
+                                 message: "체크아웃 명령을 복사했어요")
     }
 
     /// 저장소 키("provider:owner/slug")로 숨긴다. 같은 이름의 다른 소유자 저장소는 영향 없다.

@@ -51,6 +51,8 @@ struct SummaryView: View {
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                // 아래 버튼 줄을 가리지 않게 그 바로 위에 띄운다
+                .overlay(alignment: .bottom) { CopyToast().padding(.bottom, 8) }
             }
             Divider()
             footer
@@ -241,8 +243,7 @@ struct SummaryView: View {
 
     private func copy() {
         guard let m = currentMarkdown else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(m, forType: .string)
+        CopyFeedback.shared.copy(m, message: "요약을 복사했어요")
     }
 
     private func openLog() {
