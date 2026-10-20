@@ -14,7 +14,17 @@ struct PRView: View {
     @AppStorage(SettingsKey.prGitHubEnabled) private var ghOn = false
     @AppStorage(SettingsKey.prBitbucketEnabled) private var bbOn = false
     @AppStorage(SettingsKey.prStaleDays) private var staleDays = 2
+    @AppStorage(SettingsKey.prReviewStateFilter) private var stateFilterRaw = "[]"
+    @AppStorage(SettingsKey.prReviewRepoFilter) private var repoFilterRaw = "[]"
+    @AppStorage(SettingsKey.prReviewAuthorFilter) private var authorFilterRaw = "[]"
     @State private var expanded: String?
+    @State private var showStatePopover = false
+    @State private var showRepoPopover = false
+    @State private var showAuthorPopover = false
+
+    private var stateSel: Set<String> { Set(Settings.decodeList(stateFilterRaw)) }
+    private var repoSel: Set<String> { Set(Settings.decodeList(repoFilterRaw)) }
+    private var authorSel: Set<String> { Set(Settings.decodeList(authorFilterRaw)) }
 
     private var effectiveFilter: String {
         (filter == "github" && ghOn) || (filter == "bitbucket" && bbOn) ? filter : "all"
@@ -38,12 +48,25 @@ struct PRView: View {
                     }
                     if bbOn, pr.bitbucketStatus == .notConfigured { notConnected("Bitbucket") }
 
-                    let rr = visible(pr.reviewRequests), mine = visible(pr.mine)
-                    SectionHeader(title: "리뷰 요청", count: rr.count, collapsed: $reviewCollapsed)
+                    // 저장소·사람 필터는 리뷰 요청에만 건다 (탭 배지·알림은 모델 쪽 원본 목록을 쓰므로 영향 없음)
+                    let base = visible(pr.reviewRequests), mine = visible(pr.mine)
+                    let filtering = !stateSel.isEmpty || !repoSel.isEmpty || !authorSel.isEmpty
+                    let rr = PRLogic.filterReviews(base, states: stateSel, repos: repoSel, authors: authorSel)
+                    SectionHeader(title: "리뷰 요청", count: rr.count, total: filtering ? base.count : nil, collapsed: $reviewCollapsed) {
+                        reviewFilterChips(base, filtering: filtering)
+                    }
                     if !reviewCollapsed {
                         ForEach(rr) { row($0, review: true, now: now) }
                         if rr.isEmpty && pr.lastRefresh != nil {
-                            Text("✓ 밀린 리뷰 없어요").font(.system(size: 11.5 * scale)).foregroundStyle(.secondary).padding(.vertical, 8)
+                            if filtering && !base.isEmpty {
+                                HStack(spacing: 8) {
+                                    Text("조건에 맞는 리뷰 요청이 없어요").font(.system(size: 11.5 * scale)).foregroundStyle(.secondary)
+                                    Button { clearReviewFilters() } label: { AccentChip(icon: "xmark", text: "필터 해제", style: .soft) }.buttonStyle(.plain)
+                                }
+                                .padding(.vertical, 8)
+                            } else {
+                                Text("✓ 밀린 리뷰 없어요").font(.system(size: 11.5 * scale)).foregroundStyle(.secondary).padding(.vertical, 8)
+                            }
                         }
                     }
                     SectionHeader(title: "내 PR", count: mine.count, collapsed: $mineCollapsed)
@@ -58,6 +81,7 @@ struct PRView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
         }
+        .themedScrollbar()
         .task {
             if !ghOn && !bbOn { await pr.probeGitHub() }
             await pr.refreshIfStale()
@@ -132,6 +156,75 @@ struct PRView: View {
         .padding(.top, 8)
     }
 
+    // MARK: - 리뷰 요청 필터
+
+    private func clearReviewFilters() { stateFilterRaw = "[]"; repoFilterRaw = "[]"; authorFilterRaw = "[]" }
+
+    private func chipTitle(_ name: String, _ sel: Set<String>, _ facets: [PRLogic.Facet]) -> String {
+        switch sel.count {
+        case 0: return name
+        case 1: return "\(name): \(facets.first { sel.contains($0.key) }?.label ?? sel.first ?? "")"
+        default: return "\(name): \(sel.count)개"
+        }
+    }
+
+    /// 칩에는 짧은 이름을 쓴다 ("상태: 안 함").
+    private func stateChipTitle() -> String {
+        let sel = stateSel
+        if sel.count > 1 { return "상태: \(sel.count)개" }
+        guard let raw = sel.first else { return "상태" }
+        return "상태: \(PRLogic.ReviewStatus(rawValue: raw)?.short ?? raw)"
+    }
+
+    @ViewBuilder
+    private func reviewFilterChips(_ base: [PullRequest], filtering: Bool) -> some View {
+        let states = PRLogic.facets(base, kind: .status, states: stateSel, repos: repoSel, authors: authorSel)
+        let repos = PRLogic.facets(base, kind: .repo, states: stateSel, repos: repoSel, authors: authorSel)
+        let authors = PRLogic.facets(base, kind: .author, states: stateSel, repos: repoSel, authors: authorSel)
+        HStack(spacing: 5) {
+            facetChip(stateChipTitle(), active: !stateSel.isEmpty, shown: $showStatePopover) {
+                FacetPopover(allLabel: "모든 상태", facets: states, selected: stateSel,
+                             toggle: { stateFilterRaw = Self.toggled(stateSel, $0) }, clear: { stateFilterRaw = "[]" })
+            }
+            facetChip(chipTitle("저장소", repoSel, repos), active: !repoSel.isEmpty, shown: $showRepoPopover) {
+                FacetPopover(allLabel: "모든 저장소", facets: repos, selected: repoSel,
+                             toggle: { repoFilterRaw = Self.toggled(repoSel, $0) }, clear: { repoFilterRaw = "[]" })
+            }
+            facetChip(chipTitle("사람", authorSel, authors), active: !authorSel.isEmpty, shown: $showAuthorPopover) {
+                FacetPopover(allLabel: "모든 사람", facets: authors, selected: authorSel,
+                             toggle: { authorFilterRaw = Self.toggled(authorSel, $0) }, clear: { authorFilterRaw = "[]" })
+            }
+            if filtering {
+                Button { clearReviewFilters() } label: {
+                    Image(systemName: "xmark").font(.system(size: 9 * scale, weight: .semibold))
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary).help("필터 해제")
+            }
+        }
+    }
+
+    private static func toggled(_ sel: Set<String>, _ key: String) -> String {
+        var s = sel
+        if !s.insert(key).inserted { s.remove(key) }
+        return Settings.encodeList(Array(s))
+    }
+
+    private func facetChip<P: View>(_ text: String, active: Bool, shown: Binding<Bool>, @ViewBuilder popover: @escaping () -> P) -> some View {
+        Button { shown.wrappedValue.toggle() } label: {
+            HStack(spacing: 3) {
+                Text(text).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 7.5 * scale, weight: .bold))
+            }
+            .font(.system(size: 10.5 * scale, weight: active ? .semibold : .regular))
+            .foregroundStyle(active ? accent : Color.secondary)
+            .padding(.horizontal, 8).padding(.vertical, 2.5)
+            .background(Capsule().fill(active ? accent.opacity(0.16) : Color.primary.opacity(0.05)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: shown, arrowEdge: .bottom, content: popover)
+    }
+
     private func filterChip(_ text: String, _ id: String) -> some View {
         let on = effectiveFilter == id
         return Button { filter = id } label: {
@@ -200,6 +293,63 @@ struct PRView: View {
               expanded: expanded == p.id, model: pr) {
             withAnimation(.easeInOut(duration: 0.15)) { expanded = expanded == p.id ? nil : p.id }
         }
+    }
+}
+
+/// 저장소·사람 고르기 팝오버. 여러 개 고를 수 있고 고르는 동안 열려 있다.
+private struct FacetPopover: View {
+    let allLabel: String
+    let facets: [PRLogic.Facet]
+    let selected: Set<String>
+    let toggle: (String) -> Void
+    let clear: () -> Void
+
+    /// 이름이 같은 저장소는 어느 제공자인지 붙여서 구분한다.
+    private func label(_ f: PRLogic.Facet) -> String {
+        guard let p = f.provider, facets.filter({ $0.label == f.label }).count > 1 else { return f.label }
+        return "\(f.label) · \(p == .github ? "GH" : "BB")"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                FacetRow(title: allLabel, count: nil, on: selected.isEmpty, action: clear)
+                ForEach(facets, id: \.key) { f in
+                    FacetRow(title: label(f), count: f.count, on: selected.contains(f.key)) { toggle(f.key) }
+                }
+            }
+            .padding(6)
+        }
+        .frame(minWidth: 190, maxHeight: 280)
+        .fixedSize(horizontal: true, vertical: false)
+        .themedPopover()
+    }
+}
+
+private struct FacetRow: View {
+    let title: String
+    let count: Int?
+    let on: Bool
+    let action: () -> Void
+    @Environment(\.atmAccent) private var accent
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(accent)
+                    .opacity(on ? 1 : 0).frame(width: 10)
+                Text(title).font(.system(size: 12, weight: on ? .semibold : .regular)).lineLimit(1)
+                    .foregroundStyle(count == 0 ? Color.secondary : Color.primary)
+                Spacer(minLength: 8)
+                if let count { Text("\(count)").font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary) }
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hover ? Color.primary.opacity(0.07) : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
     }
 }
 
@@ -286,7 +436,7 @@ private struct PRRow: View {
                 .padding(.horizontal, 5).padding(.vertical, 1).background(Capsule().fill(accent)).fixedSize() }
             if PRLogic.isStale(pr, now: now, days: staleDays) { pill("\(PRLogic.waitDays(pr, now: now))일째 대기", .red) }
             if pr.myReviewAt != nil {
-                pill("✓ 리뷰함", .secondary)
+                pill("✓ 리뷰함", .green)   // 회색은 잘 안 보여서 승인과 같은 초록
                 if PRLogic.hasNewCommitsSinceMyReview(pr) { pill("새 커밋", .orange) }
             }
         } else {
