@@ -1,0 +1,16 @@
+[
+  {
+    "id": "1001",
+    "spaceKey": "SHOP",
+    "title": "SHOP 배포 체크리스트",
+    "updated": "2026-10-19T04:00:00Z",
+    "url": "https://example.atlassian.net/wiki/spaces/SHOP/pages/1001"
+  },
+  {
+    "id": "1002",
+    "spaceKey": "SHOP",
+    "title": "주문·정산 도메인 용어 정리",
+    "updated": "2026-10-15T06:00:00Z",
+    "url": "https://example.atlassian.net/wiki/spaces/SHOP/pages/1002"
+  }
+]

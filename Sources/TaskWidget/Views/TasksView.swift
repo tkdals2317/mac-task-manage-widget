@@ -87,8 +87,10 @@ struct TasksView: View {
                     }
                     .buttonStyle(.plain)
                     Spacer()
-                    Button("비우기") { state.clearDone() }
-                        .controlSize(.mini)
+                    // 시스템 미니 버튼은 패널 테마와 따로 놀아서 다른 칩 버튼과 같은 모양으로
+                    Button { state.clearDone() } label: { AccentChip(icon: "trash", text: "비우기", style: .plain) }
+                        .buttonStyle(.plain)
+                        .help("완료한 할 일을 모두 지워요")
                 }
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)

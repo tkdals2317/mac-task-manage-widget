@@ -1,0 +1,176 @@
+[
+  {
+    "fixVersions": [
+      "SHOP_v2.3"
+    ],
+    "id": "SHOP-1234",
+    "priority": "High",
+    "status": "검토 중",
+    "statusCategory": "indeterminate",
+    "summary": "주문 취소 시 쿠폰 복원 처리",
+    "transitions": [
+      {
+        "id": "21",
+        "name": "진행 중",
+        "toCategory": "indeterminate",
+        "toName": "진행 중"
+      },
+      {
+        "id": "41",
+        "name": "완료",
+        "toCategory": "done",
+        "toName": "완료"
+      }
+    ],
+    "updated": "2026-10-20T00:40:00Z"
+  },
+  {
+    "fixVersions": [
+      "SHOP_v2.3"
+    ],
+    "id": "SHOP-1241",
+    "priority": "Highest",
+    "status": "진행 중",
+    "statusCategory": "indeterminate",
+    "summary": "장바구니 쿠폰 중복 적용 오류",
+    "transitions": [
+      {
+        "id": "11",
+        "name": "해야 할 일",
+        "toCategory": "new",
+        "toName": "해야 할 일"
+      },
+      {
+        "id": "31",
+        "name": "검토 중",
+        "toCategory": "indeterminate",
+        "toName": "검토 중"
+      }
+    ],
+    "updated": "2026-10-20T01:10:00Z"
+  },
+  {
+    "fixVersions": [
+      "SHOP_v2.3"
+    ],
+    "id": "SHOP-1229",
+    "priority": "High",
+    "status": "진행 중",
+    "statusCategory": "indeterminate",
+    "summary": "환불 금액 검증 로직 보완",
+    "transitions": [
+      {
+        "id": "11",
+        "name": "해야 할 일",
+        "toCategory": "new",
+        "toName": "해야 할 일"
+      },
+      {
+        "id": "31",
+        "name": "검토 중",
+        "toCategory": "indeterminate",
+        "toName": "검토 중"
+      }
+    ],
+    "updated": "2026-10-19T08:00:00Z"
+  },
+  {
+    "fixVersions": [
+      "SHOP_v2.4"
+    ],
+    "id": "SHOP-1250",
+    "priority": "Medium",
+    "status": "검토 중",
+    "statusCategory": "indeterminate",
+    "summary": "정산 배치 청크 크기 설정 분리",
+    "transitions": [
+      {
+        "id": "21",
+        "name": "진행 중",
+        "toCategory": "indeterminate",
+        "toName": "진행 중"
+      },
+      {
+        "id": "41",
+        "name": "완료",
+        "toCategory": "done",
+        "toName": "완료"
+      }
+    ],
+    "updated": "2026-10-19T06:30:00Z"
+  },
+  {
+    "fixVersions": [
+      "SHOP_v2.4"
+    ],
+    "id": "SHOP-1262",
+    "priority": "Medium",
+    "status": "해야 할 일",
+    "statusCategory": "new",
+    "summary": "관리자 콘솔 권한 그룹 편집 화면",
+    "transitions": [
+      {
+        "id": "21",
+        "name": "진행 중",
+        "toCategory": "indeterminate",
+        "toName": "진행 중"
+      }
+    ],
+    "updated": "2026-10-18T05:00:00Z"
+  },
+  {
+    "fixVersions": [
+      "SHOP_v2.4"
+    ],
+    "id": "SHOP-1263",
+    "priority": "Medium",
+    "status": "해야 할 일",
+    "statusCategory": "new",
+    "summary": "상품 목록 무한 스크롤 성능 개선",
+    "transitions": [
+      {
+        "id": "21",
+        "name": "진행 중",
+        "toCategory": "indeterminate",
+        "toName": "진행 중"
+      }
+    ],
+    "updated": "2026-10-17T04:00:00Z"
+  },
+  {
+    "fixVersions": [
+      "SHOP_v2.4"
+    ],
+    "id": "SHOP-1270",
+    "priority": "Low",
+    "status": "해야 할 일",
+    "statusCategory": "new",
+    "summary": "결제 수단 선택 컴포넌트 분리",
+    "transitions": [
+      {
+        "id": "21",
+        "name": "진행 중",
+        "toCategory": "indeterminate",
+        "toName": "진행 중"
+      }
+    ],
+    "updated": "2026-10-17T02:00:00Z"
+  },
+  {
+    "fixVersions": [],
+    "id": "SHOP-1275",
+    "priority": "Low",
+    "status": "해야 할 일",
+    "statusCategory": "new",
+    "summary": "운영 DB 슬로우 쿼리 모니터링 정리",
+    "transitions": [
+      {
+        "id": "21",
+        "name": "진행 중",
+        "toCategory": "indeterminate",
+        "toName": "진행 중"
+      }
+    ],
+    "updated": "2026-10-16T03:00:00Z"
+  }
+]

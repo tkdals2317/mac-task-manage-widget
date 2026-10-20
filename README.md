@@ -81,7 +81,7 @@ open ~/Applications/ATM.app
 
 **태그**
 
-<img src="docs/images/tag-popover.png" width="360" alt="태그 팝오버">
+<img src="docs/images/tag-popover.png" width="380" alt="태그 팝오버">
 
 <sub>할 일 오른쪽의 태그 영역을 누르면 그룹별 태그 선택 팝오버가 열린다. "중요도"는 하나만, "작업 종류"는 여러 개 고를 수 있다.</sub>
 
@@ -94,6 +94,10 @@ open ~/Applications/ATM.app
 ### 노트
 
 메모와 링크를 한 탭에 모은다.
+
+<img src="docs/images/panel-notes.png" width="360" alt="노트 탭">
+
+<sub>위는 메모(고정 · 잠금), 아래는 링크와 Confluence 별표 문서.</sub>
 
 **메모**
 
@@ -131,14 +135,14 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
    - 사용자 ID 는 Teleport 계정이다. DB 사용자(`developer`)가 아니다. OTP 주소를 넣으면 계정이 자동으로 채워진다.
    - OTP 키 아래 "현재 코드" 6자리가 휴대폰/확장의 OTP 와 같으면 키가 맞다.
 
-   <img src="docs/images/teleport-setup.png" width="420" alt="Teleport 첫 설정 1단계">
+   <img src="docs/images/teleport-setup.png" width="360" alt="Teleport 첫 설정 1단계">
 
 3. **다음** 을 누르면 실제로 로그인해 확인하고, 통과하면 비밀번호·OTP 키를 저장한다 (기본 키체인, 설정 > 창·일반 > 비밀 정보 저장 에서 파일로 바꿀 수 있다).
 4. **2/2 DB 선택** 에서 `tsh db ls` 로 불러온 DB 를 체크한다. 포트는 4306 부터 자동으로 채워지고(수정 가능, 겹치면 빨간색), 운영 DB 는 빨간 "운영" 표시가 붙고 기본으로 선택되지 않는다 (고르면 경고가 나온다). **N개 저장** 을 누른다.
 
 **사용**
 
-<img src="docs/images/teleport-tab.png" width="420" alt="Teleport 탭">
+<img src="docs/images/teleport-tab.png" width="360" alt="Teleport 탭">
 
 - **모두 연결 / 모두 끊기**, 또는 DB 별 토글로 켜고 끈다. 필요하면 저장된 비밀번호와 OTP 로 자동 로그인한다.
 - 토글과 점은 실제 상태를 보여준다: 초록 연결됨, 주황 연결 중, 회색 끊김, 빨강 실패(이유가 아래 줄에 나온다).
@@ -164,6 +168,10 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
 
 GitHub·Bitbucket 에서 나한테 온 **리뷰 요청**과 **내가 올린 PR** 을 모아 본다.
 
+<img src="docs/images/panel-pr.png" width="360" alt="PR 탭">
+
+<sub>리뷰 요청(대기 일수 · NEW · 리뷰함)과 내 PR(승인 n/m · 변경 요청, 리뷰어 동그라미).</sub>
+
 - **리뷰 요청**: 오래 기다린 것은 "N일째 대기"(기준은 설정에서), 새로 온 것은 NEW, 내가 리뷰한 뒤 새 커밋이 올라온 것은 "리뷰함 · 새 커밋"으로 표시된다.
 - **내 PR**: 승인 배지(✓ 승인 n/m · 승인 대기 · 변경 요청)와 리뷰어 동그라미(초록 승인, 빨강 변경 요청, 회색 대기)가 붙는다.
 - 행을 누르면 펼쳐져 리뷰어별 상태, 브랜치, 변경 규모를 보고 **열기 · 브랜치 복사 · 할 일로** 를 쓴다. 우클릭에는 체크아웃 명령 복사와 이 저장소 숨기기도 있다.
@@ -188,7 +196,7 @@ GitHub·Bitbucket 에서 나한테 온 **리뷰 요청**과 **내가 올린 PR**
 - 헤더의 버전 pill 로 **버전별 필터**를 건다 (× 로 해제).
 - 메뉴의 "버전별로 묶기"를 켜면 버전 그룹으로 표시된다. 선택은 재실행 후에도 유지된다.
 
-<img src="docs/images/jira-version-menu.png" width="340" alt="Jira 버전 메뉴">
+<img src="docs/images/jira-version-menu.png" width="360" alt="Jira 버전 메뉴">
 
 <sub>버전 pill 메뉴. 버전별 이슈 개수를 보고 필터를 고르거나 "버전별로 묶기"를 켠다.</sub>
 
@@ -213,29 +221,102 @@ GitHub·Bitbucket 에서 나한테 온 **리뷰 요청**과 **내가 올린 PR**
 
 ### 설정
 
-| 섹션 | 내용 |
-|---|---|
-| 외관 | 테마 색(완성 테마 12종 + 직접 조합: 배경 20·강조색 8), 투명도, 호버, 테마(시스템/라이트/다크), 글자 크기 |
-| 창·일반 | 항상 위, Spaces, 전역 단축키(기본 ⌃⌥Space, 원하는 조합으로 변경), 탭 켜고 끄기, 로그인 시 실행, 비밀 정보 저장 위치(키체인/파일) |
-| 태그 | 그룹/태그 관리, 색, 정렬 기준, 기본값 복원 |
-| Jira | 이메일·토큰, 연결 테스트, JQL |
-| 노트 | 잠금 비밀번호 만들기·변경·초기화, Touch ID 로 열기, Confluence 주소와 연결 확인 |
-| PR | GitHub(gh)·Bitbucket 연결, 볼 저장소, 클론 찾을 폴더, 알림, 오래 대기 기준, Draft 숨김, 새로고침 주기, 숨긴 저장소 |
-| 요약 | 생성 시각, 완료 알림, 요약 프롬프트, claude 경로 |
-| Claude 연동 | 활동 훅과 `/worklog` 스킬 설치·제거, 데이터/요약 폴더 열기 |
-| Teleport | 계정·DB 설정 다시 하기, 연결 확인 주기, 자동 재연결, teleport.json 열기 |
-| 정보 | 버전·빌드, 업데이트 확인, 설정 도우미 열기, 진단 정보 내보내기, 개발자 후원 |
+패널 맨 아래 ⚙ 를 누르면 열린다. 왼쪽 목록에서 화면을 고른다.
 
-<table>
-<tr>
-<td><img src="docs/images/settings-tags.png" width="300" alt="태그 설정"><br><sub>태그: 그룹별 하나만/여러 개, 정렬 기준, 태그 색과 순서.</sub></td>
-<td><img src="docs/images/settings-summary.png" width="300" alt="요약 설정"><br><sub>요약: 생성 시각과 요약 프롬프트. 프롬프트의 <code>{날짜}</code> 는 해당 날짜로 치환되고, 데이터는 자동 첨부된다.</sub></td>
-</tr>
-<tr>
-<td><img src="docs/images/settings-claude.png" width="300" alt="Claude 연동 설정"><br><sub>Claude 연동: 활동 훅과 /worklog 스킬의 설치 상태.</sub></td>
-<td><img src="docs/images/settings-about.png" width="300" alt="정보"><br><sub>정보: 버전, 업데이트 확인, 개발자 후원(카카오페이 QR).</sub></td>
-</tr>
-</table>
+| 화면 | 하는 일 |
+|---|---|
+| 외관 | 테마 색, 투명도, 라이트/다크, 글자 크기 |
+| 창·일반 | 항상 위, 전역 단축키, 탭 켜고 끄기, 로그인 시 실행, 비밀 정보 저장 위치 |
+| 태그 | 태그 그룹과 태그, 색, 정렬 기준 |
+| Jira | Atlassian 계정 연결, 갱신 주기, JQL |
+| 노트 | 잠금 비밀번호, Touch ID, Confluence 연결 |
+| PR | GitHub·Bitbucket 연결, 볼 저장소, 알림, 표시 옵션 |
+| 요약 | 생성 시각, 요약 프롬프트, claude CLI |
+| Claude 연동 | 활동 훅과 스킬 설치 |
+| Teleport | tsh 위치, 자동 연결, 다시 설정하기 |
+| 정보 | 버전, 업데이트, 설정 도우미, 진단 정보 |
+
+#### 외관
+
+<img src="docs/images/settings-appearance.png" width="480" alt="설정 > 외관">
+
+- **투명도**: 패널 바탕의 비침 정도. "마우스 올리면 불투명"을 켜면 쓰는 동안만 또렷해진다.
+- **테마 색**: 완성 테마 12종(미드나잇·오션·포레스트·피치 등) 중 고른다. **직접 조합**을 펼치면 배경 20가지와 강조색 8가지를 섞는다. 강조색은 버튼·배지·선택 표시·스크롤 막대에 쓰인다.
+- **테마**: 시스템을 따르거나 라이트/다크로 고정한다. **글자 크기**: 작게·보통·크게.
+
+#### 창 · 일반
+
+<img src="docs/images/settings-window.png" width="480" alt="설정 > 창 · 일반">
+
+- **창**: 항상 위, 모든 Spaces 에 표시, **전역 단축키**(기본 ⌃⌥Space, 눌러서 원하는 조합으로 바꾼다).
+- **탭**: 할 일·요약·노트·PR·Teleport 를 켜고 끈다. 하나만 켜면 탭 바가 숨는다.
+- **로그인 시 실행**.
+- **비밀 정보 저장**: 토큰·비밀번호를 **키체인**(권장)에 둘지 **파일**(`secrets.json`)에 둘지. 바꾸면 기존 값을 옮긴다.
+
+#### 태그
+
+<img src="docs/images/settings-tags.png" width="480" alt="설정 > 태그">
+
+- 그룹마다 "하나만"(같은 그룹에서 하나만 붙음) 또는 "여러 개"를 고르고, 한 그룹을 **정렬 기준**으로 정한다.
+- 태그 이름·색을 바꾸고, 끌어서 순서를 바꾸고, **＋ 태그 / ＋ 그룹 추가** 로 늘린다.
+- **태그 순서로 정렬**을 켜면 할 일이 정렬 기준 그룹의 태그 순서대로 놓인다. **기본값으로 되돌리기**로 처음 태그로 돌아간다.
+
+#### Jira
+
+<img src="docs/images/settings-jira.png" width="480" alt="설정 > Jira">
+
+- **URL**(예: `https://회사.atlassian.net`), **이메일**, **API 토큰**("토큰 발급 ↗"으로 만든다)을 넣고 **연결 테스트**.
+- **갱신 주기**(1·5·15분)와 **JQL**(기본: 내게 할당된 미완료 이슈). 비워 두면 기본값을 쓴다.
+
+#### 노트
+
+<img src="docs/images/settings-notes.png" width="480" alt="설정 > 노트">
+
+- **잠금 비밀번호**: 만들기·변경·초기화. 초기화하면 잠긴 메모는 지워진다.
+- **Touch ID 로 열기**: 켜면 잠긴 메모를 지문으로 연다 (메모 열쇠가 비밀 정보 저장 위치에 보관된다).
+- **Confluence**: 주소를 넣고 **연결 확인**. Jira 와 같은 Atlassian 토큰을 쓴다.
+
+#### PR
+
+<img src="docs/images/settings-pr.png" width="480" alt="설정 > PR">
+
+- **GitHub**: 켜면 `gh` 로그인 상태가 보인다. 로그인이 안 돼 있으면 할 명령을 알려 준다.
+- **Bitbucket**: 이메일·API 토큰 → **연결 확인** → 워크스페이스, **리뷰 요청 볼 저장소**, **클론 찾을 폴더**.
+- **알림**: 새 리뷰 요청 / 내 PR 승인(한 명씩) / 변경 요청 / 새 댓글·리뷰를 각각 켜고 끈다. macOS 에서 ATM 알림이 꺼져 있으면 여기 안내가 뜬다.
+- **표시**: 오래 대기 기준(1~7일), Draft PR 숨기기, 새로고침 주기, 숨긴 저장소 다시 보기.
+
+#### 요약
+
+<img src="docs/images/settings-summary.png" width="480" alt="설정 > 요약">
+
+- **생성 시각**(기본 18:00)과 **완료 알림**.
+- **요약 프롬프트**: 요약을 어떻게 쓸지 고친다. `{날짜}` 는 그날 날짜로 바뀌고, 일지·대화 기록·커밋은 자동으로 붙는다. **기본값으로 되돌리기**가 있다.
+- **Claude CLI**: 모델과 `claude` 경로. 경로를 못 찾으면 **자동 찾기**.
+
+#### Claude 연동
+
+<img src="docs/images/settings-claude.png" width="480" alt="설정 > Claude 연동">
+
+- **활동 훅**: Claude Code 대화를 요약 재료로 모은다. 상태 옆에 오늘 기록 수가 보이고, 경로가 어긋나면 **재설치**.
+- **/worklog 스킬**, **할 일 추가 스킬(atm-todo)**: 설치·제거. `~/.claude/settings.json` 은 백업한 뒤 고친다.
+- **데이터 폴더 열기 / 요약 폴더 열기**.
+
+#### Teleport
+
+<img src="docs/images/settings-teleport.png" width="480" alt="설정 > Teleport">
+
+- **tsh 경로**: 비우면 자동으로 찾는다. 설치 뒤 **다시 찾기**.
+- **ATM 시작 시 마지막에 켜 둔 DB 자동 연결**, **연결 확인 주기**(30초·1분·2분·5분).
+- **설정 다시 하기**(계정·DB 다시 고르기), **teleport.json 열기**(그룹 이름 등 직접 고치기).
+
+#### 정보
+
+<img src="docs/images/settings-about.png" width="480" alt="설정 > 정보">
+
+- 버전·빌드 날짜·소스 폴더, **업데이트 확인**과 **전체 업데이트 노트**.
+- **설정 도우미 열기**: 처음 설정 마법사를 지금 값이 채워진 채로 다시 연다.
+- **진단 정보 내보내기**: 문제가 생기면 바탕화면에 만들어지는 zip 을 개발자에게 전달한다 (비밀번호·토큰은 들어가지 않는다).
+- 개발자 후원.
 
 ## 업데이트
 
@@ -299,4 +380,5 @@ make run       # build/ATM.app 실행
 - 앱 아이콘: `swift scripts/make-icon.swift` 로 다시 생성한다 (`Resources/AppIcon.icns`).
 - 설계 문서: `docs/superpowers/specs/2026-10-02-task-widget-design.md`
 - 릴리스: `VERSION` 을 올리고(기능 추가 = minor, 버그 수정 = patch) `CHANGELOG.md` 맨 위에 `## <버전> — <날짜>` 섹션을 추가한다 (사용자 입장의 짧은 한글 항목). 같은 PR에 넣는다. 머지되면 GitHub Actions(`.github/workflows/release.yml`)가 `v<버전>` 태그와 GitHub Release 를 자동으로 만든다 (본문은 `scripts/release-notes.sh <버전>` 으로 뽑은 CHANGELOG 섹션).
+- README 스크린샷: `make app && scripts/screenshot-demo.sh` 로 가짜 데이터(`docs/demo/`)가 든 데모 앱을 따로 띄워 찍는다. 실제 데이터·설정·키체인은 건드리지 않고 네트워크도 쓰지 않는다 ([docs/demo/README.md](docs/demo/README.md)).
 - 릴리스 전 확인 목록: [docs/manual-test-checklist.md](docs/manual-test-checklist.md)

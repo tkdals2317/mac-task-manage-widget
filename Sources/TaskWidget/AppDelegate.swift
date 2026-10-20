@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 시작 10초 후 한 번, 이후 30분마다 업데이트 확인 (소스 폴더 정보가 없으면 checkForUpdates 가 무시)
         updateTask = Task { [state] in
+            guard !DemoFixtures.isOn else { return }
             try? await Task.sleep(nanoseconds: 10_000_000_000)
             while !Task.isCancelled {
                 await state.checkForUpdates()

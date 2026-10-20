@@ -76,7 +76,7 @@ final class AppState: ObservableObject {
 
     func checkForUpdates() async {
         let dir = buildInfo.sourceDir, ver = buildInfo.version
-        guard !dir.isEmpty, !checkingUpdates, !updating else { return }
+        guard !DemoFixtures.isOn, !dir.isEmpty, !checkingUpdates, !updating else { return }
         checkingUpdates = true
         lastUpdateCheckAt = Date()
         defer { checkingUpdates = false }
@@ -384,6 +384,15 @@ final class AppState: ObservableObject {
     }
 
     func refreshJira() async {
+        // 데모: 토큰·네트워크 없이 fixture 로 채운다.
+        if let issues = DemoFixtures.load("jira", as: [JiraIssue].self) {
+            jiraConfigured = true
+            jiraIssues = JiraClient.sortedForDisplay(issues)
+            jiraTruncated = false
+            jiraUpdatedAt = Date()
+            jiraError = nil
+            return
+        }
         let s = Settings.shared
         let token = s.jiraEmail.isEmpty ? nil : await jiraToken(for: s.jiraEmail)
         jiraConfigured = token != nil
@@ -428,6 +437,7 @@ final class AppState: ObservableObject {
 
     /// Jira 와 같은 이메일·토큰을 쓴다. 주소가 비어 있으면 아무것도 하지 않는다.
     func refreshConfluence() async {
+        if let pages = DemoFixtures.load("confluence", as: [StarredPage].self) { notes.setDemoStarred(pages); return }
         let s = Settings.shared
         guard !s.confluenceBaseURL.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         guard let url = Self.confluenceURL(s.confluenceBaseURL) else {
@@ -467,6 +477,7 @@ final class AppState: ObservableObject {
 
     /// 가능한 전환 목록. 실패하면 메시지를 담은 JiraError 를 던진다 (팝오버에서 인라인 표시).
     func loadTransitions(for key: String) async throws -> [JiraTransition] {
+        if DemoFixtures.isOn { return jiraIssues.first { $0.id == key }?.transitions ?? [] }
         guard let c = await jiraClient() else { throw JiraError.message("Jira 설정 필요") }
         do { return try await c.fetchTransitions(issueKey: key) }
         catch {
@@ -476,6 +487,7 @@ final class AppState: ObservableObject {
     }
 
     func transitionJira(_ key: String, to t: JiraTransition) async {
+        guard !DemoFixtures.isOn else { return }
         guard let c = await jiraClient(), !jiraBusyKeys.contains(key) else { return }
         jiraBusyKeys.insert(key)
         defer { jiraBusyKeys.remove(key) }

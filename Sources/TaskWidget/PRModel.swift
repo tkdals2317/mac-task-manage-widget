@@ -19,6 +19,12 @@ enum BitbucketStatus: Equatable {
     case error(String)
 }
 
+/// 데모 fixture(pr.json) 모양.
+private struct DemoPRData: Decodable {
+    var reviewRequests: [PullRequest]
+    var mine: [PullRequest]
+}
+
 /// PR 탭의 데이터. 두 제공자를 따로 받아 한쪽이 실패해도 그쪽의 직전 목록을 유지한다.
 @MainActor
 final class PRModel: ObservableObject {
@@ -95,6 +101,7 @@ final class PRModel: ObservableObject {
 
     /// gh 가 있고 로그인돼 있는지만 확인한다 (토큰은 읽자마자 버린다). force: "다시 확인" 때 gh 위치도 다시 찾는다.
     func probeGitHub(force: Bool = false) async {
+        guard !DemoFixtures.isOn else { return }
         guard let gh = await resolveGh(force: force) else { githubStatus = .ghMissing; return }
         let r = await Task.detached { () -> GitHubStatus in
             guard let t = GhCLI.token(path: gh) else { return .loggedOut }
@@ -184,6 +191,7 @@ final class PRModel: ObservableObject {
     func unapprove(_ pr: PullRequest) async { await act(pr, undo: true) }
 
     private func act(_ pr: PullRequest, undo: Bool) async {
+        guard !DemoFixtures.isOn else { return }
         guard !acting.contains(pr.id), !(undo && pr.provider == .github), !(pr.provider == .bitbucket && bbNoWrite && !undo) else { return }
         acting.insert(pr.id); actionError[pr.id] = nil
         defer { acting.remove(pr.id) }
@@ -238,6 +246,16 @@ final class PRModel: ObservableObject {
     }
 
     private func runRefresh(interactive: Bool, background: Bool) async {
+        // 데모: gh·Bitbucket·키체인·알림 없이 fixture 로 채운다.
+        if let f = DemoFixtures.load("pr", as: DemoPRData.self) {
+            ghRR = f.reviewRequests.filter { $0.provider == .github }; bbRR = f.reviewRequests.filter { $0.provider == .bitbucket }
+            ghMine = f.mine.filter { $0.provider == .github }; bbMine = f.mine.filter { $0.provider == .bitbucket }
+            githubStatus = .ok("haneul-kim"); bitbucketStatus = .ok("김하늘")
+            githubError = nil; bitbucketError = nil
+            lastRefresh = Date()
+            apply(succeeded: [])
+            return
+        }
         let s = Settings.shared
         guard s.prGitHubEnabled || s.prBitbucketEnabled else {
             // 둘 다 꺼짐: 목록·상태를 비워 배지도 지운다.

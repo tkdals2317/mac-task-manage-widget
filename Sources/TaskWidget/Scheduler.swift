@@ -15,6 +15,7 @@ final class Scheduler {
     }
 
     func start() {
+        guard !DemoFixtures.isOn else { return }  // 데모: 요약 자동 생성·알림 없음
         requestNotificationPermission()
         reschedule()
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
