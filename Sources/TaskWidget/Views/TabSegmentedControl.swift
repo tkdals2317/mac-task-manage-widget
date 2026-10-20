@@ -96,13 +96,14 @@ private struct SoftAccentTabBar: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.fontScale) private var scale
     @State private var hovered: String?
+    @Namespace private var pillNS
 
     var body: some View {
         let dark = scheme == .dark
         HStack(spacing: 2) {
             ForEach(items, id: \.id) { item in
                 let on = item.id == selection
-                Button { selection = item.id } label: {
+                Button { withAnimation(.snappy(duration: 0.25)) { selection = item.id } } label: {
                     HStack(spacing: 4) {
                         Text(item.title)
                             .font(.system(size: 12.5 * scale, weight: on ? .medium : .regular))
@@ -111,11 +112,15 @@ private struct SoftAccentTabBar: View {
                     }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(on ? accent.opacity(dark ? 0.28 : 0.18)
-                                         : (hovered == item.id ? Color.primary.opacity(0.06) : .clear))
-                        )
+                        .background {
+                            // 선택 표시는 한 몸으로 두어 다른 탭으로 미끄러져 가게 한다
+                            if on {
+                                RoundedRectangle(cornerRadius: 6).fill(accent.opacity(dark ? 0.28 : 0.18))
+                                    .matchedGeometryEffect(id: "tabPill", in: pillNS)
+                            } else if hovered == item.id {
+                                RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06))
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
