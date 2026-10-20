@@ -46,11 +46,17 @@ struct SummaryView: View {
             if editing != nil {
                 editor
             } else {
-                ScrollView {
-                    content
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                // 일간은 왼쪽, 주간은 오른쪽에 있다고 보고 전환 버튼처럼 옆으로 밀어 바꾼다
+                ZStack {
+                    ScrollView {
+                        content
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .id(weekly)
+                    .transition(.move(edge: weekly ? .trailing : .leading))
                 }
+                .clipped()
                 // 아래 버튼 줄을 가리지 않게 그 바로 위에 띄운다
                 .overlay(alignment: .bottom) { CopyToast().padding(.bottom, 8) }
             }

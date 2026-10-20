@@ -435,7 +435,7 @@ private struct PRRow: View {
                 .padding(.horizontal, 5).padding(.vertical, 1).background(Capsule().fill(accent)).fixedSize() }
             if PRLogic.isStale(pr, now: now, days: staleDays) { pill("\(PRLogic.waitDays(pr, now: now))일째 대기", .red) }
             if pr.myReviewAt != nil {
-                pill("✓ 리뷰함", .secondary)
+                pill("✓ 리뷰함", .green)   // 회색은 잘 안 보여서 승인과 같은 초록
                 if PRLogic.hasNewCommitsSinceMyReview(pr) { pill("새 커밋", .orange) }
             }
         } else {
