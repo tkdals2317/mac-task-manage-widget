@@ -1,0 +1,27 @@
+{
+  "proxy": "teleport.example.com:443",
+  "tunnels": [
+    {
+      "dbUser": "developer",
+      "name": "shop-dv",
+      "port": 4306
+    },
+    {
+      "dbUser": "developer",
+      "name": "shop-st",
+      "port": 4307
+    },
+    {
+      "dbUser": "developer",
+      "name": "order-dv",
+      "port": 4308
+    },
+    {
+      "dbUser": "readonly",
+      "group": "SHOP (운영)",
+      "name": "shop-pr",
+      "port": 4309
+    }
+  ],
+  "user": "demo"
+}

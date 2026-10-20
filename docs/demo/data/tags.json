@@ -1,0 +1,33 @@
+{
+  "groups": [
+    {
+      "id": "importance",
+      "name": "중요도",
+      "selection": "single",
+      "tags": [
+        {
+          "colorHex": "#E24B4A",
+          "id": "urgent",
+          "name": "긴급"
+        },
+        {
+          "colorHex": "#EF9F27",
+          "id": "high",
+          "name": "높음"
+        },
+        {
+          "colorHex": "#9A9A9A",
+          "id": "normal",
+          "name": "보통"
+        },
+        {
+          "colorHex": "#7896C8",
+          "id": "low",
+          "name": "낮음"
+        }
+      ]
+    }
+  ],
+  "sortGroupId": "importance",
+  "version": 2
+}

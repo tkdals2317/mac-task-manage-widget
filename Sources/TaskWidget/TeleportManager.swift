@@ -65,7 +65,8 @@ final class TeleportManager: ObservableObject {
 
     init() {
         config = TeleportConfig.load()
-        hasSecrets = TeleportSecrets.load() != nil
+        // 데모: 키체인을 읽지 않고, tsh 는 있는 것으로 보이게 하되 실제로 부르지 않는다.
+        hasSecrets = DemoFixtures.isOn ? true : TeleportSecrets.load() != nil
         pendingRestore = UserDefaults.standard.stringArray(forKey: SettingsKey.teleportWanted) ?? []
         locateTsh()
     }
@@ -85,12 +86,13 @@ final class TeleportManager: ObservableObject {
     }
 
     func locateTsh() {
+        if DemoFixtures.isOn { tshPath = "/usr/bin/false"; return }
         tshPath = TeleportTsh.locate(configured: Settings.shared.tshPath)
     }
 
     func reloadConfig() {
         config = TeleportConfig.load()
-        hasSecrets = TeleportSecrets.load() != nil
+        hasSecrets = DemoFixtures.isOn ? true : TeleportSecrets.load() != nil
         authFailed = false   // 비밀 정보를 다시 넣었을 수 있으니 자동 로그인을 다시 허용
     }
 
@@ -104,6 +106,7 @@ final class TeleportManager: ObservableObject {
     }
 
     func start() {
+        guard !DemoFixtures.isOn else { return }
         Task { await refreshStatus() }
         scheduleTimer()
         observers.append(NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -144,6 +147,7 @@ final class TeleportManager: ObservableObject {
     // MARK: - 로그인 상태
 
     func refreshStatus() async {
+        guard !DemoFixtures.isOn else { return }
         guard let tsh = tshPath else { validUntil = nil; return }
         let r = await Task.detached { ProcessRunner.run(executable: tsh, arguments: ["status", "--format=json"], timeout: 10) }.value
         validUntil = r.status == 0 ? TeleportTsh.parseSessionExpiry(json: Data(r.stdout.utf8)) : nil
@@ -152,6 +156,7 @@ final class TeleportManager: ObservableObject {
     /// 저장된 비밀번호/OTP 키로 로그인. 이미 유효하면 아무것도 안 한다.
     @discardableResult
     func ensureLoggedIn(force: Bool = false, kind: String = "connect") async -> Bool {
+        guard !DemoFixtures.isOn else { return false }
         if let t = loginTask { return await t.value }
         let t = Task { await self.performLogin(force: force, kind: kind) }
         loginTask = t
@@ -228,6 +233,7 @@ final class TeleportManager: ObservableObject {
 
     /// 사용자가 켠 터널. 이후 watchdog 이 살아 있게 유지한다.
     func connect(_ t: TeleportTunnel) async {
+        guard !DemoFixtures.isOn else { return }
         wanted.insert(t.name); failures[t.name] = 0; retryAt[t.name] = nil
         await open(t)
     }
@@ -300,6 +306,7 @@ final class TeleportManager: ObservableObject {
     func disconnect(_ t: TeleportTunnel) { wanted.remove(t.name); stop(t.name) }
 
     func connectAll() async {
+        guard !DemoFixtures.isOn else { return }
         guard await ensureLoggedIn() else { return }
         await withTaskGroup(of: Void.self) { g in
             for t in config.tunnels where state(t) != .connected { g.addTask { @MainActor in await self.connect(t) } }
@@ -308,6 +315,7 @@ final class TeleportManager: ObservableObject {
 
     /// ATM 시작 시: 지난번에 켜 둔 터널을 다시 연결한다 (로그인이 필요하면 자동 로그인).
     func restoreWanted(tabEnabled: Bool) async {
+        guard !DemoFixtures.isOn else { return }
         let saved = pendingRestore; pendingRestore = []
         guard tabEnabled, isConfigured, tshPath != nil else { return }
         let names = TeleportAutoConnect.namesToRestore(persisted: saved, configured: config.tunnels.map(\.name),
@@ -372,6 +380,7 @@ final class TeleportManager: ObservableObject {
 
     /// 터널 종료 + `tsh db logout` 각각 + `tsh logout` (Python 도구와 같은 순서).
     func disconnectAll() async {
+        guard !DemoFixtures.isOn else { return }
         let names = config.tunnels.map(\.name)
         wanted.removeAll()
         for n in procs.keys { stop(n) }

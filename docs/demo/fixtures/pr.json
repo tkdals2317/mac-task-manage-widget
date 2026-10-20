@@ -1,0 +1,229 @@
+{
+  "mine": [
+    {
+      "additions": 76,
+      "author": "김하늘",
+      "changedFiles": 4,
+      "commentCount": 4,
+      "createdAt": "2026-10-17T02:00:00Z",
+      "deletions": 12,
+      "id": "github:shop-team/shop-api#409",
+      "isDraft": false,
+      "number": 409,
+      "provider": "github",
+      "recentActivity": [],
+      "repo": "shop-api",
+      "reviewRequested": false,
+      "reviewers": [
+        {
+          "at": "2026-10-19T05:00:00Z",
+          "name": "이도윤",
+          "state": "approved"
+        },
+        {
+          "at": "2026-10-19T08:00:00Z",
+          "name": "박서준",
+          "state": "approved"
+        }
+      ],
+      "sourceBranch": "feature/SHOP-1229-refund-check",
+      "targetBranch": "develop",
+      "title": "환불 금액 검증 로직 보완",
+      "updatedAt": "2026-10-19T08:00:00Z",
+      "url": "https://github.com/shop-team/shop-api/pull/409"
+    },
+    {
+      "additions": null,
+      "author": "김하늘",
+      "changedFiles": null,
+      "commentCount": 0,
+      "createdAt": "2026-10-19T07:00:00Z",
+      "deletions": null,
+      "id": "bitbucket:shop-team/order-batch#91",
+      "isDraft": false,
+      "number": 91,
+      "provider": "bitbucket",
+      "recentActivity": [],
+      "repo": "order-batch",
+      "reviewRequested": false,
+      "reviewers": [
+        {
+          "name": "최유나",
+          "state": "pending"
+        }
+      ],
+      "sourceBranch": "feature/settlement-csv",
+      "targetBranch": "develop",
+      "title": "정산 결과 CSV 내보내기 추가",
+      "updatedAt": "2026-10-19T07:00:00Z",
+      "url": "https://bitbucket.org/shop-team/order-batch/pull-requests/91"
+    },
+    {
+      "additions": 132,
+      "author": "김하늘",
+      "changedFiles": 7,
+      "commentCount": 6,
+      "createdAt": "2026-10-16T03:00:00Z",
+      "deletions": 40,
+      "id": "github:shop-team/shop-web#301",
+      "isDraft": false,
+      "number": 301,
+      "provider": "github",
+      "recentActivity": [
+        {
+          "author": "박서준",
+          "id": "c1"
+        }
+      ],
+      "repo": "shop-web",
+      "reviewRequested": false,
+      "reviewers": [
+        {
+          "at": "2026-10-19T23:30:00Z",
+          "name": "박서준",
+          "state": "changesRequested"
+        }
+      ],
+      "sourceBranch": "feature/cart-coupon-input",
+      "targetBranch": "develop",
+      "title": "장바구니 쿠폰 입력창 개선",
+      "updatedAt": "2026-10-20T00:00:00Z",
+      "url": "https://github.com/shop-team/shop-web/pull/301"
+    }
+  ],
+  "reviewRequests": [
+    {
+      "additions": 120,
+      "author": "이도윤",
+      "changedFiles": 6,
+      "commentCount": 0,
+      "createdAt": "2026-10-20T00:10:00Z",
+      "deletions": 18,
+      "id": "github:shop-team/shop-api#412",
+      "isDraft": false,
+      "lastCommitAt": "2026-10-20T00:05:00Z",
+      "number": 412,
+      "provider": "github",
+      "recentActivity": [],
+      "repo": "shop-api",
+      "reviewRequested": true,
+      "reviewers": [
+        {
+          "name": "haneul-kim",
+          "state": "pending"
+        }
+      ],
+      "sourceBranch": "feature/SHOP-1234-coupon-restore",
+      "targetBranch": "develop",
+      "title": "주문 취소 시 쿠폰 복원 처리",
+      "updatedAt": "2026-10-20T00:30:00Z",
+      "url": "https://github.com/shop-team/shop-api/pull/412"
+    },
+    {
+      "additions": null,
+      "author": "박서준",
+      "changedFiles": null,
+      "commentCount": 2,
+      "createdAt": "2026-10-14T02:00:00Z",
+      "deletions": null,
+      "id": "bitbucket:shop-team/order-batch#88",
+      "isDraft": false,
+      "number": 88,
+      "provider": "bitbucket",
+      "recentActivity": [],
+      "repo": "order-batch",
+      "reviewRequested": true,
+      "reviewers": [
+        {
+          "name": "김하늘",
+          "state": "pending"
+        }
+      ],
+      "sourceBranch": "feature/SHOP-1250-chunk-size",
+      "targetBranch": "develop",
+      "title": "정산 배치 청크 크기 설정 분리",
+      "updatedAt": "2026-10-15T05:00:00Z",
+      "url": "https://bitbucket.org/shop-team/order-batch/pull-requests/88"
+    },
+    {
+      "additions": 210,
+      "author": "최유나",
+      "changedFiles": 9,
+      "commentCount": 3,
+      "createdAt": "2026-10-18T03:00:00Z",
+      "deletions": 64,
+      "id": "github:shop-team/shop-web#305",
+      "isDraft": false,
+      "lastCommitAt": "2026-10-18T09:00:00Z",
+      "myReviewAt": "2026-10-19T05:00:00Z",
+      "number": 305,
+      "provider": "github",
+      "recentActivity": [],
+      "repo": "shop-web",
+      "reviewRequested": true,
+      "reviewers": [
+        {
+          "at": "2026-10-19T05:00:00Z",
+          "name": "haneul-kim",
+          "state": "commented"
+        }
+      ],
+      "sourceBranch": "feature/infinite-scroll",
+      "targetBranch": "develop",
+      "title": "상품 목록 무한 스크롤 개선",
+      "updatedAt": "2026-10-19T06:00:00Z",
+      "url": "https://github.com/shop-team/shop-web/pull/305"
+    },
+    {
+      "additions": 540,
+      "author": "이도윤",
+      "changedFiles": 14,
+      "commentCount": 5,
+      "createdAt": "2026-10-16T04:00:00Z",
+      "deletions": 32,
+      "id": "github:shop-team/admin-console#77",
+      "isDraft": false,
+      "lastCommitAt": "2026-10-19T06:00:00Z",
+      "myReviewAt": "2026-10-17T02:00:00Z",
+      "number": 77,
+      "provider": "github",
+      "recentActivity": [],
+      "repo": "admin-console",
+      "reviewRequested": true,
+      "reviewers": [
+        {
+          "at": "2026-10-17T02:00:00Z",
+          "name": "haneul-kim",
+          "state": "commented"
+        }
+      ],
+      "sourceBranch": "feature/role-group-editor",
+      "targetBranch": "develop",
+      "title": "권한 그룹 편집 화면 추가",
+      "updatedAt": "2026-10-19T06:00:00Z",
+      "url": "https://github.com/shop-team/admin-console/pull/77"
+    },
+    {
+      "additions": 88,
+      "author": "최유나",
+      "changedFiles": 5,
+      "commentCount": 0,
+      "createdAt": "2026-10-19T04:00:00Z",
+      "deletions": 41,
+      "id": "github:shop-team/shop-web#318",
+      "isDraft": true,
+      "lastCommitAt": "2026-10-19T09:00:00Z",
+      "number": 318,
+      "provider": "github",
+      "recentActivity": [],
+      "repo": "shop-web",
+      "reviewRequested": true,
+      "reviewers": [],
+      "sourceBranch": "wip/payment-method-select",
+      "targetBranch": "develop",
+      "title": "WIP: 결제 수단 선택 컴포넌트 분리",
+      "updatedAt": "2026-10-19T09:00:00Z",
+      "url": "https://github.com/shop-team/shop-web/pull/318"
+    }
+  ]
+}

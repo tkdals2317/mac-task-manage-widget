@@ -1,8 +1,12 @@
 import Foundation
 
 public enum Paths {
-    public static var dataDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    public static var dataDir: URL { dataDir(env: ProcessInfo.processInfo.environment) }
+
+    /// `ATM_DATA_DIR` 가 있으면 그 폴더 (스크린샷 데모용), 없으면 Application Support/TaskWidget.
+    static func dataDir(env: [String: String]) -> URL {
+        if let p = env["ATM_DATA_DIR"], !p.isEmpty { return URL(fileURLWithPath: p, isDirectory: true) }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("TaskWidget", isDirectory: true)
     }
     public static var todosFile: URL { dataDir.appendingPathComponent("todos.json") }

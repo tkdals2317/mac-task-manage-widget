@@ -1,6 +1,6 @@
 import Foundation
 
-public struct StarredPage: Identifiable, Equatable {
+public struct StarredPage: Identifiable, Equatable, Codable {
     public let id: String
     public let title: String
     public let spaceKey: String

@@ -346,6 +346,7 @@ final class NotesModel: ObservableObject {
 
     /// 페이지 제목을 받아 이름이 아직 placeholder 면 바꾼다 (그 사이 사용자가 이름을 바꿨으면 건드리지 않는다).
     private func fetchTitle(_ id: UUID, _ url: URL, placeholder: String) {
+        guard !DemoFixtures.isOn else { return }
         Task { [weak self] in
             guard let title = await LinkTitle.fetch(url) else { return }
             guard let self, let cur = self.data.links.first(where: { $0.id == id }), cur.title == placeholder else { return }
@@ -396,6 +397,13 @@ final class NotesModel: ObservableObject {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             starredError = (error as? ConfluenceError)?.userMessage ?? error.localizedDescription
         }
+    }
+
+    /// 데모 fixture 의 별표 문서.
+    func setDemoStarred(_ pages: [StarredPage]) {
+        starred = pages
+        starredError = nil
+        starredUpdatedAt = Date()
     }
 
     func setConfluenceError(_ message: String) { starredError = message }
