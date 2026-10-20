@@ -175,9 +175,8 @@ private struct NotesBody: View {
 
 // MARK: - 링크 줄
 
-private func copyToPasteboard(_ s: String) {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(s, forType: .string)
+@MainActor private func copyLink(_ s: String) {
+    CopyFeedback.shared.copy(s, message: "링크를 복사했어요")
 }
 
 /// 링크 줄 공통 모양: 왼쪽 출처 아이콘 상자 + 한 줄 제목 + 오른쪽 흐린 출처. 직접 저장한 링크와 Confluence 문서가 같은 모양.
@@ -245,7 +244,7 @@ private struct LinkRow: View {
         let host = URL(string: link.url)?.host
         LinkLine(icon: LinkSiteIcon.icon(for: host), tint: .secondary, title: link.title, source: host ?? link.url) { _ in
             HStack(spacing: 7) {
-                hoverButton("doc.on.doc", help: "주소 복사") { copyToPasteboard(link.url) }
+                hoverButton("doc.on.doc", help: "주소 복사") { copyLink(link.url) }
                 hoverButton("pencil", help: "수정") { editing = true }
                 hoverButton("xmark", help: "삭제", bold: true) { notes.deleteLink(link.id) }
             }
@@ -256,18 +255,18 @@ private struct LinkRow: View {
         }
         .contextMenu {
             Button("열기") { open() }
-            Button("주소 복사") { copyToPasteboard(link.url) }
+            Button("주소 복사") { copyLink(link.url) }
             Button("수정…") { editing = true }
             Divider()
             Button("삭제", role: .destructive) { notes.deleteLink(link.id) }
         }
     }
 
-    private func hoverButton(_ icon: String, help: String, bold: Bool = false, _ action: @escaping () -> Void) -> some View {
+    private func hoverButton(_ icon: String, help: String, bold: Bool = false, tint: Color = .secondary, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 9.5 * scale, weight: bold ? .bold : .regular))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(tint)
         }
         .buttonStyle(.plain)
         .help(help)
@@ -323,7 +322,7 @@ private struct ConfluenceRow: View {
                 if let d = page.updated {
                     Text(Self.agoText(d)).font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
                 }
-                Button { copyToPasteboard(page.url.absoluteString) } label: {
+                Button { copyLink(page.url.absoluteString) } label: {
                     Image(systemName: "doc.on.doc").font(.system(size: 9.5 * scale)).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -333,7 +332,7 @@ private struct ConfluenceRow: View {
         .onTapGesture { NSWorkspace.shared.open(page.url) }
         .contextMenu {
             Button("열기") { NSWorkspace.shared.open(page.url) }
-            Button("주소 복사") { copyToPasteboard(page.url.absoluteString) }
+            Button("주소 복사") { copyLink(page.url.absoluteString) }
         }
     }
 

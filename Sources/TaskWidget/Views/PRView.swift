@@ -362,8 +362,8 @@ private struct PRRow: View {
             HStack(spacing: 6) {
                 Button { model.open(pr) } label: { AccentChip(icon: "arrow.up.right.square", text: "열기", style: .solid) }.buttonStyle(.plain)
                 if review { approveControls }
-                Button { model.copyBranch(pr); flash("branch") } label: {
-                    AccentChip(icon: "doc.on.doc", text: copied == "branch" ? "복사됨" : "브랜치 복사", style: .soft)
+                Button { model.copyBranch(pr) } label: {
+                    AccentChip(icon: "doc.on.doc", text: "브랜치 복사", style: .soft)
                 }.buttonStyle(.plain)
                 Button { sendToTodo(); flash("todo") } label: {
                     AccentChip(icon: "checkmark.square", text: copied == "todo" ? "추가됨" : "할 일로", style: .soft)

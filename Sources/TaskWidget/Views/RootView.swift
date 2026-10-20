@@ -28,6 +28,8 @@ struct RootView: View {
             }
             content(for: current)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // 요약 탭은 자기 버튼 줄 위에 따로 띄운다
+                .overlay(alignment: .bottom) { if current != "summary" { CopyToast().padding(.bottom, 8) } }
             Divider()
             HStack {
                 Spacer()
