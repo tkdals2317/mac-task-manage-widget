@@ -215,3 +215,30 @@ final class SummaryEditTests: XCTestCase {
         XCTAssertNil(SummaryEdits.editedAt("a.md", defaults: d))
     }
 }
+
+final class SummaryTitleTests: XCTestCase {
+    private func d(_ s: String) -> Date {
+        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.timeZone = TimeZone(identifier: "Asia/Seoul"); f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: s)!
+    }
+
+    func testWeekTitleCountsByThursday() throws {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        let svc = SummaryService(calendar: cal) { _ in "" }
+        let w = svc.weekTitle(containing: d("2026-10-20"), now: d("2026-10-20"))
+        XCTAssertEqual(w.title, "10월 4주차")
+        XCTAssertEqual(w.range, "10/19(월) ~ 10/25(일)")
+        // 10/26~11/1 주: 목요일 10/29 → 10월 5주차
+        XCTAssertEqual(svc.weekTitle(containing: d("2026-11-01"), now: d("2026-10-20")).title, "10월 5주차")
+        // 11/2~11/8: 목요일 11/5 → 11월 1주차
+        XCTAssertEqual(svc.weekTitle(containing: d("2026-11-02"), now: d("2026-10-20")).title, "11월 1주차")
+        XCTAssertEqual(svc.weekTitle(containing: d("2025-10-20"), now: d("2026-10-20")).title, "2025년 10월 4주차")
+    }
+
+    func testDayTitle() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        let svc = SummaryService(calendar: cal) { _ in "" }
+        XCTAssertEqual(svc.dayTitle(d("2026-10-20"), now: d("2026-10-20")), "10월 20일 (화)")
+        XCTAssertEqual(svc.dayTitle(d("2025-12-31"), now: d("2026-10-20")), "2025년 12월 31일 (수)")
+    }
+}
