@@ -12,6 +12,7 @@ struct SummaryView: View {
     @State private var editing: Editing?
     @State private var draft = ""
     @FocusState private var focused: Bool
+    @Namespace private var modeNS
     @State private var confirmDiscard = false
     @State private var confirmRegenerate = false
 
@@ -98,14 +99,17 @@ struct SummaryView: View {
 
     /// 노트 링크 필터와 같은 모양: 선택은 강조색 알약 + 흰 글씨, 나머지는 옅은 알약.
     private func modeChip(_ title: String, _ value: Bool) -> some View {
-        Button { weekly = value } label: {
+        Button { withAnimation(.snappy(duration: 0.25)) { weekly = value } } label: {
             Text(title)
                 .font(.system(size: 12 * scale, weight: weekly == value ? .semibold : .regular))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
                 .foregroundStyle(weekly == value ? Color.white : Color.secondary)
-                .background(Capsule().fill(weekly == value ? accent : Color.clear))
+                .background {
+                    // 선택 표시가 다른 칸으로 미끄러져 가게 한 몸으로 둔다
+                    if weekly == value { Capsule().fill(accent).matchedGeometryEffect(id: "modePill", in: modeNS) }
+                }
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
