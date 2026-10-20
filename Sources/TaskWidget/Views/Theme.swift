@@ -167,7 +167,8 @@ extension View {
 private struct ThemedScrollbarModifier: ViewModifier {
     @Environment(\.atmAccent) private var accent
     func body(content: Content) -> some View {
-        content.background(ScrollerHook(color: NSColor(accent)))
+        // 시스템 막대는 SwiftUI 쪽에서 숨겨야 한다 (NSScrollView 에서만 끄면 갱신 때 다시 켜진다). .hidden 은 "항상 보기" 설정이면 무시돼서 .never.
+        content.scrollIndicators(.never).background(ScrollerHook(color: NSColor(accent)))
     }
 }
 
