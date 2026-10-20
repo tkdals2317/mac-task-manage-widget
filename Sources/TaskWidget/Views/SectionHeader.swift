@@ -3,13 +3,16 @@ import SwiftUI
 struct SectionHeader<Trailing: View>: View {
     let title: String
     let count: Int
+    /// 필터로 줄었을 때 "4/14" 처럼 보일 전체 개수
+    var total: Int? = nil
     @Binding var collapsed: Bool
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.fontScale) private var scale
 
-    init(title: String, count: Int, collapsed: Binding<Bool>, @ViewBuilder trailing: @escaping () -> Trailing) {
+    init(title: String, count: Int, total: Int? = nil, collapsed: Binding<Bool>, @ViewBuilder trailing: @escaping () -> Trailing) {
         self.title = title
         self.count = count
+        self.total = total
         self._collapsed = collapsed
         self.trailing = trailing
     }
@@ -23,7 +26,7 @@ struct SectionHeader<Trailing: View>: View {
                     Image(systemName: collapsed ? "chevron.right" : "chevron.down")
                         .font(.system(size: 9 * scale, weight: .semibold))
                     Text(title).font(.system(size: 11 * scale, weight: .semibold))
-                    Text("\(count)").font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                    Text(total.map { "\(count)/\($0)" } ?? "\(count)").font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
             }

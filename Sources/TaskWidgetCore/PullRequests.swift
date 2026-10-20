@@ -241,6 +241,80 @@ public enum PRLogic {
         String(id.prefix(while: { $0 != "#" }))
     }
 
+    /// 리뷰 요청 필터의 한 가지 값 (상태·저장소·사람)과 그 값의 PR 개수.
+    public struct Facet: Equatable, Sendable {
+        public var key: String
+        public var label: String
+        /// 저장소 값만. 같은 이름 저장소를 구분하는 표시에 쓴다.
+        public var provider: PRProvider?
+        public var count: Int
+    }
+    public enum FacetKind: Sendable { case status, repo, author }
+
+    /// 내 리뷰 진행 상태. 칩에는 짧은 이름(short), 팝오버에는 label 을 쓴다.
+    public enum ReviewStatus: String, CaseIterable, Sendable {
+        case unreviewed, newCommits, reviewed
+        public var label: String {
+            switch self {
+            case .unreviewed: return "아직 리뷰 안 함"
+            case .newCommits: return "리뷰함 · 새 커밋"
+            case .reviewed: return "리뷰함"
+            }
+        }
+        public var short: String {
+            switch self {
+            case .unreviewed: return "안 함"
+            case .newCommits: return "새 커밋"
+            case .reviewed: return "리뷰함"
+            }
+        }
+    }
+
+    /// Bitbucket 은 lastCommitAt 이 없을 수 있어 새 커밋을 못 알아채고 "리뷰함" 이 된다.
+    public static func reviewStatus(_ pr: PullRequest) -> ReviewStatus {
+        if pr.myReviewAt == nil { return .unreviewed }
+        return hasNewCommitsSinceMyReview(pr) ? .newCommits : .reviewed
+    }
+
+    /// 고른 상태(rawValue)·저장소(repoKey)·사람(author) 으로 거른다. 빈 집합은 "전체". 세 차원은 AND.
+    public static func filterReviews(_ prs: [PullRequest], states: Set<String> = [], repos: Set<String>, authors: Set<String>) -> [PullRequest] {
+        prs.filter {
+            (states.isEmpty || states.contains(reviewStatus($0).rawValue))
+                && (repos.isEmpty || repos.contains(repoKey($0.id)))
+                && (authors.isEmpty || authors.contains($0.author))
+        }
+    }
+
+    /// 팝오버에 보일 값과 개수. 개수는 다른 차원의 선택만 적용하고 이 차원의 선택은 무시해서,
+    /// 하나 골랐다고 나머지 값이 사라지지 않게 한다. 상태는 고정 순서, 나머지는 개수 내림차순.
+    /// 목록에 없는 선택값은 0개로 맨 아래에 남겨 풀 수 있게 한다.
+    public static func facets(_ prs: [PullRequest], kind: FacetKind, states: Set<String> = [], repos: Set<String>, authors: Set<String>) -> [Facet] {
+        let base = filterReviews(prs, states: kind == .status ? [] : states,
+                                 repos: kind == .repo ? [] : repos, authors: kind == .author ? [] : authors)
+        if kind == .status {
+            return ReviewStatus.allCases.map { st in
+                Facet(key: st.rawValue, label: st.label, provider: nil, count: base.filter { reviewStatus($0) == st }.count)
+            }
+        }
+        var map: [String: Facet] = [:]
+        for pr in base {
+            let key = kind == .repo ? repoKey(pr.id) : pr.author
+            if map[key] == nil {
+                map[key] = Facet(key: key, label: kind == .repo ? pr.repo : pr.author,
+                                 provider: kind == .repo ? pr.provider : nil, count: 0)
+            }
+            map[key]?.count += 1
+        }
+        let live = map.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+        let selected = kind == .repo ? repos : authors
+        let gone = selected.subtracting(map.keys).sorted().map { key -> Facet in
+            kind == .repo
+                ? Facet(key: key, label: String(key.split(separator: "/").last ?? Substring(key)), provider: provider(of: key), count: 0)
+                : Facet(key: key, label: key, provider: nil, count: 0)
+        }
+        return live + gone
+    }
+
     static let activityCap = 50
     /// 직전 상태 was 와 비교해 아직 못 본 다른 사람의 댓글·리뷰. was 가 없으면(처음 보는 PR) 이미 있던 것으로 보고 빈 배열.
     static func newActivity(_ pr: PullRequest, _ was: PRMineState?) -> [PRActivity] {

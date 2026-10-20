@@ -199,6 +199,75 @@ final class PRLogicTests: XCTestCase {
         XCTAssertEqual(PRLogic.relative(now.addingTimeInterval(-86400 * 3), now: now), "3일 전")
         XCTAssertEqual(PRLogic.todoTitle(pr("a"), isReviewRequest: true), "[PR 리뷰] t")
     }
+
+    // MARK: 리뷰 요청 필터
+
+    func rpr(_ id: String, repo: String, author: String, provider: PRProvider = .github) -> PullRequest {
+        PullRequest(id: id, provider: provider, repo: repo, number: 1, title: "t", url: "u", author: author,
+                    createdAt: day(1), updatedAt: day(1))
+    }
+
+    var reviewList: [PullRequest] {
+        [rpr("github:o/a#1", repo: "a", author: "kim"),
+         rpr("github:o/a#2", repo: "a", author: "lee"),
+         rpr("github:o/b#3", repo: "b", author: "kim"),
+         rpr("bitbucket:w/a#4", repo: "a", author: "kim", provider: .bitbucket)]
+    }
+
+    func testFilterReviews() {
+        let l = reviewList
+        XCTAssertEqual(PRLogic.filterReviews(l, repos: [], authors: []).count, 4)
+        XCTAssertEqual(PRLogic.filterReviews(l, repos: ["github:o/a"], authors: []).map(\.id), ["github:o/a#1", "github:o/a#2"])
+        XCTAssertEqual(PRLogic.filterReviews(l, repos: [], authors: ["lee"]).map(\.id), ["github:o/a#2"])
+        XCTAssertEqual(PRLogic.filterReviews(l, repos: ["github:o/a", "github:o/b"], authors: ["kim"]).map(\.id), ["github:o/a#1", "github:o/b#3"])
+        XCTAssertTrue(PRLogic.filterReviews(l, repos: ["github:o/zzz"], authors: []).isEmpty)
+    }
+
+    func testFacetsIgnoreOwnDimensionButApplyOther() {
+        let l = reviewList
+        // 같은 이름 a 가 제공자별로 따로 집계된다. 개수 내림차순 → 이름순.
+        let repos = PRLogic.facets(l, kind: .repo, repos: [], authors: [])
+        XCTAssertEqual(repos.map(\.key), ["github:o/a", "bitbucket:w/a", "github:o/b"])
+        XCTAssertEqual(repos.map(\.count), [2, 1, 1])
+        // 저장소를 골라도 저장소 목록은 그대로, 사람 목록은 그 저장소 기준
+        let sel: Set<String> = ["github:o/b"]
+        XCTAssertEqual(PRLogic.facets(l, kind: .repo, repos: sel, authors: []).map(\.count), [2, 1, 1])
+        XCTAssertEqual(PRLogic.facets(l, kind: .author, repos: sel, authors: []).map(\.key), ["kim"])
+        // 사람 kim 을 고르면 저장소 개수에서 lee 의 PR 이 빠진다
+        XCTAssertEqual(PRLogic.facets(l, kind: .repo, repos: [], authors: ["kim"]).map(\.count), [1, 1, 1])
+    }
+
+    func testReviewStatusClassifier() {
+        XCTAssertEqual(PRLogic.reviewStatus(pr("a")), .unreviewed)
+        XCTAssertEqual(PRLogic.reviewStatus(pr("a", myReview: day(2), lastCommit: day(1))), .newCommits)
+        XCTAssertEqual(PRLogic.reviewStatus(pr("a", myReview: day(1), lastCommit: day(2))), .reviewed)
+        // Bitbucket 처럼 마지막 커밋 시각을 모르면 "리뷰함"
+        XCTAssertEqual(PRLogic.reviewStatus(pr("a", myReview: day(1), lastCommit: nil)), .reviewed)
+    }
+
+    func testStatusFilterAndFacets() {
+        let l = [pr("github:o/a#1"),
+                 pr("github:o/a#2", myReview: day(2), lastCommit: day(1)),
+                 pr("github:o/b#3", myReview: day(1), lastCommit: day(2)),
+                 pr("github:o/b#4")]
+        XCTAssertEqual(PRLogic.filterReviews(l, states: ["unreviewed"], repos: [], authors: []).map(\.id), ["github:o/a#1", "github:o/b#4"])
+        XCTAssertEqual(PRLogic.filterReviews(l, states: ["unreviewed", "reviewed"], repos: ["github:o/b"], authors: []).map(\.id), ["github:o/b#3", "github:o/b#4"])
+        // 고정 순서, 자기 차원 선택은 무시
+        let st = PRLogic.facets(l, kind: .status, states: ["reviewed"], repos: [], authors: [])
+        XCTAssertEqual(st.map(\.key), ["unreviewed", "newCommits", "reviewed"])
+        XCTAssertEqual(st.map(\.count), [2, 1, 1])
+        // 다른 차원의 선택은 적용
+        XCTAssertEqual(PRLogic.facets(l, kind: .status, repos: ["github:o/b"], authors: []).map(\.count), [1, 0, 1])
+        // 상태 선택이 저장소 개수에 반영
+        XCTAssertEqual(PRLogic.facets(l, kind: .repo, states: ["unreviewed"], repos: [], authors: []).map(\.count), [1, 1])
+    }
+
+    func testFacetsKeepMissingSelectionAtBottom() {
+        let f = PRLogic.facets(reviewList, kind: .repo, repos: ["github:o/gone"], authors: [])
+        XCTAssertEqual(f.last, PRLogic.Facet(key: "github:o/gone", label: "gone", provider: .github, count: 0))
+        let a = PRLogic.facets(reviewList, kind: .author, repos: [], authors: ["park"])
+        XCTAssertEqual(a.last, PRLogic.Facet(key: "park", label: "park", provider: nil, count: 0))
+    }
 }
 
 /// 승인(쓰기) 관련. 요청을 만들기만 하고 네트워크는 타지 않는다.

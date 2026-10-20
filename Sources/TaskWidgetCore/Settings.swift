@@ -60,6 +60,9 @@ public enum SettingsKey {
     public static let prSeenIDs = "prSeenIDs"
     public static let prLastSnapshot = "prLastSnapshot"
     public static let prFilter = "prFilter"
+    public static let prReviewStateFilter = "prReviewStateFilter"
+    public static let prReviewRepoFilter = "prReviewRepoFilter"
+    public static let prReviewAuthorFilter = "prReviewAuthorFilter"
     public static let prReviewCollapsed = "prReviewCollapsed"
     public static let prMineCollapsed = "prMineCollapsed"
 }
