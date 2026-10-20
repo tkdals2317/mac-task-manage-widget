@@ -163,46 +163,52 @@ struct SummaryView: View {
         .padding(.vertical, 6)
     }
 
+    /// 버튼과 생성 시각을 한 줄에 둔다. 시각 줄이 따로 있으면 요약이 있을 때만 줄이 늘어 버튼 높이가 들쭉날쭉했다.
     private var viewFooter: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                if shown != nil && !state.summaryGenerating {
-                    chip("pencil", "수정") { startEdit() }
-                        .keyboardShortcut("e", modifiers: .command)
-                }
-                chip("doc.on.doc", "복사") { copy() }
-                    .disabled(currentMarkdown == nil)
-                chip("arrow.clockwise", shown == nil ? "생성" : "다시 생성") {
-                    if editedAt != nil { confirmRegenerate = true } else { regenerate() }
-                }
-                .disabled(state.summaryGenerating)
-                if !weekly {
-                    chip("book.closed", "일지") { NSWorkspace.shared.open(Worklog.fileURL(for: day)) }
-                        .disabled(state.worklogRaw == nil)
-                }
-                Spacer()
+        HStack(spacing: 6) {
+            if shown != nil && !state.summaryGenerating {
+                chip("pencil", "수정") { startEdit() }
+                    .keyboardShortcut("e", modifiers: .command)
             }
-            HStack(spacing: 8) {
-                if state.summaryGenerating {
-                    ProgressView().controlSize(.small)
-                    Text("생성 중…")
-                } else if let e = state.summaryError {
-                    Text(e).foregroundStyle(.red).lineLimit(1)
-                    if e == SummaryError.claudeNotFound.userMessage {
-                        Button("설정 열기") { NotificationCenter.default.post(name: .openSettings, object: "summary") }.controlSize(.mini)
-                    }
-                    Button("로그") { openLog() }.controlSize(.mini)
-                } else if let s = shown {
-                    Text("\(s.generatedAt.formatted(date: .omitted, time: .shortened)) 생성"
-                         + (editedAt.map { " · \($0.formatted(date: .omitted, time: .shortened)) 수정" } ?? ""))
-                }
+            chip("doc.on.doc", "복사") { copy() }
+                .disabled(currentMarkdown == nil)
+            chip("arrow.clockwise", shown == nil ? "생성" : "다시 생성") {
+                if editedAt != nil { confirmRegenerate = true } else { regenerate() }
             }
-            .font(.system(size: 10.5 * scale))
-            .foregroundStyle(.secondary)
+            .disabled(state.summaryGenerating)
+            if !weekly {
+                chip("book.closed", "일지") { NSWorkspace.shared.open(Worklog.fileURL(for: day)) }
+                    .disabled(state.worklogRaw == nil)
+            }
+            Spacer(minLength: 4)
+            status
+                .font(.system(size: 10.5 * scale))
+                .foregroundStyle(.secondary)
+                .layoutPriority(-1)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    /// 오른쪽 상태 글자. 생성·수정 시각은 두 줄로 쌓아 버튼 높이 안에 넣는다.
+    @ViewBuilder private var status: some View {
+        if state.summaryGenerating {
+            HStack(spacing: 4) { ProgressView().controlSize(.small); Text("생성 중…") }
+        } else if let e = state.summaryError {
+            HStack(spacing: 4) {
+                Text(e).foregroundStyle(.red).lineLimit(1).truncationMode(.tail).help(e)
+                if e == SummaryError.claudeNotFound.userMessage {
+                    Button("설정") { NotificationCenter.default.post(name: .openSettings, object: "summary") }.controlSize(.mini)
+                }
+                Button("로그") { openLog() }.controlSize(.mini)
+            }
+        } else if let s = shown {
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("\(s.generatedAt.formatted(date: .omitted, time: .shortened)) 생성")
+                if let at = editedAt { Text("\(at.formatted(date: .omitted, time: .shortened)) 수정") }
+            }
+            .lineLimit(1)
+        }
     }
 
     private var editedAt: Date? {
