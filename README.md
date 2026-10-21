@@ -156,7 +156,7 @@ DB 접속용 Teleport 터널을 ATM 안에서 켜고 끈다. 로그인(비밀번
 
 - 계정이나 DB 목록을 바꾸려면 설정 > Teleport > **설정 다시 하기**.
 - 그룹 이름은 DB 이름의 첫 부분(`app-dv` → APP)이다. 바꾸려면 설정 > Teleport > **teleport.json 열기** 에서 해당 DB 에 `"group": "원하는 이름"` 을 넣는다.
-- 저장 위치: 비밀번호·OTP 키는 키체인(`com.lsm0506.TaskWidget.teleport`) 또는 `secrets.json`(저장 위치 설정에 따름), DB 목록은 `~/Library/Application Support/TaskWidget/teleport.json`, 터널 로그는 `logs/teleport-<이름>.log`.
+- 저장 위치: 비밀번호·OTP 키는 macOS 키체인 또는 `secrets.json`(저장 위치 설정에 따름), DB 목록은 `~/Library/Application Support/TaskWidget/teleport.json`, 터널 로그는 `logs/teleport-<이름>.log`.
 
 **문제 해결**
 
@@ -356,7 +356,7 @@ make install
 - `worklog/`: `/worklog` 로 남긴 일지
 - `summaries/`: 생성된 요약
 - `logs/`: 업데이트 등 로그
-- 비밀 정보(Jira·Confluence API 토큰, Bitbucket API 토큰, Teleport 비밀번호·OTP 키, Touch ID 를 켰을 때 노트 잠금 열쇠)는 기본적으로 키체인(`com.lsm0506.TaskWidget.*`)에 저장된다. GitHub 은 `gh` 의 로그인을 그때그때 빌려 쓰고 따로 저장하지 않는다. 설정 > 창·일반 > 비밀 정보 저장 에서 **파일**을 고르면 `secrets.json` 에 **암호화 없이** 저장된다 (권한 600, 내 계정만 읽기 가능). 저장소 밖이라 git 에 올라가지 않는다. 전환하면 기존 값을 새 위치로 옮기고 이전 위치에서 지운다.
+- 비밀 정보(Jira·Confluence API 토큰, Bitbucket API 토큰, Teleport 비밀번호·OTP 키, Touch ID 를 켰을 때 노트 잠금 열쇠)는 기본적으로 macOS 키체인에 저장된다. GitHub 은 `gh` 의 로그인을 그때그때 빌려 쓰고 따로 저장하지 않는다. 설정 > 창·일반 > 비밀 정보 저장 에서 **파일**을 고르면 `secrets.json` 에 **암호화 없이** 저장된다 (권한 600, 내 계정만 읽기 가능). 저장소 밖이라 git 에 올라가지 않는다. 전환하면 기존 값을 새 위치로 옮기고 이전 위치에서 지운다.
 
 외부로 나가는 통신은 켠 기능에 따라 아래뿐이다. 그 외 서버로 데이터를 보내지 않는다.
 
