@@ -11,14 +11,32 @@ public enum SummaryError: Error, Equatable {
     public var userMessage: String {
         switch self {
         case .claudeNotFound: return "claude CLI를 찾지 못했습니다. 터미널에서 `command -v claude` 결과를 설정 > 요약 > claude 경로에 넣어주세요."
-        case .timeout: return "claude 응답 시간 초과"
+        case .timeout: return "Claude 응답이 너무 오래 걸려 멈췄어요 · 잠시 뒤 다시 생성"
         case .claudeFailed(let code, let tail):
+            // claude 의 영어 원문만 보여주면 뭘 해야 할지 몰라서, 자주 나는 원인은 할 일을 알려준다
+            if let hint = Self.hint(for: tail) { return hint }
             let last = tail.split(separator: "\n").last.map(String.init) ?? ""
             return "claude 실패 (exit \(code)): \(last)"
         case .emptyOutput: return "claude 출력이 비어 있음"
         case .busy: return "이미 생성 중"
         case .noDailySummaries: return "이번 주 일간 요약 없음"
         }
+    }
+
+    /// claude 출력에서 흔한 실패 원인을 알아본다. 모르면 nil.
+    static func hint(for output: String) -> String? {
+        let t = output.lowercased()
+        func has(_ words: String...) -> Bool { words.contains { t.contains($0) } }
+        if has("failed to authenticate", "oauth", "not logged in", "please run /login", "invalid api key", "authentication_error") {
+            return "Claude Code 로그인이 만료됐어요 · 터미널에서 claude 실행 → /login 후 다시 생성"
+        }
+        if has("usage limit", "rate limit", "rate_limit", "limit reached", "overloaded") {
+            return "Claude 사용 한도에 걸렸거나 붐벼요 · 잠시 뒤 다시 생성"
+        }
+        if has("enotfound", "econnrefused", "econnreset", "network error", "getaddrinfo", "unable to connect") {
+            return "Claude 서버에 연결하지 못했어요 · 인터넷 연결 확인 후 다시 생성"
+        }
+        return nil
     }
 }
 

@@ -92,7 +92,7 @@ public final class SummaryService {
             do {
                 markdown = try runner(SummaryPrompt.build(input, instructions: instructions(), calendar: calendar))
             } catch {
-                log += "error: \(error)\n"
+                log += "error: \(error)\n" + ((error as? SummaryError).map { "→ \($0.userMessage)\n" } ?? "")
                 writeLog(key, log)
                 throw error
             }
@@ -195,7 +195,7 @@ public final class SummaryService {
         do {
             markdown = try runner(prompt)
         } catch {
-            writeLog("week-\(key)", log + "error: \(error)\n")
+            writeLog("week-\(key)", log + "error: \(error)\n" + ((error as? SummaryError).map { "→ \($0.userMessage)\n" } ?? ""))
             throw error
         }
         let url = weeklyURL(for: day)
