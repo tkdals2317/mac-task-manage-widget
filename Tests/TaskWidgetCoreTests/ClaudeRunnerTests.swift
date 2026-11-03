@@ -168,9 +168,17 @@ final class ClaudeRunnerTests: XCTestCase {
 
     func testUserMessages() {
         XCTAssertEqual(SummaryError.claudeNotFound.userMessage, "claude CLI를 찾지 못했습니다. 터미널에서 `command -v claude` 결과를 설정 > 요약 > claude 경로에 넣어주세요.")
-        XCTAssertEqual(SummaryError.timeout.userMessage, "claude 응답 시간 초과")
+        XCTAssertEqual(SummaryError.timeout.userMessage, "Claude 응답이 너무 오래 걸려 멈췄어요 · 잠시 뒤 다시 생성")
         XCTAssertEqual(SummaryError.claudeFailed(2, "a\nlast line\n").userMessage, "claude 실패 (exit 2): last line")
         XCTAssertEqual(SummaryError.emptyOutput.userMessage, "claude 출력이 비어 있음")
         XCTAssertEqual(SummaryError.busy.userMessage, "이미 생성 중")
+    }
+
+    func testFailureHints() {
+        let auth = SummaryError.claudeFailed(1, "Failed to authenticate: OAuth session expired and could not be refreshed\n")
+        XCTAssertTrue(auth.userMessage.contains("/login"))
+        XCTAssertTrue(SummaryError.claudeFailed(1, "Claude AI usage limit reached|1700000000\n").userMessage.contains("한도"))
+        XCTAssertTrue(SummaryError.claudeFailed(1, "getaddrinfo ENOTFOUND api.anthropic.com\n").userMessage.contains("연결"))
+        XCTAssertEqual(SummaryError.claudeFailed(2, "weird\n").userMessage, "claude 실패 (exit 2): weird")
     }
 }
