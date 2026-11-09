@@ -62,6 +62,14 @@ final class TeleportLeftoverTests: XCTestCase {
         XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy db --tunnel mrs-dv2 --port 4306", name: "mrs-dv"))
         XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/mysql/bin/mysqld --port 4306", name: "mrs-dv"))
     }
+    func testIsAppTunnelCommand() {
+        XCTAssertTrue(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy app grafana-dv --port 18123\n", name: "grafana-dv"))
+        XCTAssertTrue(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy app grafana-dv\n", name: "grafana-dv"))
+        XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy app grafana-dv2 --port 18123", name: "grafana-dv"))
+        XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy app --port 18123", name: "grafana-dv"))
+        XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/bin/python3 proxy app grafana-dv --port 18123", name: "grafana-dv"))
+        XCTAssertFalse(TeleportTsh.isTunnelCommand("/usr/local/bin/tsh proxy kube grafana-dv", name: "grafana-dv"))
+    }
 }
 
 final class TOTPFreshCodeTests: XCTestCase {

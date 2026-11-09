@@ -8,7 +8,7 @@ enum TunnelState: Equatable {
     case portInUse
 }
 
-/// tsh 로그인 상태와 DB 터널(`tsh proxy db`)을 관리한다. 터널 프로세스는 ATM 이 직접 띄우고 직접 끈다.
+/// tsh 로그인 상태와 DB·앱 터널(`tsh proxy db` / `tsh proxy app`)을 관리한다. 터널 프로세스는 ATM 이 직접 띄우고 직접 끈다.
 @MainActor
 final class TeleportManager: ObservableObject {
     @Published private(set) var config: TeleportConfig
@@ -262,7 +262,7 @@ final class TeleportManager: ObservableObject {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: tsh)
-        p.arguments = ["proxy", "db", "--tunnel", t.name, "--db-user", t.dbUser, "--port", String(t.port)]
+        p.arguments = t.proxyArguments
         let logURL = Paths.logsDir.appendingPathComponent("teleport-\(t.name).log")
         try? FileManager.default.createDirectory(at: Paths.logsDir, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
@@ -378,15 +378,15 @@ final class TeleportManager: ObservableObject {
         DiagLog.append("teleport watchdog: \(n) failure #\(failures[n]!), next try in \(Int(wait))s")
     }
 
-    /// 터널 종료 + `tsh db logout` 각각 + `tsh logout` (Python 도구와 같은 순서).
+    /// 터널 종료 + `tsh db logout`/`tsh apps logout` 각각 + `tsh logout` (Python 도구와 같은 순서).
     func disconnectAll() async {
         guard !DemoFixtures.isOn else { return }
-        let names = config.tunnels.map(\.name)
+        let each = config.tunnels.map(\.logoutArguments)
         wanted.removeAll()
         for n in procs.keys { stop(n) }
         guard let tsh = tshPath else { return }
         busy = "끊는 중…"
-        await Task.detached { Self.logout(tsh: tsh, names: names, timeout: 10) }.value
+        await Task.detached { Self.logout(tsh: tsh, each: each, timeout: 10) }.value
         busy = nil
         validUntil = nil
     }
@@ -396,12 +396,13 @@ final class TeleportManager: ObservableObject {
         guard touched else { return }
         for p in procs.values { p.terminate() }
         for p in procs.values where p.isRunning { usleep(100_000) }
-        if let tsh = tshPath { Self.logout(tsh: tsh, names: config.tunnels.map(\.name), timeout: 3) }
+        if let tsh = tshPath { Self.logout(tsh: tsh, each: config.tunnels.map(\.logoutArguments), timeout: 3) }
     }
 
-    nonisolated private static func logout(tsh: String, names: [String], timeout: TimeInterval) {
-        DispatchQueue.concurrentPerform(iterations: names.count) { i in
-            _ = ProcessRunner.run(executable: tsh, arguments: ["db", "logout", names[i]], timeout: timeout)
+    /// each: 터널별 로그아웃 인자 (TeleportTunnel.logoutArguments).
+    nonisolated private static func logout(tsh: String, each: [[String]], timeout: TimeInterval) {
+        DispatchQueue.concurrentPerform(iterations: each.count) { i in
+            _ = ProcessRunner.run(executable: tsh, arguments: each[i], timeout: timeout)
         }
         _ = ProcessRunner.run(executable: tsh, arguments: ["logout"], timeout: timeout)
     }

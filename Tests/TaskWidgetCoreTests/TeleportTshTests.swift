@@ -12,6 +12,12 @@ final class TeleportTshTests: XCTestCase {
         XCTAssertEqual(dbs.filter(\.isProd).map(\.name), ["ats-llm-x", "mrs-prd-rep"])
         XCTAssertEqual(TeleportTsh.parseDBList(json: Data("garbage".utf8)), [])
     }
+    func testAppListParse() {
+        let apps = TeleportTsh.parseAppList(json: fixture("tsh-apps-ls"))
+        XCTAssertEqual(apps.map(\.name), ["grafana-dv", "grafana-prd", "grafana-st2", "kibana"])   // 이름 없는 항목·중복 제외
+        XCTAssertEqual(apps.filter(\.isProd).map(\.name), ["grafana-prd", "kibana"])
+        XCTAssertEqual(TeleportTsh.parseAppList(json: Data("garbage".utf8)), [])
+    }
     func testSessionExpiry() {
         let d = TeleportTsh.parseSessionExpiry(json: fixture("tsh-status"))
         XCTAssertEqual(d, ISO8601DateFormatter().date(from: "2026-10-08T21:07:10Z")!.addingTimeInterval(0.5))

@@ -34,6 +34,36 @@ final class TeleportConfigTests: XCTestCase {
         XCTAssertEqual(m.proxy, TeleportConfig.defaultProxy)
         XCTAssertEqual(m.tunnels[0].dbUser, "developer")
     }
+    func testLegacyTunnelDecodesAsDB() throws {
+        // kind 가 생기기 전 teleport.json
+        let j = #"{"name":"mrs-dv","dbUser":"developer","port":4306,"group":"MRS"}"#
+        let t = try JSONDecoder().decode(TeleportTunnel.self, from: Data(j.utf8))
+        XCTAssertEqual(t.kind, .db)
+        XCTAssertEqual(t.proxyArguments, ["proxy", "db", "--tunnel", "mrs-dv", "--db-user", "developer", "--port", "4306"])
+        XCTAssertEqual(t.logoutArguments, ["db", "logout", "mrs-dv"])
+    }
+    func testDBEncodingUnchanged() throws {
+        let e = JSONEncoder(); e.outputFormatting = [.sortedKeys]
+        let s = String(decoding: try e.encode(TeleportTunnel(name: "mrs-dv", port: 4306)), as: UTF8.self)
+        XCTAssertEqual(s, #"{"dbUser":"developer","name":"mrs-dv","port":4306}"#)
+    }
+    func testAppRoundTrip() throws {
+        let e = JSONEncoder(); e.outputFormatting = [.sortedKeys]
+        let app = TeleportTunnel(name: "grafana-dv", port: 18123, kind: .app)
+        let d = try e.encode(app)
+        XCTAssertEqual(String(decoding: d, as: UTF8.self), #"{"kind":"app","name":"grafana-dv","port":18123}"#)
+        XCTAssertEqual(try JSONDecoder().decode(TeleportTunnel.self, from: d), app)
+        XCTAssertEqual(app.proxyArguments, ["proxy", "app", "grafana-dv", "--port", "18123"])
+        XCTAssertEqual(app.logoutArguments, ["apps", "logout", "grafana-dv"])
+        XCTAssertEqual(app.group, "GRAFANA")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("tp-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("teleport.json")
+        let c = TeleportConfig(user: "me", tunnels: [TeleportTunnel(name: "mrs-dv", port: 4306), app])
+        try c.save(to: url)
+        XCTAssertEqual(TeleportConfig.load(from: url), c)
+    }
     func testSecretsCodable() throws {
         let s = TeleportSecrets(password: "p", otpSecret: "k")
         XCTAssertEqual(try JSONDecoder().decode(TeleportSecrets.self, from: JSONEncoder().encode(s)), s)
