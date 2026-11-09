@@ -68,7 +68,7 @@ public struct JiraClient {
         return try JSONDecoder().decode(Me.self, from: data).displayName
     }
 
-    private func get(_ url: URL) async throws -> Data {
+    func get(_ url: URL) async throws -> Data {
         let (data, code) = try await send(url)
         switch code {
         case 200...299: return data
@@ -78,7 +78,7 @@ public struct JiraClient {
         }
     }
 
-    private func send(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, Int) {
+    func send(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, Int) {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.httpBody = body

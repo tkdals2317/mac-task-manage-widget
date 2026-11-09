@@ -229,6 +229,9 @@ struct JiraRow: View {
     @State fileprivate var showTransitions = false
     @Environment(\.fontScale) private var scale
     @Environment(\.atmAccent) private var accent
+    @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
+
+    private var e2eOn: Bool { TabConfig.enabled(from: enabledTabs, all: allTabs.map(\.id)).contains("e2e") }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -266,6 +269,14 @@ struct JiraRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        if e2eOn, let v = state.e2e.verdictByKey[issue.id] {
+            Button {
+                state.e2e.openJobId = v.jobId
+                UserDefaults.standard.set("e2e", forKey: SettingsKey.lastTab)
+            } label: { E2EVerdictBadge(verdict: v.verdict) }
+                .buttonStyle(.plain)
+                .help("최근 E2E 검증 결과 · 눌러서 보기")
+        }
         if state.jiraBusyKeys.contains(issue.id) {
             ProgressView().controlSize(.mini)
         } else {

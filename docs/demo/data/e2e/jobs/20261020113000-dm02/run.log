@@ -1,0 +1,5 @@
+[ATM 2026-10-20 11:30:00] 시작 env=DV issues=SHOP-1250 timeout=600s
+[ATM 2026-10-20 11:30:00] 실행 /Users/demo/.local/bin/aside exec --permission full-access <지시문>
+[err] Error: Not signed in. Run aside login to continue.
+[ATM 2026-10-20 11:30:06] 종료 exit=1
+[ATM 2026-10-20 11:30:06] 결과 failed · Aside CLI 로그인이 필요해요 · 터미널에서 aside login 후 Aside 설정 > 계정 > 기기에서 승인

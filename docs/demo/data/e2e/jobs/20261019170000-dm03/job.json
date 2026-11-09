@@ -1,0 +1,16 @@
+{
+  "baseUrl" : "https://shop.example.com",
+  "createdAt" : "2026-10-19T08:00:00Z",
+  "env" : "PR",
+  "finishedAt" : "2026-10-19T08:05:12Z",
+  "id" : "20261019170000-dm03",
+  "issues" : [
+    { "key" : "SHOP-1229", "title" : "환불 금액 검증 로직 보완", "url" : "https://example.atlassian.net/browse/SHOP-1229" }
+  ],
+  "notes" : "",
+  "readOnly" : true,
+  "requestedBy" : "demo@example.com",
+  "sessionId" : "demoSession03",
+  "status" : "done",
+  "username" : ""
+}

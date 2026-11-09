@@ -1,0 +1,16 @@
+{
+  "baseUrl" : "https://dv.shop.example.com",
+  "createdAt" : "2026-10-20T02:30:00Z",
+  "env" : "DV",
+  "error" : "Aside CLI 로그인이 필요해요 · 터미널에서 aside login 후 Aside 설정 > 계정 > 기기에서 승인",
+  "finishedAt" : "2026-10-20T02:30:06Z",
+  "id" : "20261020113000-dm02",
+  "issues" : [
+    { "key" : "SHOP-1250", "title" : "정산 배치 청크 크기 설정 분리", "url" : "https://example.atlassian.net/browse/SHOP-1250" }
+  ],
+  "notes" : "",
+  "readOnly" : false,
+  "requestedBy" : "demo@example.com",
+  "status" : "failed",
+  "username" : "qa_shop"
+}
