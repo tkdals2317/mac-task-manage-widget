@@ -14,12 +14,20 @@ enum AsideStatus: Equatable {
 
     var isReady: Bool { if case .ready = self { return true }; return false }
 
+    /// 찾은 aside 경로. 못 찾았거나 확인 전이면 nil.
+    var path: String? {
+        switch self {
+        case .signedOut(let p), .ready(let p, _, _), .failed(let p, _): return p
+        case .unchecked, .checking, .missing: return nil
+        }
+    }
+
     /// 실행을 막는 이유. 준비됐으면 nil.
     var problem: String? {
         switch self {
         case .unchecked, .checking: return "Aside CLI 를 확인하는 중이에요"
         case .missing: return "Aside CLI 를 찾지 못했어요 · 설치한 뒤 설정 > E2E 에서 다시 확인"
-        case .signedOut: return "Aside CLI 로그인이 필요해요 · 터미널에서 aside login 후 Aside 설정 > 계정 > 기기에서 승인"
+        case .signedOut: return "Aside CLI 로그인이 필요해요 · 설정 > E2E 의 '터미널에서 로그인' 후 Aside 설정 > 계정 > 기기에서 승인"
         case .failed(_, let m): return "Aside CLI 확인 실패 · \(m)"
         case .ready: return nil
         }
@@ -52,6 +60,8 @@ final class E2EModel: ObservableObject {
 
     let store: E2EJobStore
     private let runner: E2ERunner
+    /// 터미널 로그인 뒤 승인될 때까지 상태를 다시 확인하는 작업.
+    private var loginWatch: Task<Void, Never>?
 
     init(store: E2EJobStore = E2EJobStore()) {
         self.store = store
@@ -124,11 +134,12 @@ final class E2EModel: ObservableObject {
 
     // MARK: - Aside CLI
 
-    func checkAside() async {
+    /// quiet: 확인 중 표시 없이 결과만 바꾼다 (로그인 대기 중 반복 확인용).
+    func checkAside(quiet: Bool = false) async {
         guard aside != .checking else { return }
         // 스크린샷 데모는 실제 CLI 를 부르지 않는다
         if DemoFixtures.isOn { aside = .ready(path: "aside", account: "demo@example.com", accountId: 0); asideSource = "데모"; return }
-        aside = .checking
+        if !quiet { aside = .checking }
         let configured = Settings.shared.e2eAsidePath
         let found = await Task.detached { () -> (path: String, source: String, account: AsideAccountStatus)? in
             guard let f = AsideCLI.locateWithSource(configured: configured) else { return nil }
@@ -147,6 +158,33 @@ final class E2EModel: ObservableObject {
             asideModels = await Task.detached { AsideCLI.models(accountId: accountId) }.value
         case .signedOut: aside = .signedOut(path: found.path)
         case .unknown(let m): aside = .failed(path: found.path, message: m)
+        }
+    }
+
+    /// 찾은 aside 로 로그인하는 터미널 창을 열고, 승인 화면이 보이게 Aside 를 앞으로 띄운다.
+    /// 승인될 때까지 3초마다 조용히 다시 확인한다 (최대 5분).
+    func openLoginTerminal() {
+        guard let exe = aside.path else { return }
+        let script = FileManager.default.temporaryDirectory.appendingPathComponent("ATM-aside-login.command")
+        do {
+            try Data(AsideCLI.loginScript(executable: exe).utf8).write(to: script, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        } catch {
+            submitError = "터미널 스크립트를 만들지 못했어요 · \(error.localizedDescription)"
+            return
+        }
+        if let app = AsideBrowser.appURL {
+            NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
+        }
+        NSWorkspace.shared.open(script)
+        loginWatch?.cancel()
+        loginWatch = Task { [weak self] in
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled, let me = self else { return }
+                await me.checkAside(quiet: true)
+                if me.aside.isReady { return }
+            }
         }
     }
 
@@ -190,7 +228,7 @@ final class E2EModel: ObservableObject {
         if !aside.isReady { await checkAside() }
         guard case .ready(let exe, _, let accountId) = aside else { submitError = aside.problem; return false }
 
-        // 비밀번호는 넘기지 않는다. 로그인은 Aside 비밀번호 관리자나 이미 로그인된 세션으로 한다.
+        // 비밀번호는 넘기지 않는다. 로그인은 Aside Vault 나 이미 로그인된 세션으로 한다.
         let user = s.e2eUser(env).trimmingCharacters(in: .whitespaces)
         let jira = Onboarding.normalizedURL(s.jiraBaseURL)
         let jobId = E2EJobID.make()
@@ -276,5 +314,16 @@ final class E2EModel: ObservableObject {
         guard let text = try? String(contentsOf: store.logFile(id), encoding: .utf8) else { return "" }
         return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// Aside 브라우저로 주소 열기. 사용자가 직접 로그인하고 Aside Vault 에 저장하게 일반 창에 연다.
+/// `aside <주소>` 는 에이전트 세션(모델)이 페이지를 읽고, `aside repl` 은 시크릿 창이라 저장이 남지 않아 앱으로 바로 연다.
+enum AsideBrowser {
+    static var appURL: URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: AsideCLI.browserBundleId) }
+
+    static func open(_ url: URL) {
+        guard let app = appURL else { return }
+        NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
     }
 }

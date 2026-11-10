@@ -48,10 +48,7 @@ struct E2EResultView: View {
                 .buttonStyle(.plain)
             Spacer()
             if !e2e.isActive(job.id) {
-                Button { if job.env.forcesReadOnly { confirmPR = true } else { retry() } } label: {
-                    AccentChip(icon: "arrow.clockwise", text: "다시 실행", style: job.status == .done ? .plain : .soft)
-                }
-                .buttonStyle(.plain).disabled(e2e.submitting).help("같은 이슈·메모로 다시 실행 (지금 고른 모델로)")
+                retryButton(style: job.status == .done ? .plain : .soft)
             }
             Button { e2e.revealInFinder(job.id) } label: { AccentChip(icon: "folder", text: "폴더", style: .plain) }
                 .buttonStyle(.plain).help("job 폴더를 Finder 에서 열기")
@@ -62,6 +59,13 @@ struct E2EResultView: View {
                     .buttonStyle(.plain).help("삭제")
             }
         }
+    }
+
+    private func retryButton(style: AccentChip.Style) -> some View {
+        Button { if job.env.forcesReadOnly { confirmPR = true } else { retry() } } label: {
+            AccentChip(icon: "arrow.clockwise", text: "다시 실행", style: style)
+        }
+        .buttonStyle(.plain).disabled(e2e.submitting).help("같은 이슈·메모로 다시 실행 (지금 고른 모델로)")
     }
 
     /// 다시 실행하면 목록으로 돌아가 새 job 이 도는 걸 보여준다.
@@ -95,6 +99,7 @@ struct E2EResultView: View {
     private var content: some View {
         switch e2e.results[job.id] {
         case .ok(let r):
+            if let block = r.loginBlocked, !e2e.isActive(job.id) { loginHelp(block) }
             summary(r)
             ForEach(Array(r.issues.enumerated()), id: \.offset) { _, issue in issueCard(issue) }
         case .invalid(let m):
@@ -127,6 +132,36 @@ struct E2EResultView: View {
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+    }
+
+    /// 환경 로그인에 막혔을 때: 이유와 Aside 에서 할 일, 로그인 페이지 열기·다시 실행.
+    private func loginHelp(_ block: E2ELoginBlock) -> some View {
+        // 열 주소는 ATM 설정에서 온 환경 주소만 쓴다 (result.json 의 주소는 쓰지 않는다).
+        let site = E2EWebURL.parse(job.baseUrl)
+        let canOpen = site != nil && AsideBrowser.appURL != nil
+        let steps = block.steps(account: job.username.isEmpty ? "테스트 계정" : "테스트 계정(\(job.username))")
+        return VStack(alignment: .leading, spacing: 4) {
+            Label("환경 로그인에서 막혔어요", systemImage: "key.fill")
+                .font(.system(size: 12 * scale, weight: .semibold)).foregroundStyle(.orange)
+            Text(block.reason).font(.system(size: 11.5 * scale))
+            ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
+                Text("\(i + 1). \(step)").font(.system(size: 11 * scale)).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 6) {
+                Button { if let site { AsideBrowser.open(site) } } label: {
+                    AccentChip(icon: "arrow.up.right.square", text: "Aside 에서 로그인 페이지 열기", style: .soft)
+                }
+                .buttonStyle(.plain).disabled(!canOpen)
+                .help(canOpen ? (site?.host ?? "") : "환경 주소나 Aside 브라우저를 찾지 못했어요")
+                retryButton(style: .plain)
+            }
+            .padding(.top, 2)
+            Text("비밀번호는 Aside 에서 직접 입력해요. ATM 과 Aside 에이전트는 비밀번호를 보지 않아요.")
+                .font(.system(size: 10 * scale)).foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
     }
 
     private func issueCard(_ issue: E2EIssueResult) -> some View {

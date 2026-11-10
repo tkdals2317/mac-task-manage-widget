@@ -65,10 +65,53 @@ public struct E2EIssueRef: Codable, Equatable, Identifiable {
     }
 
     /// 눌러서 열어도 되는 이슈 주소. ATM 이 Jira 주소로 만든 http(s) 만 받는다 (result.json 의 url 은 쓰지 않는다).
-    public var webURL: URL? {
-        guard let u = URL(string: url), let scheme = u.scheme?.lowercased(), scheme == "https" || scheme == "http",
+    public var webURL: URL? { E2EWebURL.parse(url) }
+}
+
+/// 눌러서 열어도 되는 웹 주소. http(s) 이고 호스트가 있을 때만.
+public enum E2EWebURL {
+    public static func parse(_ raw: String) -> URL? {
+        guard let u = URL(string: raw), let scheme = u.scheme?.lowercased(), scheme == "https" || scheme == "http",
               u.host?.isEmpty == false else { return nil }
         return u
+    }
+}
+
+/// 환경 로그인에 막힌 이유 (result.json 의 loginBlocked). 사용자가 Aside 에서 무엇을 하면 되는지 고르는 데 쓴다.
+public enum E2ELoginBlock: String, CaseIterable {
+    case vaultLocked = "VAULT_LOCKED", noSavedLogin = "NO_SAVED_LOGIN", other = "OTHER"
+
+    /// 비었거나 NONE·false 면 nil, 모르는 값은 other.
+    public init?(lenient raw: String) {
+        let v = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !v.isEmpty, !["NONE", "NULL", "FALSE"].contains(v) else { return nil }
+        self = Self(rawValue: v) ?? .other
+    }
+
+    public var reason: String {
+        switch self {
+        case .vaultLocked: return "Aside Vault 가 잠겨 있어 저장된 로그인을 꺼내지 못했어요."
+        case .noSavedLogin: return "Aside Vault 에 이 환경의 로그인이 없어요."
+        case .other: return "자동 로그인이 끝까지 되지 않았어요 (2단계 인증·SSO 등)."
+        }
+    }
+
+    /// 사용자가 할 일. account 는 "테스트 계정(qa)" 처럼 보여줄 이름.
+    public func steps(account: String) -> [String] {
+        switch self {
+        case .vaultLocked:
+            return ["Aside 에서 로그인 페이지를 열어요",
+                    "아이디 칸의 자동 채우기에서 Vault 잠금을 풀어요",
+                    "다시 실행해요"]
+        case .noSavedLogin:
+            return ["Aside 에서 로그인 페이지를 열어요",
+                    "\(account)으로 직접 로그인해요",
+                    "로그인 정보를 저장할지 물으면 Aside Vault 에 저장해요",
+                    "다시 실행해요"]
+        case .other:
+            return ["Aside 에서 로그인 페이지를 열어 \(account)으로 직접 로그인해 두면 다음 실행이 그 로그인을 이어 써요",
+                    "다시 실행해요"]
+        }
     }
 }
 
@@ -246,18 +289,21 @@ public struct E2EResult: Equatable, Decodable {
     public var startedAt: String
     public var finishedAt: String
     public var summary: String
+    /// 환경 로그인에 막혔을 때만 있다.
+    public var loginBlocked: E2ELoginBlock?
     public var issues: [E2EIssueResult]
 
     public init(status: String = "done", startedAt: String = "", finishedAt: String = "", summary: String = "",
-                issues: [E2EIssueResult]) {
+                loginBlocked: E2ELoginBlock? = nil, issues: [E2EIssueResult]) {
         self.status = status
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.summary = summary
+        self.loginBlocked = loginBlocked
         self.issues = issues
     }
 
-    enum CodingKeys: String, CodingKey { case status, startedAt, finishedAt, summary, issues }
+    enum CodingKeys: String, CodingKey { case status, startedAt, finishedAt, summary, loginBlocked, issues }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -265,6 +311,7 @@ public struct E2EResult: Equatable, Decodable {
         startedAt = c.lenientString(.startedAt)
         finishedAt = c.lenientString(.finishedAt)
         summary = c.lenientString(.summary)
+        loginBlocked = E2ELoginBlock(lenient: c.lenientString(.loginBlocked))
         issues = try c.decode([E2EIssueResult].self, forKey: .issues)
     }
 

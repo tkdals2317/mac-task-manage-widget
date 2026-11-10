@@ -19,6 +19,11 @@ struct AsideStatusLine: View {
                 Text(e2e.aside.problem ?? "").foregroundStyle(.orange).lineLimit(3)
             }
             Spacer(minLength: 4)
+            if case .signedOut = e2e.aside {
+                Button { e2e.openLoginTerminal() } label: { AccentChip(icon: "terminal", text: "터미널에서 로그인", style: .solid) }
+                    .buttonStyle(.plain)
+                    .help("ATM 이 찾은 aside 로 로그인 창을 열어요. Aside 설정 > 계정 > 기기에서 승인하면 자동으로 다시 확인해요.")
+            }
             Button { Task { await e2e.checkAside() } } label: { AccentChip(icon: "arrow.clockwise", text: "다시 확인", style: .soft) }
                 .buttonStyle(.plain)
                 .disabled(e2e.aside == .checking)
@@ -64,7 +69,7 @@ struct E2ESettingsSections: View {
                 .onSubmit { Task { await e2e.checkAside() } }
             CommandCopyRow(label: "설치", command: AsideCLI.installCommand)
             CommandCopyRow(label: "로그인", command: AsideCLI.loginCommand)
-            Text("Aside 브라우저를 설치하고 테스트 환경에 로그인해 두세요. CLI 는 위 명령이나 Aside 설정 > 개발자에서 설치하고, 로그인 후 Aside 설정 > 계정 > 기기에서 승인해요.")
+            Text("Aside 브라우저를 설치해 켜 두세요. CLI 는 위 명령이나 Aside 설정 > 개발자에서 설치하고, 로그인이 필요하면 '터미널에서 로그인'을 눌러 이메일을 넣은 뒤 Aside 설정 > 계정 > 기기에서 승인해요. 터미널에서 aside 를 못 찾으면 ~/.local/bin/aside 로 실행해요.")
                 .font(.caption).foregroundStyle(.secondary)
             Text("ATM 은 aside 를 guard 권한으로 실행해요. Aside 에이전트는 Aside 계정 폴더 안의 실행용 폴더(~/.aside/u/<계정>/atm-e2e)에서만 파일을 읽고 쓰고, 끝나면 ATM 이 스크린샷 이미지와 result.json 만 골라 가져와요. 다만 Aside 브라우저에 로그인된 사이트는 그대로 쓸 수 있으니 믿을 수 있는 이슈만 검증하세요.")
                 .font(.caption).foregroundStyle(.orange)
@@ -77,7 +82,7 @@ struct E2ESettingsSections: View {
         } header: {
             Text("환경")
         } footer: {
-            Text("테스트 계정 비밀번호는 ATM 이 Aside 에 넘기지 않아요. Aside 비밀번호 관리자에 저장하거나 Aside 브라우저에서 미리 로그인해 두세요. 계정 ID 를 넣으면 그 계정으로 로그인하라고 알려줘요.")
+            Text("테스트 계정 비밀번호는 ATM 이 Aside 에 넘기지 않아요. 주소 옆 'Aside 에서 열기'로 환경을 열어 직접 로그인하고 Aside Vault 에 저장해 두면 Aside 가 자동 채우기로 로그인해요. Vault 가 잠기면 로그인이 막히니 실행 전에 풀어 두세요. 계정 ID 를 넣으면 그 계정으로 로그인하라고 알려줘요.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         Section("실행") {
@@ -113,8 +118,17 @@ private struct E2EEnvFields: View {
     }
 
     var body: some View {
-        TextField("\(env.rawValue) 주소", text: $url, prompt: Text("https://\(env.rawValue.lowercased()).example.com"))
-            .onSubmit { url = Onboarding.normalizedURL(url) }
+        let site = E2EWebURL.parse(Onboarding.normalizedURL(url))
+        HStack(spacing: 6) {
+            TextField("\(env.rawValue) 주소", text: $url, prompt: Text("https://\(env.rawValue.lowercased()).example.com"))
+                .onSubmit { url = Onboarding.normalizedURL(url) }
+            Button { if let site { AsideBrowser.open(site) } } label: {
+                AccentChip(icon: "arrow.up.right.square", text: "Aside 에서 열기", style: .plain)
+            }
+            .buttonStyle(.plain)
+            .disabled(site == nil || AsideBrowser.appURL == nil)
+            .help("Aside 브라우저에서 이 환경을 열어 직접 로그인하고 Aside Vault 에 저장해 두세요")
+        }
         TextField("\(env.rawValue) 계정 ID", text: $user, prompt: Text("비우면 Aside 에 저장된 로그인"))
         if env.forcesReadOnly {
             Text("PR 환경은 조회만 하라고 지시해요 (쓰기 동작은 SKIPPED)").font(.caption).foregroundStyle(.secondary)

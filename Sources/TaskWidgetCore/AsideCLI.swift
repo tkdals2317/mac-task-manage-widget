@@ -16,7 +16,10 @@ public enum AsideAccountStatus: Equatable {
 /// - CLI 에 SIGTERM 을 보내면 세션도 aborted 로 멈춘다. `--timeout` 은 CLI 만 멈추고 세션은 계속 돌아서 쓰지 않는다.
 public enum AsideCLI {
     public static let installCommand = "curl -fsSL https://releases.aside.com/install.sh | bash"
-    public static let loginCommand = "aside login --email \"<이메일>\""
+    /// 이메일은 터미널에서 묻는다.
+    public static let loginCommand = "aside login"
+    /// Aside 브라우저 앱. 로그인 페이지를 사용자에게 열어 줄 때 쓴다.
+    public static let browserBundleId = "at.studio.AsideBrowser"
 
     static func knownPaths(home: String) -> [String] {
         ["\(home)/.local/bin/aside", "\(home)/.aside/cli/Aside CLI.app/Contents/MacOS/aside",
@@ -33,6 +36,24 @@ public enum AsideCLI {
         if let p = shellLookup(), p.hasPrefix("/"), ClaudeRunner.isExe(p) { return (p, "로그인 셸") }
         if let p = knownPaths(home: home.path).first(where: ClaudeRunner.isExe) { return (p, "기본 위치") }
         return nil
+    }
+
+    /// 터미널에서 CLI 로그인을 하는 스크립트 (.command 로 연다).
+    /// 설치 스크립트가 넣는 ~/.local/bin 이 셸 PATH 에 없는 경우가 많아 ATM 이 찾은 경로를 그대로 쓴다.
+    public static func loginScript(executable: String) -> String {
+        let exe = Updater.shellQuote(executable)
+        return """
+        #!/bin/zsh
+        clear
+        echo "ATM · Aside CLI 로그인"
+        echo "1. 아래에 Aside 계정 이메일을 넣어요."
+        echo "2. Aside 브라우저의 설정 > 계정 > 기기에서 이 기기를 승인해요."
+        echo "3. 승인되면 ATM 이 알아서 확인해요. 끝나면 이 창은 닫아도 돼요."
+        echo
+        \(exe) login
+        echo
+        \(exe) account status
+        """
     }
 
     /// `aside exec` 인자. 셸을 거치지 않고 배열로 넘긴다. model 이 비면 Aside 설정의 기본 모델.
@@ -208,7 +229,7 @@ public enum E2EFailureHint {
             return "고른 모델을 이 Aside 계정에서 쓸 수 없어요 · E2E 탭 실행 버튼 옆에서 다른 모델을 고르세요"
         }
         if has("not signed in", "aside login", "sign in to", "unauthorized", "session expired", "login required") {
-            return "Aside CLI 로그인이 필요해요 · 터미널에서 aside login 후 Aside 설정 > 계정 > 기기에서 승인"
+            return "Aside CLI 로그인이 필요해요 · 설정 > E2E 의 '터미널에서 로그인' 후 Aside 설정 > 계정 > 기기에서 승인"
         }
         if has("operation not permitted", "path escapes", "blocked by policy", "permission denied") {
             return "Aside 가 실행용 폴더에 접근하지 못했어요 · run.log 를 확인해 주세요"

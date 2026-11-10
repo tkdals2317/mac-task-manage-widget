@@ -217,6 +217,11 @@ final class E2ERunnerTests: XCTestCase {
     func testAsideHelpers() {
         XCTAssertEqual(AsideCLI.sessionId(in: "created new session: pltnf6d7zRGoVm6U"), "pltnf6d7zRGoVm6U")
         XCTAssertNil(AsideCLI.sessionId(in: "Error This operation was aborted"))
+        // 경로에 공백·따옴표가 있어도 찾은 aside 그대로 부른다
+        let script = AsideCLI.loginScript(executable: "/Users/a b/it's/aside")
+        XCTAssertTrue(script.hasPrefix("#!/bin/zsh\n"))
+        XCTAssertTrue(script.contains("\n'/Users/a b/it'\\''s/aside' login\n"))
+        XCTAssertTrue(script.hasSuffix("'/Users/a b/it'\\''s/aside' account status"))
         XCTAssertEqual(AsideCLI.execArguments(prompt: "p"), ["exec", "--permission", "guard", "p"])
         XCTAssertEqual(AsideCLI.execArguments(prompt: "p", model: " claude-sonnet-5 "),
                        ["exec", "--permission", "guard", "--model", "claude-sonnet-5", "p"])
@@ -326,6 +331,8 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertTrue(p.contains("/tmp/a b/jobs/1/result.json"))
         XCTAssertFalse(p.contains("password"), "비밀번호는 넘기지 않는다")
         XCTAssertTrue(p.contains("\"verdict\": \"PASS|FAIL|BLOCKED|SKIPPED\""))
+        XCTAssertTrue(p.contains("\"loginBlocked\""))
+        for b in E2ELoginBlock.allCases { XCTAssertTrue(p.contains(b.rawValue), "지시문이 \(b.rawValue) 를 알려준다") }
         XCTAssertFalse(p.contains("{JOB_DIR}"))
         XCTAssertFalse(p.contains("{SCHEMA}"))
     }

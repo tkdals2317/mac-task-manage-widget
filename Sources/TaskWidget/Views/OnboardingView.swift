@@ -531,15 +531,16 @@ struct OnboardingView: View {
             header("E2E 검증 · Aside", "검증은 내 Aside 브라우저가 해요. Aside 를 설치해 두는 걸 추천해요. 지금 없어도 탭은 켜 둘 수 있어요.")
             card {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("1. Aside 브라우저를 설치하고 Jira·테스트 환경에 로그인해 두세요.").font(.system(size: 12 * scale))
+                    Text("1. Aside 브라우저를 설치하고 Aside 계정으로 로그인해 켜 두세요.").font(.system(size: 12 * scale))
                     Text("2. Aside CLI 를 설치해요 (또는 Aside 설정 > 개발자에서 설치).").font(.system(size: 12 * scale))
                     CommandCopyRow(label: "설치", command: AsideCLI.installCommand)
-                    Text("3. CLI 로 로그인한 뒤 Aside 설정 > 계정 > 기기에서 승인해요.").font(.system(size: 12 * scale))
+                    Text("3. 아래 줄의 '터미널에서 로그인'을 눌러 Aside 계정 이메일을 넣고, Aside 설정 > 계정 > 기기에서 승인해요. 승인되면 ✓ 로 바뀌어요.").font(.system(size: 12 * scale))
                     CommandCopyRow(label: "로그인", command: AsideCLI.loginCommand)
+                    Text("4. 테스트 환경 계정은 설정 > E2E 의 주소 옆 'Aside 에서 열기'로 직접 로그인해 Aside Vault 에 저장해요.").font(.system(size: 12 * scale))
                 }
             }
             AsideStatusLine(e2e: state.e2e)
-            helper("환경 주소(DV/ST/ST2)와 테스트 계정 ID 는 설정 > E2E 에서 넣어요. 비밀번호는 ATM 이 넘기지 않으니 Aside 비밀번호 관리자에 저장해 두세요.")
+            helper("환경 주소(DV/ST/ST2)와 테스트 계정 ID 는 설정 > E2E 에서 넣어요. 비밀번호는 ATM 이 넘기지 않아요.")
         }
     }
 

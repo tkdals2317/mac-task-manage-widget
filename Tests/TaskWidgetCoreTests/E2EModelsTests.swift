@@ -164,5 +164,25 @@ final class E2EModelsTests: XCTestCase {
         XCTAssertNil(url("javascript:alert(1)"))
         XCTAssertNil(url("https://"))
         XCTAssertNil(url(""))
+        XCTAssertEqual(E2EWebURL.parse("https://st.example.com")?.host, "st.example.com")
+        XCTAssertNil(E2EWebURL.parse("st.example.com"))
+    }
+
+    func testLoginBlockedReason() throws {
+        func blocked(_ value: String) throws -> E2ELoginBlock? {
+            try E2EResult.decode(Data(#"{"issues":[],"loginBlocked":\#(value)}"#.utf8)).loginBlocked
+        }
+        XCTAssertEqual(try blocked(#""VAULT_LOCKED""#), .vaultLocked)
+        XCTAssertEqual(try blocked(#"" no_saved_login ""#), .noSavedLogin)
+        XCTAssertEqual(try blocked(#""2FA""#), .other)
+        XCTAssertEqual(try blocked("true"), .other)
+        XCTAssertNil(try blocked(#""""#))
+        XCTAssertNil(try blocked("null"))
+        XCTAssertNil(try blocked("false"))
+        XCTAssertNil(try E2EResult.decode(Data(#"{"issues":[]}"#.utf8)).loginBlocked)
+
+        let steps = E2ELoginBlock.noSavedLogin.steps(account: "테스트 계정(qa)")
+        XCTAssertTrue(steps.contains { $0.contains("테스트 계정(qa)") })
+        XCTAssertEqual(E2ELoginBlock.allCases.map { $0.steps(account: "a").last ?? "" }, Array(repeating: "다시 실행해요", count: 3))
     }
 }
