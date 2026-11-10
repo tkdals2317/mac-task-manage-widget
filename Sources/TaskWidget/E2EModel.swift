@@ -132,6 +132,25 @@ final class E2EModel: ObservableObject {
     }
     func isActive(_ id: String) -> Bool { running == id || queued.contains(id) }
 
+    // MARK: - 탭 도입 (한 번)
+
+    /// E2E 탭이 생긴 버전으로 처음 올라온 사용자에게 탭을 한 번 켜 준다. 이후 끄면 다시 켜지 않는다.
+    /// 처음 설치하는 사람은 설정 도우미에서 고르므로 건드리지 않는다.
+    static func introduceTabIfNeeded() {
+        let d = UserDefaults.standard
+        guard !d.bool(forKey: SettingsKey.e2eTabIntroduced) else { return }
+        let s = Settings.shared
+        defer { d.set(true, forKey: SettingsKey.e2eTabIntroduced) }
+        let fm = FileManager.default
+        if Onboarding.shouldShow(done: s.onboardingDone, todosExists: fm.fileExists(atPath: Paths.todosFile.path),
+                                 jiraEmail: s.jiraEmail, teleportExists: fm.fileExists(atPath: Paths.teleportFile.path),
+                                 notesExists: fm.fileExists(atPath: Paths.notesFile.path)) { return }
+        let ids = allTabs.map(\.id)
+        if !TabConfig.enabled(from: s.enabledTabs, all: ids).contains("e2e") {
+            s.enabledTabs = TabConfig.toggled("e2e", in: s.enabledTabs, all: ids)
+        }
+    }
+
     // MARK: - Aside CLI
 
     /// quiet: 확인 중 표시 없이 결과만 바꾼다 (로그인 대기 중 반복 확인용).

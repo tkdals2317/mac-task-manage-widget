@@ -57,6 +57,7 @@ final class AppState: ObservableObject {
         consumeUpdateFailure()
         NotesModel.introduceTabIfNeeded()
         PRModel.introduceTabIfNeeded()
+        E2EModel.introduceTabIfNeeded()
         // 탭 바 배지가 pr 의 변화를 따라가도록 (RootView 는 AppState 만 관찰한다)
         prSub = pr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         // Jira 목록의 E2E 판정 뱃지가 검증 결과를 따라가도록

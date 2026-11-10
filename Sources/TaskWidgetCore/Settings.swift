@@ -67,6 +67,7 @@ public enum SettingsKey {
     public static let prMineCollapsed = "prMineCollapsed"
     public static let e2eEnv = "e2eEnv"
     public static let e2eAllowPR = "e2eAllowPR"
+    public static let e2eTabIntroduced = "e2eTabIntroduced"
     public static let e2eAsidePath = "e2eAsidePath"
     public static let e2eModel = "e2eModel"
     public static let e2eMinutesPerIssue = "e2eMinutesPerIssue"

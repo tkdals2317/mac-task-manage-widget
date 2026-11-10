@@ -171,12 +171,50 @@ public enum AsideCLI {
         return .signedOut
     }
 
+    public static let updateHint = "Aside CLI 가 오래됐어요 · 터미널에서 aside update 로 업데이트"
+
+    /// 구버전 CLI 가 모르는 옵션을 받았을 때의 출력인지.
+    static func isUnknownOption(_ output: String) -> Bool {
+        output.lowercased().contains("unknown option")
+    }
+
+    /// `aside account status` 일반 출력 해석 (`--json` 이 없는 구버전용).
+    /// 예: `* u0  me@example.com  signed in  profiles: Profile 0`. `*` 가 지금 계정이고, 없으면 첫 계정.
+    public static func parsePlainAccountStatus(_ output: String) -> AsideAccountStatus {
+        let rows = output.split(whereSeparator: \.isNewline).map { line -> (current: Bool, tokens: [Substring]) in
+            var t = line.split(whereSeparator: \.isWhitespace)
+            let current = t.first == "*"
+            if current { t.removeFirst() }
+            return (current, t)
+        }.filter { r in
+            guard let first = r.tokens.first, first.hasPrefix("u"), r.tokens.count >= 3 else { return false }
+            return Int(first.dropFirst()) != nil
+        }
+        let lower = output.lowercased()
+        guard let row = rows.first(where: { $0.current }) ?? rows.first else {
+            if lower.contains("not signed in") || lower.contains("aside login") { return .signedOut }
+            return .unknown(updateHint)
+        }
+        let state = row.tokens.dropFirst(2).joined(separator: " ").lowercased()
+        if state.contains("not signed in") || state.contains("signed out") { return .signedOut }
+        guard state.hasPrefix("signed in"), let id = Int(row.tokens[0].dropFirst()) else { return .unknown(updateHint) }
+        return .signedIn(email: String(row.tokens[1]), accountId: id, plan: "")
+    }
+
     public static func accountStatus(executable: String) -> AsideAccountStatus {
-        let r = ProcessRunner.run(executable: executable, arguments: ["account", "status", "--json"],
-                                  environment: environment(executable: executable), timeout: 15)
-        if r.timedOut { return .unknown("aside 응답 없음 (15초) · Aside 앱이 켜져 있는지 확인") }
-        let out = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return parseAccountStatus(stdout: out.isEmpty ? r.stderr : out, exitCode: r.status)
+        let env = environment(executable: executable)
+        func run(_ args: [String]) -> (text: String, status: Int32)? {
+            let r = ProcessRunner.run(executable: executable, arguments: args, environment: env, timeout: 15)
+            if r.timedOut { return nil }
+            let out = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (out.isEmpty ? r.stderr : out, r.status)
+        }
+        let timeout = AsideAccountStatus.unknown("aside 응답 없음 (15초) · Aside 앱이 켜져 있는지 확인")
+        guard let r = run(["account", "status", "--json"]) else { return timeout }
+        // 구버전 CLI 는 --json 이 없어 일반 출력으로 다시 본다.
+        guard isUnknownOption(r.text) else { return parseAccountStatus(stdout: r.text, exitCode: r.status) }
+        guard let plain = run(["account", "status"]) else { return timeout }
+        return parsePlainAccountStatus(plain.text)
     }
 
     /// SIGKILL 까지 가서 세션이 남았을 수 있을 때 세션을 멈춘다.
@@ -225,6 +263,7 @@ public enum E2EFailureHint {
     public static func hint(for output: String) -> String? {
         let t = output.lowercased()
         func has(_ words: String...) -> Bool { words.contains { t.contains($0) } }
+        if AsideCLI.isUnknownOption(t) { return AsideCLI.updateHint }
         if has("is not available for this account", "choose an available model") {
             return "고른 모델을 이 Aside 계정에서 쓸 수 없어요 · E2E 탭 실행 버튼 옆에서 다른 모델을 고르세요"
         }

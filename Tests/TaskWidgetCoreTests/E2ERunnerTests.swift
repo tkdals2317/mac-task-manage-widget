@@ -325,6 +325,33 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(AsideCLI.workRoots(home: home.appendingPathComponent("none")), [])
     }
 
+    func testPlainAccountStatusForOldCLI() {
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u0  me@example.com  signed in  profiles: Profile 0\n  provider: google"),
+                       .signedIn(email: "me@example.com", accountId: 0, plan: ""))
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("  u0  a@example.com  signed in\n* u2  b@example.com  signed in"),
+                       .signedIn(email: "b@example.com", accountId: 2, plan: ""))
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  signed out"), .signedOut)
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  not signed in"), .signedOut)
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("Not signed in. Run aside login"), .signedOut)
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("something else"), .unknown(AsideCLI.updateHint))
+        XCTAssertEqual(E2EFailureHint.hint(for: "Error: Unknown option '--permission'\n(add --help for usage)"), AsideCLI.updateHint)
+    }
+
+    /// --json 을 모르는 구버전 CLI 면 일반 출력으로 다시 확인한다.
+    func testAccountStatusFallsBackWithoutJSON() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("aside-old-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let exe = dir.appendingPathComponent("aside")
+        try Data("""
+        #!/bin/sh
+        for a in "$@"; do [ "$a" = "--json" ] && { echo "Error: Unknown option '--json'" >&2; echo "(add --help for usage)" >&2; exit 1; }; done
+        echo "* u3  old@example.com  signed in  profiles: Profile 0"
+        """.utf8).write(to: exe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exe.path)
+        XCTAssertEqual(AsideCLI.accountStatus(executable: exe.path), .signedIn(email: "old@example.com", accountId: 3, plan: ""))
+    }
+
     func testPromptHasJobDirAndSchema() {
         let p = E2EPrompt.render(jobDir: URL(fileURLWithPath: "/tmp/a b/jobs/1", isDirectory: true))
         XCTAssertTrue(p.contains("/tmp/a b/jobs/1/request.json"))
