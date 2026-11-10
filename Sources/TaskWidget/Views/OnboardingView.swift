@@ -655,7 +655,7 @@ struct OnboardingView: View {
             r.append(state.e2e.aside.isReady ? "E2E: Aside 준비됨 · 환경 주소와 테스트 계정은 설정 > E2E 에서"
                                              : "E2E: Aside 설치·로그인 필요 — 설정 > E2E 에서 이어서 할 수 있어요")
         }
-        if useTeleport { r.append(tpCount > 0 ? "Teleport DB \(tpCount)개" : "Teleport 미설정 — 탭에서 이어서 할 수 있어요") }
+        if useTeleport { r.append(tpCount > 0 ? "Teleport 터널 \(tpCount)개" : "Teleport 미설정 — 탭에서 이어서 할 수 있어요") }
         return r
     }
 
@@ -697,6 +697,8 @@ private struct TeleportOnboardingBody: View {
         VStack(alignment: .leading, spacing: 10) {
             if m.step == 1 { login } else { dbs }
             if let e = m.error { Text(e).font(.system(size: 11 * scale)).foregroundStyle(.red).textSelection(.enabled) }
+            // 한쪽 목록(DB 또는 앱)만 실패했을 때의 안내. 안 보이면 실패가 조용히 묻힌다.
+            if let n = m.note { Text(n).font(.system(size: 11 * scale)).foregroundStyle(.orange).textSelection(.enabled) }
         }
         .disabled(m.busy)
     }
@@ -759,12 +761,15 @@ private struct TeleportOnboardingBody: View {
     private var dbs: some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("DB 고르기").font(.system(size: 16 * scale, weight: .medium))
+                Text("DB·앱 고르기").font(.system(size: 16 * scale, weight: .medium))
                 if !m.entries.isEmpty {
-                    Text("로그인 성공 · 접근 가능한 DB \(m.entries.count)개").font(.system(size: 11 * scale)).foregroundStyle(.green)
+                    Text("로그인 성공 · 접근 가능한 DB·앱 \(m.entries.count)개").font(.system(size: 11 * scale)).foregroundStyle(.green)
                 }
-                Text("고른 DB 는 앱이 켜져 있는 동안 아래 포트로 열어 둬요. DB 툴에서 localhost:포트 로 접속하면 돼요.")
+                Text("고른 항목은 앱이 켜져 있는 동안 아래 포트로 열어 둬요. DB 툴에서 localhost:포트 로 접속하면 돼요.")
                     .font(.system(size: 12 * scale)).foregroundStyle(.secondary)
+                if m.entries.contains(where: { $0.kind == .app }) {
+                    Text("HTTP 앱: http://localhost:포트, 인증 자동").font(.system(size: 12 * scale)).foregroundStyle(.secondary)
+                }
             }
             if m.entries.isEmpty && !m.busy {
                 Button { Task { await m.loadDBs() } } label: { AccentChip(icon: "arrow.clockwise", text: "다시 불러오기", style: .soft) }.buttonStyle(.plain)
@@ -805,6 +810,7 @@ private struct TeleportOnboardingBody: View {
                         Text(e.name).font(.system(size: 12 * scale))
                     }.contentShape(Rectangle())
                 }.buttonStyle(.plain)
+                if e.kind == .app { Text("HTTP").font(.system(size: 10 * scale, weight: .semibold)).foregroundStyle(.secondary) }
                 if e.isProd {
                     Text("운영").font(.system(size: 10 * scale, weight: .semibold)).foregroundStyle(.red)
                         .padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Color.red.opacity(0.14)))
@@ -833,10 +839,10 @@ private struct TeleportFooter: View {
             if m.step == 1 {
                 // 이미 저장된 비밀번호·OTP 키가 있고 새로 입력하지 않았으면 그걸로 로그인해서 목록만 받는다.
                 if m.hasSavedSecrets && m.password.isEmpty && m.otpKey.isEmpty {
-                    Button { Task { await m.loadWithSaved() } } label: { AccentChip(icon: "person.badge.key", text: "저장된 정보로 DB 불러오기", style: .solid) }
+                    Button { Task { await m.loadWithSaved() } } label: { AccentChip(icon: "person.badge.key", text: "저장된 정보로 DB·앱 불러오기", style: .solid) }
                         .buttonStyle(.plain).disabled(m.busy)
                 } else {
-                    Button { Task { await m.next() } } label: { AccentChip(icon: "person.badge.key", text: "로그인하고 DB 불러오기", style: .solid) }
+                    Button { Task { await m.next() } } label: { AccentChip(icon: "person.badge.key", text: "로그인하고 DB·앱 불러오기", style: .solid) }
                         .buttonStyle(.plain).disabled(!m.canNext)
                 }
             } else {

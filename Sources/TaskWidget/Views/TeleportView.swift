@@ -119,7 +119,8 @@ private struct TunnelRow: View {
             Circle().fill(color(st)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
                 Text(tunnel.name).font(.system(size: 12.5 * scale, weight: .medium))
-                Text("localhost:\(String(tunnel.port)) · \(label(st))")
+                // 앱은 브라우저·HTTP 클라이언트로 여는 주소라 scheme 까지 보여 DB 와 구분한다.
+                Text("\(tunnel.kind == .app ? "http://" : "")localhost:\(String(tunnel.port)) · \(label(st))")
                     .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
                     .lineLimit(1).help(label(st))
             }

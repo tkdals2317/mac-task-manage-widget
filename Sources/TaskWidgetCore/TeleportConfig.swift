@@ -1,19 +1,25 @@
 import Foundation
 
 public struct TeleportTunnel: Codable, Equatable, Identifiable {
+    /// db = `tsh proxy db --tunnel`, app = `tsh proxy app` (HTTP 앱, 인증 헤더는 Teleport 가 넣는다).
+    public enum Kind: String, Codable { case db, app }
+
     public var name: String
+    /// app 은 쓰지 않는다 (`tsh proxy app` 에는 DB 사용자가 없다).
     public var dbUser: String
     public var port: Int
     /// teleport.json 에 "group" 으로 적으면 그 이름으로 묶는다. 없으면 이름의 첫 토큰.
     public var groupOverride: String?
+    public var kind: Kind
     public var id: String { name }
 
-    enum CodingKeys: String, CodingKey { case name, dbUser, port, groupOverride = "group" }
+    enum CodingKeys: String, CodingKey { case name, dbUser, port, groupOverride = "group", kind }
 
-    public init(name: String, dbUser: String = "developer", port: Int) {
+    public init(name: String, dbUser: String = "developer", port: Int, kind: Kind = .db) {
         self.name = name
         self.dbUser = dbUser
         self.port = port
+        self.kind = kind
     }
 
     public init(from decoder: Decoder) throws {
@@ -22,6 +28,37 @@ public struct TeleportTunnel: Codable, Equatable, Identifiable {
         dbUser = try c.decodeIfPresent(String.self, forKey: .dbUser) ?? "developer"
         port = try c.decode(Int.self, forKey: .port)
         groupOverride = try c.decodeIfPresent(String.self, forKey: .groupOverride)
+        // kind 가 생기기 전에 저장한 teleport.json 은 모두 DB 터널이다.
+        // 손으로 고친 오타나 모르는 값도 db 로 읽는다 (던지면 teleport.json 전체가 빈 설정으로 읽힌다).
+        kind = (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? .db
+    }
+
+    // db 항목은 kind 를 적지 않아 기존 teleport.json 과 같은 모양으로 저장하고, app 은 dbUser 를 적지 않는다.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encode(port, forKey: .port)
+        try c.encodeIfPresent(groupOverride, forKey: .groupOverride)
+        switch kind {
+        case .db: try c.encode(dbUser, forKey: .dbUser)
+        case .app: try c.encode(kind, forKey: .kind)
+        }
+    }
+
+    /// 터널을 띄우는 tsh 인자.
+    public var proxyArguments: [String] {
+        switch kind {
+        case .db: return ["proxy", "db", "--tunnel", name, "--db-user", dbUser, "--port", String(port)]
+        case .app: return ["proxy", "app", name, "--port", String(port)]
+        }
+    }
+
+    /// 끊을 때 이 리소스의 인증서를 지우는 tsh 인자.
+    public var logoutArguments: [String] {
+        switch kind {
+        case .db: return ["db", "logout", name]
+        case .app: return ["apps", "logout", name]
+        }
     }
 
     public var group: String {

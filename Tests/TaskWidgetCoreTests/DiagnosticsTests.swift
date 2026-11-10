@@ -138,13 +138,15 @@ final class DiagnosticsTests: XCTestCase {
         let suite = UserDefaults(suiteName: "diag-\(UUID().uuidString)")!
         let s = Settings(defaults: suite)
         s.jiraEmail = "me@example.com"; s.jiraBaseURL = "https://x.atlassian.net"
-        let cfg = TeleportConfig(proxy: "p.example.com", user: "tester", tunnels: [TeleportTunnel(name: "mrs-dv", port: 4306)])
+        let cfg = TeleportConfig(proxy: "p.example.com", user: "tester",
+                                 tunnels: [TeleportTunnel(name: "mrs-dv", port: 4306), TeleportTunnel(name: "grafana-dv", port: 18123, kind: .app)])
         let i = DiagnosticsExport.InfoInput(build: BuildInfo(infoDictionary: [:]), settings: s, teleport: cfg, tshPath: "/x/tsh",
                                             claudePath: nil, hasJiraToken: true, hasTeleportSecrets: false)
         let t = DiagnosticsExport.infoText(i, run: { exe, _ in "out(\(exe))" })
         XCTAssertTrue(t.contains("email=***@example.com"))
         XCTAssertFalse(t.contains("me@"))
         XCTAssertTrue(t.contains("jira token 있음: yes") && t.contains("teleport 비밀 정보 있음: no"))
-        XCTAssertTrue(t.contains("tunnel mrs-dv port=4306"))
+        XCTAssertTrue(t.contains("tunnel mrs-dv port=4306 dbUser=developer kind=db"))
+        XCTAssertTrue(t.contains("tunnel grafana-dv port=18123 kind=app\n"))   // 앱은 dbUser 없음
     }
 }
