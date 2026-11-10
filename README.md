@@ -200,17 +200,17 @@ Jira 이슈를 고르고 환경(DV / ST / ST2, 설정에서 켜면 PR)을 골라
 
 로그인이 두 가지라 헷갈리기 쉽다. **Aside 계정**은 Aside 브라우저와 CLI 를 쓰는 내 계정이고, **테스트 환경 계정**은 DV·ST 에 들어가는 테스트 계정으로 Aside Vault 에 저장한다. 아래 순서대로 하고 단계마다 **확인**을 본다.
 
-1. **Aside 브라우저 설치·로그인**: Aside 를 설치하고 내 Aside 계정으로 로그인한 뒤 켜 둔다. 검증하는 동안 Aside 가 켜져 있어야 한다.
+1. **Aside 브라우저 설치·로그인**: [aside.com/download](https://aside.com/download) 에서 Aside 를 설치하고 내 Aside 계정으로 로그인한 뒤 켜 둔다. 브라우저가 없으면 ATM 의 E2E 탭·설정에 **Aside 다운로드** 버튼이 뜬다. 검증하는 동안 Aside 가 켜져 있어야 한다.
    - Jira 이슈 내용은 ATM 이 [Jira 토큰](#jira)으로 받아 넘기므로 Aside 브라우저가 Jira 에 로그인돼 있지 않아도 된다 (토큰이 없으면 Aside 브라우저로 Jira 를 연다).
-2. **Aside CLI 설치**: 아래 명령으로 설치한다 (또는 Aside 설정 > 개발자에서 설치).
+2. **Aside CLI 설치**: ATM 의 E2E 탭이나 설정 > E2E 에 뜨는 **터미널에서 설치** 를 누른다. 공식 설치 명령이 터미널에서 돌고, 끝나면 같은 창에서 3 의 로그인으로 이어진다. 직접 하려면 아래 명령을 쓴다 (또는 Aside 설정 > 개발자에서 설치).
 
    ```bash
    curl -fsSL https://releases.aside.com/install.sh | bash
    ```
 
-   - 확인: ATM 설정 > E2E 맨 위 줄이 "Aside CLI 를 찾지 못했어요" 가 아니면 된다. ATM 은 `~/.local/bin/aside` 를 알아서 찾는다.
+   - 확인: ATM 설정 > E2E 맨 위 줄이 "Aside CLI 가 없어요" 가 아니면 된다. ATM 은 `~/.local/bin/aside` 를 알아서 찾는다.
    - 설치 직후 터미널에서 `aside` 가 `command not found` 이면 PATH 에 `~/.local/bin` 이 아직 없는 것이다. 새 터미널을 열거나 `~/.local/bin/aside` 로 실행한다.
-3. **CLI 를 내 Aside 계정에 연결**: ATM 설정 > E2E (또는 설정 도우미) 의 **터미널에서 로그인** 을 누른다. ATM 이 찾은 aside 로 터미널 창을 열고, 승인 화면을 볼 수 있게 Aside 를 앞으로 띄운다.
+3. **CLI 를 내 Aside 계정에 연결**: 2 에서 **터미널에서 설치** 를 눌렀으면 그 창에서 이어진다. CLI 가 이미 있으면 ATM 설정 > E2E (또는 설정 도우미) 의 **터미널에서 로그인** 을 누른다. ATM 이 찾은 aside 로 터미널 창을 열고, 승인 화면을 볼 수 있게 Aside 를 앞으로 띄운다.
    1. 터미널에 Aside 계정 이메일을 넣는다 (1 의 브라우저와 같은 계정).
    2. Aside 브라우저의 설정 > 계정 > 기기에서 이 기기를 승인한다.
    3. 확인: 승인되면 ATM 이 몇 초 안에 다시 확인해 "✓ aside 준비됨 · <이메일>" 로 바뀐다. 터미널 창은 닫아도 된다.
@@ -394,7 +394,8 @@ make install
 - **Jira 401**: 토큰을 다시 발급해 저장한다.
 - **요약 실패 `claudeNotFound`**: 터미널에서 `command -v claude` 로 경로를 확인해 설정 > 요약 > claude 경로에 입력한다 (또는 **자동 찾기**).
 - **요약이 "기록 없음"**: 활동 훅이 설치됐는지, 훅 설치 이후의 새 세션인지 확인한다.
-- **E2E "Aside CLI 를 찾지 못했어요"**: 터미널에서 `command -v aside` 로 경로를 확인해 설정 > E2E > aside 경로에 넣고 **다시 확인**.
+- **E2E "Aside 브라우저가 없어요"**: **Aside 다운로드** ([aside.com/download](https://aside.com/download)) 로 설치하고 켠 뒤 **다시 확인**.
+- **E2E "Aside CLI 가 없어요"**: **터미널에서 설치** 를 누른다. 이미 설치했는데 이렇게 뜨면 터미널에서 `command -v aside` 로 경로를 확인해 설정 > E2E > aside 경로에 넣고 **다시 확인**.
 - **E2E "로그인이 필요해요"**: 설정 > E2E 의 **터미널에서 로그인** 을 눌러 이메일을 넣고 Aside 설정 > 계정 > 기기에서 승인한다. 터미널에서 직접 하면 `aside login` (`command not found` 면 `~/.local/bin/aside login`).
 - **E2E "Aside CLI 가 오래됐어요"**: 터미널에서 `aside update` (못 찾으면 `~/.local/bin/aside update`) 로 업데이트하고 **다시 확인**. Aside CLI 1.26.1107 에서 확인했다.
 - **E2E "Aside 브라우저가 꺼져 있어요"**: Aside 브라우저를 켠 뒤 다시 실행한다. 검증은 켜져 있는 Aside 브라우저에서 돈다.

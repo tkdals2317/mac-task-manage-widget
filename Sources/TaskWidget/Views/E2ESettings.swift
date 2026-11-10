@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TaskWidgetCore
 
@@ -15,20 +16,42 @@ struct AsideStatusLine: View {
             case .ready(let path, let account, _):
                 Text("✓ aside 준비됨 · \(account.isEmpty ? "로그인됨" : account)").foregroundStyle(.green)
                 Text("\(path) (\(e2e.asideSource))").foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-            case .missing, .signedOut, .failed:
+            case .browserMissing, .missing, .signedOut, .failed:
                 Text(e2e.aside.problem ?? "").foregroundStyle(.orange).lineLimit(3)
             }
             Spacer(minLength: 4)
-            if case .signedOut = e2e.aside {
-                Button { e2e.openLoginTerminal() } label: { AccentChip(icon: "terminal", text: "터미널에서 로그인", style: .solid) }
-                    .buttonStyle(.plain)
-                    .help("ATM 이 찾은 aside 로 로그인 창을 열어요. Aside 설정 > 계정 > 기기에서 승인하면 자동으로 다시 확인해요.")
-            }
+            AsideFixButton(e2e: e2e)
             Button { Task { await e2e.checkAside() } } label: { AccentChip(icon: "arrow.clockwise", text: "다시 확인", style: .soft) }
                 .buttonStyle(.plain)
                 .disabled(e2e.aside == .checking)
         }
         .font(.system(size: 11.5 * scale))
+    }
+}
+
+/// 지금 막힌 단계를 푸는 버튼: 브라우저 다운로드 → CLI 설치(로그인까지) → CLI 로그인. 그 밖에는 안 보인다.
+struct AsideFixButton: View {
+    @ObservedObject var e2e: E2EModel
+
+    var body: some View {
+        switch e2e.aside {
+        case .browserMissing:
+            Button { if let u = URL(string: AsideCLI.browserDownloadURL) { NSWorkspace.shared.open(u) } } label: {
+                AccentChip(icon: "arrow.down.circle", text: "Aside 다운로드", style: .solid)
+            }
+            .buttonStyle(.plain)
+            .help(AsideCLI.browserDownloadURL)
+        case .missing:
+            Button { e2e.openInstallTerminal() } label: { AccentChip(icon: "terminal", text: "터미널에서 설치", style: .solid) }
+                .buttonStyle(.plain)
+                .help("공식 설치 명령으로 Aside CLI 를 설치하고 같은 창에서 로그인까지 이어서 해요. Aside 설정 > 계정 > 기기에서 승인하면 자동으로 다시 확인해요.")
+        case .signedOut:
+            Button { e2e.openLoginTerminal() } label: { AccentChip(icon: "terminal", text: "터미널에서 로그인", style: .solid) }
+                .buttonStyle(.plain)
+                .help("ATM 이 찾은 aside 로 로그인 창을 열어요. Aside 설정 > 계정 > 기기에서 승인하면 자동으로 다시 확인해요.")
+        case .unchecked, .checking, .ready, .failed:
+            EmptyView()
+        }
     }
 }
 
@@ -69,7 +92,7 @@ struct E2ESettingsSections: View {
                 .onSubmit { Task { await e2e.checkAside() } }
             CommandCopyRow(label: "설치", command: AsideCLI.installCommand)
             CommandCopyRow(label: "로그인", command: AsideCLI.loginCommand)
-            Text("Aside 브라우저를 설치해 켜 두세요. CLI 는 위 명령이나 Aside 설정 > 개발자에서 설치하고, 로그인이 필요하면 '터미널에서 로그인'을 눌러 이메일을 넣은 뒤 Aside 설정 > 계정 > 기기에서 승인해요. 터미널에서 aside 를 못 찾으면 ~/.local/bin/aside 로 실행해요.")
+            Text("Aside 브라우저(\(AsideCLI.browserDownloadURL))를 설치해 켜 두세요. 위 줄의 버튼이 지금 필요한 단계를 열어 줘요: CLI 가 없으면 '터미널에서 설치'(설치 후 로그인까지), 로그인만 필요하면 '터미널에서 로그인'. 이메일을 넣고 Aside 설정 > 계정 > 기기에서 승인하면 끝이에요. 직접 할 때 터미널에서 aside 를 못 찾으면 ~/.local/bin/aside 로 실행해요.")
                 .font(.caption).foregroundStyle(.secondary)
             Text("ATM 은 aside 를 guard 권한으로 실행해요. Aside 에이전트는 Aside 계정 폴더 안의 실행용 폴더(~/.aside/u/<계정>/atm-e2e)에서만 파일을 읽고 쓰고, 끝나면 ATM 이 스크린샷 이미지와 result.json 만 골라 가져와요. 다만 Aside 브라우저에 로그인된 사이트는 그대로 쓸 수 있으니 믿을 수 있는 이슈만 검증하세요.")
                 .font(.caption).foregroundStyle(.orange)

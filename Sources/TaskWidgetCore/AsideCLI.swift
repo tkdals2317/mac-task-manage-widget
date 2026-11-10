@@ -38,13 +38,32 @@ public enum AsideCLI {
         return nil
     }
 
+    public static let browserDownloadURL = "https://aside.com/download"
+
     /// 터미널에서 CLI 로그인을 하는 스크립트 (.command 로 연다).
     /// 설치 스크립트가 넣는 ~/.local/bin 이 셸 PATH 에 없는 경우가 많아 ATM 이 찾은 경로를 그대로 쓴다.
     public static func loginScript(executable: String) -> String {
-        let exe = Updater.shellQuote(executable)
-        return """
+        "#!/bin/zsh\nclear\n" + loginSteps(exe: Updater.shellQuote(executable))
+    }
+
+    /// CLI 를 설치하고 같은 창에서 이어서 로그인하는 스크립트. 설치한 셸에는 아직 PATH 가 없어 설치 위치를 먼저 본다.
+    public static func installScript(installCommand: String = installCommand) -> String {
+        """
         #!/bin/zsh
         clear
+        echo "ATM · Aside CLI 설치"
+        echo
+        \(installCommand) || { echo; echo "설치에 실패했어요. 위 메시지를 확인해 주세요."; exit 1; }
+        A="$HOME/.local/bin/aside"
+        [ -x "$A" ] || A="$(command -v aside)"
+        [ -n "$A" ] || { echo; echo "설치한 aside 를 찾지 못했어요. 새 터미널에서 aside login 을 실행해 주세요."; exit 1; }
+        echo
+
+        """ + loginSteps(exe: "\"$A\"")
+    }
+
+    private static func loginSteps(exe: String) -> String {
+        """
         echo "ATM · Aside CLI 로그인"
         echo "1. 아래에 Aside 계정 이메일을 넣어요."
         echo "2. Aside 브라우저의 설정 > 계정 > 기기에서 이 기기를 승인해요."

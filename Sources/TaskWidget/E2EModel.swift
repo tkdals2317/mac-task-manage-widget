@@ -6,6 +6,8 @@ import TaskWidgetCore
 enum AsideStatus: Equatable {
     case unchecked
     case checking
+    /// CLI 도 Aside 브라우저도 없다. 브라우저부터 설치해야 한다.
+    case browserMissing
     case missing
     case signedOut(path: String)
     /// accountId: 실행용 폴더(`~/.aside/u/<id>/atm-e2e`)를 정하는 Aside 계정 번호
@@ -18,7 +20,7 @@ enum AsideStatus: Equatable {
     var path: String? {
         switch self {
         case .signedOut(let p), .ready(let p, _, _), .failed(let p, _): return p
-        case .unchecked, .checking, .missing: return nil
+        case .unchecked, .checking, .browserMissing, .missing: return nil
         }
     }
 
@@ -26,8 +28,9 @@ enum AsideStatus: Equatable {
     var problem: String? {
         switch self {
         case .unchecked, .checking: return "Aside CLI 를 확인하는 중이에요"
-        case .missing: return "Aside CLI 를 찾지 못했어요 · 설치한 뒤 설정 > E2E 에서 다시 확인"
-        case .signedOut: return "Aside CLI 로그인이 필요해요 · 설정 > E2E 의 '터미널에서 로그인' 후 Aside 설정 > 계정 > 기기에서 승인"
+        case .browserMissing: return "Aside 브라우저가 없어요 · 'Aside 다운로드'로 설치하고 켠 뒤 다시 확인"
+        case .missing: return "Aside CLI 가 없어요 · '터미널에서 설치'를 누르면 설치하고 로그인까지 이어서 해요"
+        case .signedOut: return "Aside CLI 로그인이 필요해요 · '터미널에서 로그인' 후 Aside 설정 > 계정 > 기기에서 승인"
         case .failed(_, let m): return "Aside CLI 확인 실패 · \(m)"
         case .ready: return nil
         }
@@ -165,7 +168,7 @@ final class E2EModel: ObservableObject {
             return (f.path, f.source, AsideCLI.accountStatus(executable: f.path))
         }.value
         guard let found else {
-            aside = .missing
+            aside = AsideBrowser.appURL == nil ? .browserMissing : .missing
             asideSource = ""
             return
         }
@@ -180,13 +183,23 @@ final class E2EModel: ObservableObject {
         }
     }
 
-    /// 찾은 aside 로 로그인하는 터미널 창을 열고, 승인 화면이 보이게 Aside 를 앞으로 띄운다.
-    /// 승인될 때까지 3초마다 조용히 다시 확인한다 (최대 5분).
+    /// 찾은 aside 로 로그인하는 터미널 창을 연다. 승인될 때까지 다시 확인한다 (최대 5분).
     func openLoginTerminal() {
         guard let exe = aside.path else { return }
-        let script = FileManager.default.temporaryDirectory.appendingPathComponent("ATM-aside-login.command")
+        openTerminal(AsideCLI.loginScript(executable: exe), name: "ATM-aside-login.command", watchMinutes: 5)
+    }
+
+    /// CLI 를 설치하고 이어서 로그인하는 터미널 창을 연다. 설치·승인까지 기다린다 (최대 10분).
+    func openInstallTerminal() {
+        openTerminal(AsideCLI.installScript(), name: "ATM-aside-install.command", watchMinutes: 10)
+    }
+
+    /// 스크립트를 .command 로 써서 터미널로 열고, 승인 화면이 보이게 Aside 를 앞으로 띄운다.
+    /// 준비될 때까지 3초마다 조용히 다시 확인한다.
+    private func openTerminal(_ text: String, name: String, watchMinutes: Int) {
+        let script = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         do {
-            try Data(AsideCLI.loginScript(executable: exe).utf8).write(to: script, options: .atomic)
+            try Data(text.utf8).write(to: script, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
         } catch {
             submitError = "터미널 스크립트를 만들지 못했어요 · \(error.localizedDescription)"
@@ -198,7 +211,7 @@ final class E2EModel: ObservableObject {
         NSWorkspace.shared.open(script)
         loginWatch?.cancel()
         loginWatch = Task { [weak self] in
-            for _ in 0..<100 {
+            for _ in 0..<(watchMinutes * 20) {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled, let me = self else { return }
                 await me.checkAside(quiet: true)

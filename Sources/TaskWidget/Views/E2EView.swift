@@ -102,14 +102,18 @@ private struct E2ERequestView: View {
     }
 
     private func asideProblem(_ text: String) -> some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(text).font(.system(size: 11 * scale)).foregroundStyle(.orange).lineLimit(3)
-            Spacer(minLength: 4)
-            Button { Task { await e2e.checkAside() } } label: { AccentChip(icon: "arrow.clockwise", text: "다시 확인", style: .soft) }
-                .buttonStyle(.plain)
-            Button { openSettings() } label: { AccentChip(icon: "gearshape", text: "설정", style: .plain) }
-                .buttonStyle(.plain)
+            HStack(spacing: 6) {
+                AsideFixButton(e2e: e2e)
+                Button { Task { await e2e.checkAside() } } label: { AccentChip(icon: "arrow.clockwise", text: "다시 확인", style: .soft) }
+                    .buttonStyle(.plain)
+                Button { openSettings() } label: { AccentChip(icon: "gearshape", text: "설정", style: .plain) }
+                    .buttonStyle(.plain)
+                Spacer(minLength: 0)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.1)))
         .padding(.top, 6)

@@ -352,6 +352,34 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(AsideCLI.accountStatus(executable: exe.path), .signedIn(email: "old@example.com", accountId: 3, plan: ""))
     }
 
+    /// 설치한 셸에는 아직 PATH 가 없어도 설치 위치(~/.local/bin/aside)의 aside 로 이어서 로그인한다.
+    func testInstallScriptLogsInWithInstalledAside() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("aside-install-\(UUID().uuidString)")
+        let bin = home.appendingPathComponent(".local/bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let exe = bin.appendingPathComponent("aside")
+        try Data("#!/bin/sh\necho \"fake-aside $*\"\n".utf8).write(to: exe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exe.path)
+
+        func run(_ install: String) throws -> ProcessResult {
+            let script = home.appendingPathComponent("install.command")
+            try Data(AsideCLI.installScript(installCommand: install).utf8).write(to: script)
+            return ProcessRunner.run(executable: "/bin/zsh", arguments: [script.path],
+                                     environment: ["HOME": home.path, "PATH": "/usr/bin:/bin", "TERM": "dumb"], timeout: 20)
+        }
+        let ok = try run("echo installed")
+        XCTAssertEqual(ok.status, 0, ok.stdout + ok.stderr)
+        XCTAssertTrue(ok.stdout.contains("installed"))
+        XCTAssertTrue(ok.stdout.contains("fake-aside login"))
+        XCTAssertTrue(ok.stdout.contains("fake-aside account status"))
+
+        let failed = try run("false")
+        XCTAssertEqual(failed.status, 1)
+        XCTAssertTrue(failed.stdout.contains("설치에 실패했어요"))
+        XCTAssertFalse(failed.stdout.contains("fake-aside login"))
+    }
+
     func testPromptHasJobDirAndSchema() {
         let p = E2EPrompt.render(jobDir: URL(fileURLWithPath: "/tmp/a b/jobs/1", isDirectory: true))
         XCTAssertTrue(p.contains("/tmp/a b/jobs/1/request.json"))
