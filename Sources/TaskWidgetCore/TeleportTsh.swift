@@ -33,7 +33,12 @@ public enum TeleportTsh {
     // MARK: - 파싱
 
     /// `tsh db ls --format=json`. 이름 없는 항목은 건너뛰고 이름순. 운영 = 이름에 prd/prod 또는 env 라벨.
-    public static func parseDBList(json: Data) -> [TeleportDB] {
+    public static func parseDBList(json: Data) -> [TeleportDB] { parseResources(json: json) }
+
+    /// `tsh apps ls --format=json`. db ls 와 같은 규칙. metadata 만 읽는다 (spec 의 rewrite 헤더에는 자격 값이 들어 있다).
+    public static func parseAppList(json: Data) -> [TeleportDB] { parseResources(json: json) }
+
+    private static func parseResources(json: Data) -> [TeleportDB] {
         guard let arr = (try? JSONSerialization.jsonObject(with: json)) as? [[String: Any]] else { return [] }
         var seen = Set<String>()
         var out: [TeleportDB] = []
@@ -68,7 +73,7 @@ public enum TeleportTsh {
     // MARK: - 포트
 
     /// 127.0.0.1:port 에 TCP 연결이 되는가 (로컬이라 즉시 성공/거절).
-    /// 이전 ATM 실행이 남긴 같은 터널(`tsh proxy db --tunnel <name>`) 이 port 를 잡고 있으면 그 PID 들.
+    /// 이전 ATM 실행이 남긴 같은 터널(`tsh proxy db --tunnel <name>` 또는 `tsh proxy app <name>`) 이 port 를 잡고 있으면 그 PID 들.
     /// 다른 프로그램이 쓰는 포트는 돌려주지 않는다.
     public static func leftoverTunnelPIDs(port: Int, name: String) -> [Int32] {
         let r = ProcessRunner.run(executable: "/usr/sbin/lsof", arguments: ["-t", "-iTCP:\(port)", "-sTCP:LISTEN"], timeout: 5)
@@ -79,10 +84,18 @@ public enum TeleportTsh {
     }
 
     static func isTunnelCommand(_ cmd: String, name: String) -> Bool {
-        let parts = cmd.split(separator: " ").map(String.init)
-        guard let exe = parts.first, exe.hasSuffix("tsh"), parts.contains("proxy"), parts.contains("db"),
-              let i = parts.firstIndex(of: "--tunnel"), i + 1 < parts.count else { return false }
-        return parts[i + 1] == name
+        // 공백·줄바꿈으로 나눈다 (ps 출력 끝 줄바꿈이 마지막 인자에 붙지 않게).
+        let parts = cmd.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let exe = parts.first, exe.hasSuffix("tsh"), let p = parts.firstIndex(of: "proxy"), p + 1 < parts.count else { return false }
+        switch parts[p + 1] {
+        case "db":
+            guard let i = parts.firstIndex(of: "--tunnel"), i + 1 < parts.count else { return false }
+            return parts[i + 1] == name
+        case "app":
+            return p + 2 < parts.count && parts[p + 2] == name
+        default:
+            return false
+        }
     }
 
     private static let versionLock = NSLock()

@@ -204,7 +204,9 @@ public enum DiagnosticsExport {
         l.append("secretStorage: \(s.secretStorage)")
         l.append("enabledTabs: \(s.enabledTabs)")
         l.append("teleport: proxy=\(t.proxy) user=\(t.user)")
-        for x in t.tunnels { l.append("  tunnel \(x.name) port=\(x.port) dbUser=\(x.dbUser)") }
+        for x in t.tunnels {
+            l.append("  tunnel \(x.name) port=\(x.port)" + (x.kind == .app ? " kind=app" : " dbUser=\(x.dbUser) kind=db"))
+        }
         l.append("jira: \(s.jiraBaseURL.isEmpty ? "(주소 없음)" : s.jiraBaseURL) email=\(maskEmail(s.jiraEmail))")
         l.append("jira token 있음: \(yn(i.hasJiraToken))")
         l.append("teleport 비밀 정보 있음: \(yn(i.hasTeleportSecrets))")

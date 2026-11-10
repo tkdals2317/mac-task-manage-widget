@@ -7,6 +7,7 @@ import TaskWidgetCore
 struct DBEntry: Identifiable {
     let name: String
     let isProd: Bool
+    var kind: TeleportTunnel.Kind = .db
     var checked = false
     var dbUser = "developer"
     var portText = ""
@@ -30,6 +31,8 @@ final class TeleportSetupModel: ObservableObject {
 
     private let tp: TeleportManager
     private var saved: TeleportConfig
+    /// 목록을 받지 못한 종류의 저장된 터널. 화면에 없다고 저장 때 지워지지 않게 그대로 다시 넣는다.
+    private var kept: [TeleportTunnel] = []
 
     init(tp: TeleportManager) {
         self.tp = tp
@@ -44,11 +47,11 @@ final class TeleportSetupModel: ObservableObject {
 
     var checked: [DBEntry] { entries.filter(\.checked) }
     var duplicates: Set<Int> {
-        TeleportConfig.duplicatePorts(checked.map { TeleportTunnel(name: $0.name, port: Int($0.portText) ?? -1) })
+        TeleportConfig.duplicatePorts(checked.map { TeleportTunnel(name: $0.name, port: Int($0.portText) ?? -1) } + kept)
     }
     var canSave: Bool {
         !checked.isEmpty && duplicates.isEmpty
-            && checked.allSatisfy { (Int($0.portText).map { (1024...65535).contains($0) } ?? false) && !$0.dbUser.trimmed.isEmpty }
+            && checked.allSatisfy { (Int($0.portText).map { (1024...65535).contains($0) } ?? false) && ($0.kind == .app || !$0.dbUser.trimmed.isEmpty) }
     }
 
     // MARK: Step 1
@@ -97,7 +100,7 @@ final class TeleportSetupModel: ObservableObject {
     /// 이미 비밀번호·OTP 키가 저장돼 있는지 (설정 도우미를 다시 열었을 때 다시 입력하지 않게).
     var hasSavedSecrets: Bool { tp.hasSecrets }
 
-    /// 저장된 정보로 로그인한 뒤 DB 목록을 받는다.
+    /// 저장된 정보로 로그인한 뒤 DB·앱 목록을 받는다.
     func loadWithSaved() async {
         error = nil
         guard await tp.ensureLoggedIn(kind: "setup") else {
@@ -109,22 +112,46 @@ final class TeleportSetupModel: ObservableObject {
 
     // MARK: Step 2
 
+    /// `tsh db ls` 와 `tsh apps ls` 를 함께 받는다. 앱 목록은 권한이 없으면 실패할 수 있어, 앱 쪽 실패는 DB 목록을 막지 않는다.
     func loadDBs(tsh: String? = nil) async {
         guard let tsh = tsh ?? tp.tshPath else { return }
-        busy = true; error = nil
+        busy = true; error = nil; note = nil; kept = []
         defer { busy = false }
-        let r = await Task.detached { ProcessRunner.run(executable: tsh, arguments: ["db", "ls", "--format=json"], timeout: 30) }.value
-        let dbs = TeleportTsh.parseDBList(json: Data(r.stdout.utf8))
-        if r.status != 0 || dbs.isEmpty {
-            error = r.status != 0 ? "tsh db ls 실패: \(r.stderr.trimmed.suffix(200))" : "접근 가능한 DB 가 없어요"
+        let (r, ar) = await Task.detached {
+            (ProcessRunner.run(executable: tsh, arguments: ["db", "ls", "--format=json"], timeout: 30),
+             ProcessRunner.run(executable: tsh, arguments: ["apps", "ls", "--format=json"], timeout: 30))
+        }.value
+        let dbs = r.status == 0 ? TeleportTsh.parseDBList(json: Data(r.stdout.utf8)) : []
+        // apps ls 출력(spec)에는 자격 값이 들어 있어 stdout/stderr 를 로그에 남기지 않는다.
+        if ar.status != 0 { DiagLog.append("teleport setup: tsh apps ls 실패 (exit \(ar.status)), DB 만 표시") }
+        let savedDBs = saved.tunnels.filter { $0.kind == .db }, savedApps = saved.tunnels.filter { $0.kind == .app }
+        // states·wanted 가 이름으로 묶여 있어 DB 와 이름이 같은 앱은 뺀다 (DB 우선).
+        // DB 목록을 못 받았으면 저장된 DB 터널 이름을 기준으로 삼는다.
+        let dbNames = Set(dbs.map(\.name) + (r.status != 0 ? savedDBs.map(\.name) : []))
+        let apps = ar.status == 0 ? TeleportTsh.parseAppList(json: Data(ar.stdout.utf8)).filter { !dbNames.contains($0.name) } : []
+        if dbs.isEmpty && apps.isEmpty {
+            error = r.status != 0 ? "tsh db ls 실패: \(r.stderr.trimmed.suffix(200))" : "접근 가능한 DB·앱이 없어요"
             step = 2; entries = []; return
         }
-        let prev = Dictionary(uniqueKeysWithValues: saved.tunnels.map { ($0.name, $0) })
-        entries = dbs.map { db in
-            var e = DBEntry(name: db.name, isProd: db.isProd)
-            if let t = prev[db.name] { e.checked = true; e.dbUser = t.dbUser; e.portText = String(t.port) }
+        var notes: [String] = []
+        if r.status != 0 {
+            notes.append("tsh db ls 실패: \(r.stderr.trimmed.suffix(200))" + (savedDBs.isEmpty ? "" : " · 저장된 DB 터널은 그대로 둬요"))
+            kept += savedDBs
+        }
+        if ar.status != 0, !savedApps.isEmpty {
+            notes.append("앱 목록을 받지 못했어요 · 저장된 앱 터널은 그대로 둬요")
+            kept += savedApps
+        }
+        let dropped = ar.status == 0 ? savedApps.filter { dbNames.contains($0.name) }.map(\.name) : []
+        if !dropped.isEmpty { notes.append("이름이 같은 DB 가 있어 앱 터널 \(dropped.joined(separator: ", ")) 는 목록에서 빠졌어요") }
+        note = notes.isEmpty ? nil : notes.joined(separator: "\n")
+        let prev = Dictionary(saved.tunnels.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        func entry(_ x: TeleportDB, _ kind: TeleportTunnel.Kind) -> DBEntry {
+            var e = DBEntry(name: x.name, isProd: x.isProd, kind: kind)
+            if let t = prev[x.name], t.kind == kind { e.checked = true; e.dbUser = t.dbUser; e.portText = String(t.port) }
             return e
         }
+        entries = dbs.map { entry($0, .db) } + apps.map { entry($0, .app) }
         step = 2
     }
 
@@ -132,7 +159,7 @@ final class TeleportSetupModel: ObservableObject {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[i].checked = on
         if on, entries[i].portText.isEmpty {
-            let used = Set(entries.filter { $0.checked && $0.id != id }.compactMap { Int($0.portText) })
+            let used = Set(entries.filter { $0.checked && $0.id != id }.compactMap { Int($0.portText) } + kept.map(\.port))
             entries[i].portText = String(TeleportConfig.nextFreePort(startingAt: TeleportConfig.basePort, used: used))
         }
     }
@@ -141,12 +168,17 @@ final class TeleportSetupModel: ObservableObject {
         error = nil
         var c = saved
         // teleport.json 에 직접 적은 그룹 이름은 유지한다.
-        let prevGroup = Dictionary(uniqueKeysWithValues: saved.tunnels.map { ($0.name, $0.groupOverride) })
+        let prevGroup = Dictionary(saved.tunnels.map { ($0.name, $0.groupOverride) }, uniquingKeysWith: { a, _ in a })
         c.tunnels = checked.map { e in
-            var t = TeleportTunnel(name: e.name, dbUser: e.dbUser.trimmed, port: Int(e.portText) ?? 0)
+            var t = e.kind == .app
+                ? TeleportTunnel(name: e.name, port: Int(e.portText) ?? 0, kind: .app)
+                : TeleportTunnel(name: e.name, dbUser: e.dbUser.trimmed, port: Int(e.portText) ?? 0)
             t.groupOverride = prevGroup[e.name] ?? nil
             return t
         }
+        // 목록을 받지 못한 종류의 저장된 터널은 유지한다 (같은 이름을 새로 고른 게 있으면 그쪽 우선).
+        let names = Set(c.tunnels.map(\.name))
+        c.tunnels += kept.filter { !names.contains($0.name) }
         do {
             try c.save()
             tp.setupFinished(c)
@@ -189,7 +221,7 @@ struct TeleportSetupView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(m.step == 1 ? "1/2  계정" : "2/2  DB 선택")
+                    Text(m.step == 1 ? "1/2  계정" : "2/2  DB·앱 선택")
                         .font(.system(size: 12 * scale, weight: .semibold)).foregroundStyle(.secondary)
                     if m.step == 1 { account } else { dbs }
                     if let e = m.error {
@@ -266,6 +298,10 @@ struct TeleportSetupView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("DB 접속 툴: localhost, 이 포트, DB 사용자, 비밀번호 없음")
                 .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+            if m.entries.contains(where: { $0.kind == .app }) {
+                Text("HTTP 앱: http://localhost:포트, 인증 자동")
+                    .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+            }
             if m.entries.isEmpty && !m.busy {
                 Button("다시 불러오기") { Task { await m.loadDBs() } }.controlSize(.small)
             }
@@ -276,10 +312,12 @@ struct TeleportSetupView: View {
                         Text(e.name).font(.system(size: 12 * scale))
                     }
                     .toggleStyle(.checkbox)
+                    if e.kind == .app { Text("HTTP").font(.system(size: 10.5 * scale, weight: .semibold)).foregroundStyle(.secondary) }
                     if e.isProd { Text("운영").font(.system(size: 10.5 * scale, weight: .semibold)).foregroundStyle(.red) }
                     Spacer()
                     if e.checked, let i = m.entries.firstIndex(where: { $0.id == e.id }) {
-                        TextField("DB 사용자", text: $m.entries[i].dbUser).frame(width: 90)
+                        // 앱은 DB 사용자가 없다 (tsh proxy app 은 포트만 받는다).
+                        if e.kind == .db { TextField("DB 사용자", text: $m.entries[i].dbUser).frame(width: 90) }
                         TextField("포트", text: $m.entries[i].portText).frame(width: 60)
                             .foregroundStyle(dup.contains(Int(e.portText) ?? -1) ? Color.red : Color.primary)
                     }

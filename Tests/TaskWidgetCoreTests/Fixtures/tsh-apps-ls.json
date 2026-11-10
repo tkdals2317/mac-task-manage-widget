@@ -1,0 +1,8 @@
+[
+  {"kind":"app","metadata":{"name":"grafana-st2","labels":{"env":"development"}}},
+  {"kind":"app","metadata":{"name":"grafana-dv","labels":{"Project":"ats","env":"development"}}},
+  {"kind":"app","metadata":{"name":"grafana-prd","labels":{"env":"development"}}},
+  {"kind":"app","metadata":{"name":"kibana","labels":{"env":"production"}}},
+  {"kind":"app","metadata":{}},
+  {"kind":"app","metadata":{"name":"grafana-dv"}}
+]
