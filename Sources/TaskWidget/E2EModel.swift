@@ -8,7 +8,8 @@ enum AsideStatus: Equatable {
     case checking
     case missing
     case signedOut(path: String)
-    case ready(path: String, account: String)
+    /// accountId: 실행용 폴더(`~/.aside/u/<id>/atm-e2e`)를 정하는 Aside 계정 번호
+    case ready(path: String, account: String, accountId: Int)
     case failed(path: String, message: String)
 
     var isReady: Bool { if case .ready = self { return true }; return false }
@@ -60,7 +61,9 @@ final class E2EModel: ObservableObject {
             if !job.status.isActive {
                 DiagLog.append("e2e \(job.id) \(job.status.rawValue)\(job.error.map { " · \($0)" } ?? "")")
             }
-            Task { @MainActor in self?.reload() }
+            // Swift 5.10: weak self(var)를 Task 안에서 바로 쓰면 막힌다. let 으로 옮겨 넘긴다.
+            let me = self
+            Task { @MainActor in me?.reload() }
         }
     }
 
@@ -73,6 +76,9 @@ final class E2EModel: ObservableObject {
                 let closed = store.recoverOnLaunch(createdBefore: launchedAt)
                 store.prune(olderThanDays: days)
                 var notes: [String] = []
+                for id in E2EJobStore.pruneWorkDirs(in: AsideCLI.workRoots(), createdBefore: launchedAt) {
+                    notes.append("남은 실행용 폴더 정리 (\(id))")
+                }
                 for c in closed {
                     if let pid = c.pid, AsideCLI.terminateLeftover(pid) { notes.append("남은 aside 프로세스 종료 (\(c.id))") }
                     if let sid = c.sessionId, let exe = AsideCLI.locateWithSource(configured: configured)?.path {
@@ -121,7 +127,7 @@ final class E2EModel: ObservableObject {
     func checkAside() async {
         guard aside != .checking else { return }
         // 스크린샷 데모는 실제 CLI 를 부르지 않는다
-        if DemoFixtures.isOn { aside = .ready(path: "aside", account: "demo@example.com"); asideSource = "데모"; return }
+        if DemoFixtures.isOn { aside = .ready(path: "aside", account: "demo@example.com", accountId: 0); asideSource = "데모"; return }
         aside = .checking
         let configured = Settings.shared.e2eAsidePath
         let found = await Task.detached { () -> (path: String, source: String, account: AsideAccountStatus)? in
@@ -136,7 +142,7 @@ final class E2EModel: ObservableObject {
         asideSource = found.source
         switch found.account {
         case .signedIn(let who, let accountId, let plan):
-            aside = .ready(path: found.path, account: who)
+            aside = .ready(path: found.path, account: who, accountId: accountId)
             asidePlan = plan
             asideModels = await Task.detached { AsideCLI.models(accountId: accountId) }.value
         case .signedOut: aside = .signedOut(path: found.path)
@@ -171,6 +177,10 @@ final class E2EModel: ObservableObject {
             submitError = "한 번에 \(s.e2eMaxIssues)건까지 실행할 수 있어요 (설정 > E2E 에서 바꿀 수 있어요)"
             return false
         }
+        guard env != .pr || s.e2eAllowPR else {
+            submitError = "PR(운영) 환경은 설정 > E2E 에서 켜야 실행할 수 있어요"
+            return false
+        }
         let base = Onboarding.normalizedURL(s.e2eURL(env))
         guard !base.isEmpty else { submitError = "\(env.rawValue) 환경 주소를 설정 > E2E 에 입력하세요"; return false }
         guard !submitting else { return false }
@@ -178,14 +188,10 @@ final class E2EModel: ObservableObject {
         defer { submitting = false }
 
         if !aside.isReady { await checkAside() }
-        guard case .ready(let exe, _) = aside else { submitError = aside.problem; return false }
+        guard case .ready(let exe, _, let accountId) = aside else { submitError = aside.problem; return false }
 
+        // 비밀번호는 넘기지 않는다. 로그인은 Aside 비밀번호 관리자나 이미 로그인된 세션으로 한다.
         let user = s.e2eUser(env).trimmingCharacters(in: .whitespaces)
-        // 계정 ID 가 비어 있으면 비밀번호도 넘기지 않고 Aside 에 저장된 로그인을 쓰게 한다.
-        var password: String?
-        if !user.isEmpty {
-            password = await Task.detached { SecretStore.get(service: E2ESecrets.service, account: E2ESecrets.account(env)) }.value
-        }
         let jira = Onboarding.normalizedURL(s.jiraBaseURL)
         let jobId = E2EJobID.make()
         let (files, logNotes) = await prepareIssueFiles(keys: keys, jobDir: store.dir(jobId), jiraBase: jira)
@@ -203,12 +209,13 @@ final class E2EModel: ObservableObject {
             submitError = "요청 파일을 만들지 못했어요: \(error.localizedDescription)"
             return false
         }
+        let workDir = AsideCLI.workDir(accountId: accountId, jobId: job.id)
         let options = E2ERunOptions(
             executable: exe,
-            arguments: AsideCLI.execArguments(prompt: E2EPrompt.render(jobDir: store.dir(job.id)), model: model),
+            arguments: AsideCLI.execArguments(prompt: E2EPrompt.render(jobDir: workDir), model: model),
             environment: AsideCLI.environment(executable: exe),
             timeout: E2ERunPolicy.timeout(issueCount: keys.count, minutesPerIssue: s.e2eMinutesPerIssue, maxMinutes: s.e2eMaxMinutes),
-            password: password,
+            workDir: workDir,
             stopSession: { AsideCLI.stopSession(executable: exe, id: $0) },
             logNotes: logNotes)
         runner.enqueue(job, options: options)

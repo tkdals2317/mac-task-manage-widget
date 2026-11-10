@@ -18,7 +18,8 @@ public enum E2EResultLoad: Equatable {
     case ok(E2EResult)
 }
 
-/// `<root>/<jobId>/` 폴더 하나가 job 하나. job.json 은 ATM 과 Aside 가 같이 고치므로 키 단위로 바꾼다(patch).
+/// `<root>/<jobId>/` 폴더 하나가 job 하나. Aside 는 이 폴더를 보지 않는다.
+/// 실행할 때만 Aside 쪽 실행용 폴더에 요청을 복사하고(prepareWorkDir), 끝나면 결과만 골라 가져온다(importResults).
 public struct E2EJobStore {
     public let root: URL
 
@@ -80,7 +81,7 @@ public struct E2EJobStore {
         }
     }
 
-    /// job.json 의 키만 바꾼다. Aside 가 덧붙인 키는 그대로 둔다.
+    /// job.json 의 키만 바꾼다. 모르는 키는 그대로 둔다.
     public func patch(_ id: String, set: [String: Any] = [:], remove: [String] = []) throws {
         let url = jobFile(id)
         let data = try Data(contentsOf: url)
@@ -94,16 +95,11 @@ public struct E2EJobStore {
         try? OwnerOnlyFile.write(Data(String(pid).utf8), to: pidFile(id))
     }
 
-    /// 실행 직전에만 부른다. 끝나면 `finish` 또는 `scrubPassword` 가 지운다.
-    public func setPassword(_ password: String, for id: String) throws {
-        try patch(id, set: ["password": password])
-    }
-
-    /// 실행이 끝난 job 을 마무리한다: 상태·오류·종료 시각을 쓰고 비밀번호를 지운다.
-    /// job.json 이 깨졌거나 없어졌으면 메모리의 job(비밀번호 없음)으로 다시 쓴다.
+    /// 실행이 끝난 job 을 마무리한다: 상태·오류·종료 시각을 쓴다.
+    /// job.json 이 깨졌거나 없어졌으면 메모리의 job 으로 다시 쓴다.
     @discardableResult
     public func finish(_ job: E2EJob, status: E2EJobStatus, error: String?, sessionId: String?,
-                       secret: String? = nil, now: Date = Date()) throws -> E2EJob {
+                       now: Date = Date()) throws -> E2EJob {
         var out = load(job.id) ?? job
         out.status = status
         out.finishedAt = now
@@ -113,62 +109,86 @@ public struct E2EJobStore {
         if let error { set["error"] = error }
         if let s = out.sessionId { set["sessionId"] = s }
         do {
-            try patch(job.id, set: set, remove: ["password"] + (error == nil ? ["error"] : []))
+            try patch(job.id, set: set, remove: error == nil ? ["error"] : [])
         } catch {
             try OwnerOnlyFile.write(Self.encoder.encode(out), to: jobFile(job.id))
         }
         try? FileManager.default.removeItem(at: pidFile(job.id))
-        if let secret { redact(secret, in: job.id) }
         return out
     }
 
-    private static let passwordField = try! NSRegularExpression(pattern: "\"password\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"")
+    // MARK: - 실행용 폴더 (Aside 쪽)
 
-    /// job.json 에서 password 를 지운다. JSON 이 깨졌으면 password 항목을 글자 단위로 비운다.
-    public func scrubPassword(_ id: String) {
-        let url = jobFile(id)
-        guard let data = try? Data(contentsOf: url) else { return }
-        if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            if obj["password"] != nil { try? patch(id, remove: ["password"]) }
-            return
-        }
-        let text = String(decoding: data, as: UTF8.self)
-        let range = NSRange(text.startIndex..., in: text)
-        guard Self.passwordField.firstMatch(in: text, range: range) != nil else { return }
-        let out = Self.passwordField.stringByReplacingMatches(in: text, range: range, withTemplate: "\"password\": \"\"")
-        try? OwnerOnlyFile.write(Data(out.utf8), to: url)
-    }
+    static let requestName = "request.json"
+    static let resultName = "result.json"
+    static let jiraDirName = "jira"
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "webp", "gif"]
+    static let maxResultBytes = 2 * 1024 * 1024
+    static let maxImageBytes = 20 * 1024 * 1024
 
-    static let mask = "****"
-
-    /// job 폴더의 텍스트 파일(json·log)에 비밀번호가 글자 그대로 남아 있으면 가린다. JSON 이스케이프된 모양도 찾는다.
-    public func redact(_ secret: String, in id: String) {
-        guard !secret.isEmpty else { return }
-        let forms = Self.secretForms(secret)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir(id).path)) ?? []
-        for n in names where n.hasSuffix(".json") || n.hasSuffix(".log") || n.hasSuffix(".txt") {
-            let url = dir(id).appendingPathComponent(n)
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            let out = Self.redact(text, forms: forms)
-            if out != text { try? OwnerOnlyFile.write(Data(out.utf8), to: url) }
+    /// Aside 가 읽을 요청(request.json)과 Jira 내용(jira/)을 실행용 폴더에 둔다. 남아 있던 폴더는 비우고 다시 만든다.
+    public func prepareWorkDir(_ job: E2EJob, at work: URL) throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: work)
+        try fm.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try OwnerOnlyFile.write(Self.encoder.encode(E2ERequest(job)), to: work.appendingPathComponent(Self.requestName))
+        let jira = dir(job.id).appendingPathComponent(Self.jiraDirName, isDirectory: true)
+        if fm.fileExists(atPath: jira.path) {
+            try fm.copyItem(at: jira, to: work.appendingPathComponent(Self.jiraDirName, isDirectory: true))
         }
     }
 
-    static func secretForms(_ secret: String) -> [String] {
-        var forms = [secret]
-        if let d = try? JSONSerialization.data(withJSONObject: [secret]),
-           let s = String(data: d, encoding: .utf8), s.count > 4 {
-            let escaped = String(s.dropFirst(2).dropLast(2))
-            if escaped != secret { forms.append(escaped) }
+    /// 실행용 폴더에서 result.json 과 스크린샷 이미지만 job 폴더로 가져오고 실행용 폴더를 지운다.
+    /// 링크·폴더·이미지가 아닌 파일·너무 큰 파일은 가져오지 않고, 그 이름을 돌려준다 (run.log 에 남긴다).
+    @discardableResult
+    public func importResults(from work: URL, into id: String) -> [String] {
+        let fm = FileManager.default
+        defer { try? fm.removeItem(at: work) }
+        var skipped: [String] = []
+        for name in ((try? fm.contentsOfDirectory(atPath: work.path)) ?? []).sorted() {
+            if name == Self.requestName || name == Self.jiraDirName { continue }
+            let isResult = name == Self.resultName
+            let src = work.appendingPathComponent(name)
+            guard isResult || Self.isImageName(name),
+                  Self.isPlainFile(src, maxBytes: isResult ? Self.maxResultBytes : Self.maxImageBytes),
+                  let data = try? Data(contentsOf: src) else {
+                skipped.append(name)
+                continue
+            }
+            // 새로 써서 실행 권한 없는 0600 파일로 둔다.
+            if (try? OwnerOnlyFile.write(data, to: dir(id).appendingPathComponent(name))) == nil { skipped.append(name) }
         }
-        return forms
+        return skipped
     }
 
-    public static func redact(_ text: String, forms: [String]) -> String {
-        forms.filter { !$0.isEmpty }.sorted { $0.count > $1.count }.reduce(text) { $0.replacingOccurrences(of: $1, with: mask) }
+    /// ATM 이 실행 중에 죽어 남은 실행용 폴더를 지운다. createdBefore 이후에 만든 job(이번 실행)의 것은 둔다.
+    @discardableResult
+    public static func pruneWorkDirs(in roots: [URL], createdBefore: Date) -> [String] {
+        let fm = FileManager.default
+        var removed: [String] = []
+        for root in roots {
+            for id in ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).sorted() where E2EJobID.isValid(id) {
+                guard let created = E2EJobID.date(id), created < createdBefore else { continue }
+                if (try? fm.removeItem(at: root.appendingPathComponent(id))) != nil { removed.append(id) }
+            }
+        }
+        return removed
     }
 
-    /// 앱 시작 시: 이전 실행이 남긴 비밀번호를 모두 지우고, 끝나지 못한 job 을 닫는다.
+    /// 점으로 시작하지 않고 확장자가 이미지인 파일 이름.
+    static func isImageName(_ name: String) -> Bool {
+        !name.hasPrefix(".") && imageExtensions.contains((name as NSString).pathExtension.lowercased())
+    }
+
+    /// 심볼릭 링크·폴더가 아닌 일반 파일이고 maxBytes 이하인지 (링크를 따라가지 않고 본다).
+    static func isPlainFile(_ url: URL, maxBytes: Int) -> Bool {
+        guard let a = try? FileManager.default.attributesOfItem(atPath: url.path),
+              a[.type] as? FileAttributeType == .typeRegular,
+              let size = a[.size] as? NSNumber else { return false }
+        return size.intValue <= maxBytes
+    }
+
+    /// 앱 시작 시: 끝나지 못한 job 을 닫는다.
     /// 실행 중이던 job 은 failed, 대기 중이던 job 은 cancelled. 닫은 job 의 남은 aside pid 를 돌려준다(호출부가 정리).
     /// createdBefore 이후에 만든 job(이번 실행에서 벌써 요청한 것)은 건드리지 않는다.
     @discardableResult
@@ -176,7 +196,6 @@ public struct E2EJobStore {
         var closed: [E2ERecovered] = []
         for id in ids() {
             if let created = load(id)?.createdAt ?? E2EJobID.date(id), created >= createdBefore { continue }
-            scrubPassword(id)
             let pid = (try? String(contentsOf: pidFile(id), encoding: .utf8)).flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
             try? FileManager.default.removeItem(at: pidFile(id))
             guard let job = load(id), job.status.isActive else { continue }
@@ -218,11 +237,12 @@ public struct E2EJobStore {
         return removed
     }
 
-    /// result.json 의 스크린샷 이름 → job 폴더 안의 파일. 경로가 붙어 와도 이름만 보고, 없으면 nil.
+    /// result.json 의 스크린샷 이름 → job 폴더 안의 이미지 파일. 경로가 붙어 와도 이름만 본다.
+    /// 이미지 확장자의 일반 파일이 아니면(없음·링크·폴더·다른 종류) nil 이라 눌러도 열리지 않는다.
     public func screenshotURL(_ id: String, name: String) -> URL? {
         let n = (name as NSString).lastPathComponent
-        guard !n.isEmpty, n != "..", n != "." else { return nil }
+        guard Self.isImageName(n) else { return nil }
         let url = dir(id).appendingPathComponent(n)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        return Self.isPlainFile(url, maxBytes: Self.maxImageBytes) ? url : nil
     }
 }

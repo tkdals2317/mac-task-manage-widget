@@ -539,7 +539,7 @@ struct OnboardingView: View {
                 }
             }
             AsideStatusLine(e2e: state.e2e)
-            helper("환경 주소(DV/ST/ST2/PR)와 테스트 계정은 설정 > E2E 에서 넣어요. 비밀번호는 위에서 고른 저장 위치에 보관돼요.")
+            helper("환경 주소(DV/ST/ST2)와 테스트 계정 ID 는 설정 > E2E 에서 넣어요. 비밀번호는 ATM 이 넘기지 않으니 Aside 비밀번호 관리자에 저장해 두세요.")
         }
     }
 

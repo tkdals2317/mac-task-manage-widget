@@ -10,7 +10,8 @@ public enum AsideAccountStatus: Equatable {
 }
 
 /// Aside CLI 를 찾고 부르는 방법. 스파이크(Aside CLI 1.26)에서 확인한 동작 기준:
-/// - 기본(guard) 권한은 job 폴더 읽기/쓰기를 막아 `--permission full-access` 가 필요하다.
+/// - guard 권한에서는 CLI 작업 폴더와 상관없이 에이전트가 계정 폴더(`~/.aside/u/<id>/`) 안에서만 승인 없이 읽고 쓴다.
+///   그래서 full-access 대신 guard 로 돌리고, 요청·결과는 그 아래 실행용 폴더(`workDir`)를 거친다.
 /// - 실행 결과와 상관없이 exit 0 일 수 있어 성공 판단은 result.json 으로만 한다.
 /// - CLI 에 SIGTERM 을 보내면 세션도 aborted 로 멈춘다. `--timeout` 은 CLI 만 멈추고 세션은 계속 돌아서 쓰지 않는다.
 public enum AsideCLI {
@@ -35,9 +36,25 @@ public enum AsideCLI {
     }
 
     /// `aside exec` 인자. 셸을 거치지 않고 배열로 넘긴다. model 이 비면 Aside 설정의 기본 모델.
+    /// 사용자의 Aside 기본 권한이 full-access 여도 guard 로 돌도록 권한을 늘 적는다.
     public static func execArguments(prompt: String, model: String = "") -> [String] {
         let m = model.trimmingCharacters(in: .whitespaces)
-        return ["exec", "--permission", "full-access"] + (m.isEmpty ? [] : ["--model", m]) + [prompt]
+        return ["exec", "--permission", "guard"] + (m.isEmpty ? [] : ["--model", m]) + [prompt]
+    }
+
+    /// job 하나의 실행용 폴더. guard 에서 Aside 가 읽고 쓸 수 있는 계정 폴더 아래에 둔다.
+    public static func workDir(accountId: Int, jobId: String,
+                               home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+        home.appendingPathComponent(".aside/u/\(accountId)/atm-e2e/\(jobId)", isDirectory: true)
+    }
+
+    /// 계정마다 있는 실행용 폴더의 상위 (`~/.aside/u/*/atm-e2e`). 있는 것만.
+    public static func workRoots(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
+        let fm = FileManager.default
+        let u = home.appendingPathComponent(".aside/u", isDirectory: true)
+        return ((try? fm.contentsOfDirectory(atPath: u.path)) ?? []).sorted()
+            .map { u.appendingPathComponent($0).appendingPathComponent("atm-e2e", isDirectory: true) }
+            .filter { fm.fileExists(atPath: $0.path) }
     }
 
     /// Aside 앱이 받아 둔 모델 목록 캐시. 공식 CLI 명령이 없어 내부 파일을 읽는다 (모양이 바뀌면 빈 목록).
@@ -194,7 +211,10 @@ public enum E2EFailureHint {
             return "Aside CLI 로그인이 필요해요 · 터미널에서 aside login 후 Aside 설정 > 계정 > 기기에서 승인"
         }
         if has("operation not permitted", "path escapes", "blocked by policy", "permission denied") {
-            return "Aside 가 job 폴더에 접근하지 못했어요 · run.log 를 확인해 주세요"
+            return "Aside 가 실행용 폴더에 접근하지 못했어요 · run.log 를 확인해 주세요"
+        }
+        if has("is not connected to the daemon") {
+            return "Aside 브라우저가 꺼져 있어요 · Aside 를 켠 뒤 다시 실행"
         }
         if has("econnrefused", "daemon", "is aside running", "could not connect", "failed to connect") {
             return "Aside 앱에 연결하지 못했어요 · Aside 를 켠 뒤 다시 실행"

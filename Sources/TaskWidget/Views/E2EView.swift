@@ -21,6 +21,7 @@ private struct E2ERequestView: View {
     @Environment(\.fontScale) private var scale
     @Environment(\.atmAccent) private var accent
     @AppStorage(SettingsKey.e2eEnv) private var envRaw = E2EEnv.st.rawValue
+    @AppStorage(SettingsKey.e2eAllowPR) private var allowPR = false
     @AppStorage(SettingsKey.jiraVersionFilter) private var versionFilter = ""
     @AppStorage(SettingsKey.e2eIssuesCollapsed) private var issuesCollapsed = false
     @AppStorage(SettingsKey.e2eHistoryCollapsed) private var historyCollapsed = false
@@ -30,7 +31,11 @@ private struct E2ERequestView: View {
     @FocusState private var focus: Field?
     private enum Field { case keys, notes }
 
-    private var env: E2EEnv { E2EEnv(rawValue: envRaw) ?? .st }
+    /// 저장된 환경이 지금 고를 수 없는 것(PR 을 끈 뒤)이면 ST 로 본다.
+    private var env: E2EEnv {
+        let e = E2EEnv(rawValue: envRaw) ?? .st
+        return E2EEnv.selectable(allowPR: allowPR).contains(e) ? e : .st
+    }
 
     /// 실행할 키: 목록에서 고른 것(목록 순서) → 목록에 없는 고른 것 → 직접 입력. 중복 없이.
     private var keys: [String] {
@@ -80,7 +85,7 @@ private struct E2ERequestView: View {
 
     private var envRow: some View {
         HStack(spacing: 6) {
-            ForEach(E2EEnv.allCases) { e in
+            ForEach(E2EEnv.selectable(allowPR: allowPR)) { e in
                 Button { envRaw = e.rawValue } label: {
                     AccentChip(icon: e == env ? "checkmark" : "circle", text: e.rawValue, style: e == env ? .soft : .plain)
                 }
@@ -271,11 +276,10 @@ struct E2EModelMenu: View {
     var body: some View {
         Menu {
             item("Aside 기본 모델", id: "")
-            // Aside 제공 모델과 내가 연동한 provider 모델을 나눠 보여준다
-            ForEach(Array(Dictionary(grouping: e2e.asideModels, by: \.provider).sorted { ($0.key == "aside" ? "" : $0.key) < ($1.key == "aside" ? "" : $1.key) }), id: \.key) { group in
+            ForEach(groups) { group in
                 Divider()
-                Section(group.key == "aside" ? "Aside 제공" : "연동: \(group.key)") {
-                    ForEach(group.value) { m in
+                Section(group.title) {
+                    ForEach(group.models) { m in
                         let locked = m.needsPaidPlan && e2e.asidePlan.lowercased() == "free"
                         item(m.needsPaidPlan ? "\(m.name) · \(m.minPlan.capitalized)" : m.name, id: m.id).disabled(locked)
                     }
@@ -308,6 +312,26 @@ struct E2EModelMenu: View {
     private func item(_ title: String, id: String) -> some View {
         Toggle(title, isOn: Binding(get: { model == id }, set: { _ in model = id }))
     }
+
+    /// Aside 제공 모델을 먼저, 내가 연동한 provider 모델은 이름순으로 나눈다.
+    /// 한 줄 식으로 쓰면 Swift 5.10 타입 검사가 시간 초과로 실패한다.
+    private var groups: [E2EModelGroup] {
+        let byProvider: [String: [AsideModel]] = Dictionary(grouping: e2e.asideModels) { $0.provider }
+        let providers: [String] = byProvider.keys.sorted { a, b in
+            if a == E2EModelGroup.aside { return b != E2EModelGroup.aside }
+            if b == E2EModelGroup.aside { return false }
+            return a < b
+        }
+        return providers.map { E2EModelGroup(provider: $0, models: byProvider[$0] ?? []) }
+    }
+}
+
+private struct E2EModelGroup: Identifiable {
+    static let aside = "aside"
+    let provider: String
+    let models: [AsideModel]
+    var id: String { provider }
+    var title: String { provider == Self.aside ? "Aside 제공" : "연동: \(provider)" }
 }
 
 extension View {

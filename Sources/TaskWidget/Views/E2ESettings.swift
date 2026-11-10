@@ -12,7 +12,7 @@ struct AsideStatusLine: View {
             case .unchecked, .checking:
                 ProgressView().controlSize(.small)
                 Text("Aside CLI 확인 중…").foregroundStyle(.secondary)
-            case .ready(let path, let account):
+            case .ready(let path, let account, _):
                 Text("✓ aside 준비됨 · \(account.isEmpty ? "로그인됨" : account)").foregroundStyle(.green)
                 Text("\(path) (\(e2e.asideSource))").foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             case .missing, .signedOut, .failed:
@@ -55,6 +55,7 @@ struct E2ESettingsSections: View {
     @AppStorage(SettingsKey.e2eMaxMinutes) private var maxMinutes = 30
     @AppStorage(SettingsKey.e2eMaxIssues) private var maxIssues = 5
     @AppStorage(SettingsKey.e2eRetentionDays) private var retentionDays = 30
+    @AppStorage(SettingsKey.e2eAllowPR) private var allowPR = false
 
     var body: some View {
         Section("Aside CLI") {
@@ -63,17 +64,20 @@ struct E2ESettingsSections: View {
                 .onSubmit { Task { await e2e.checkAside() } }
             CommandCopyRow(label: "설치", command: AsideCLI.installCommand)
             CommandCopyRow(label: "로그인", command: AsideCLI.loginCommand)
-            Text("Aside 브라우저를 설치하고 Jira·테스트 환경에 로그인해 두세요. CLI 는 위 명령이나 Aside 설정 > 개발자에서 설치하고, 로그인 후 Aside 설정 > 계정 > 기기에서 승인해요.")
+            Text("Aside 브라우저를 설치하고 테스트 환경에 로그인해 두세요. CLI 는 위 명령이나 Aside 설정 > 개발자에서 설치하고, 로그인 후 Aside 설정 > 계정 > 기기에서 승인해요.")
                 .font(.caption).foregroundStyle(.secondary)
-            Text("ATM 은 aside 를 --permission full-access 로 실행해요. 기본 권한으로는 결과 폴더에 쓸 수 없어서예요. 실행하는 동안 Aside 에이전트가 이 Mac 의 파일에 접근할 수 있으니 믿을 수 있는 이슈만 검증하세요.")
+            Text("ATM 은 aside 를 guard 권한으로 실행해요. Aside 에이전트는 Aside 계정 폴더 안의 실행용 폴더(~/.aside/u/<계정>/atm-e2e)에서만 파일을 읽고 쓰고, 끝나면 ATM 이 스크린샷 이미지와 result.json 만 골라 가져와요. 다만 Aside 브라우저에 로그인된 사이트는 그대로 쓸 수 있으니 믿을 수 있는 이슈만 검증하세요.")
                 .font(.caption).foregroundStyle(.orange)
         }
         Section {
-            ForEach(E2EEnv.allCases) { E2EEnvFields(env: $0) }
+            ForEach(E2EEnv.selectable(allowPR: allowPR)) { E2EEnvFields(env: $0) }
+            Toggle("PR(운영) 환경 쓰기", isOn: $allowPR)
+            Text("기본은 꺼져 있어요. 켜면 E2E 탭에 PR 이 보이고 실행 전에 한 번 더 물어요. '조회만' 은 Aside 에 주는 지시로만 지켜지니 운영 데이터가 바뀌어도 괜찮은 경우에만 켜세요.")
+                .font(.caption).foregroundStyle(allowPR ? .orange : .secondary)
         } header: {
             Text("환경")
         } footer: {
-            Text("비밀번호는 설정 > 창·일반 > 비밀 정보 저장에서 고른 곳(키체인 또는 파일)에 저장돼요. 실행하는 동안만 요청 파일에 들어가고 끝나면 지워요. 계정을 비우면 Aside 에 저장된 로그인을 써요.")
+            Text("테스트 계정 비밀번호는 ATM 이 Aside 에 넘기지 않아요. Aside 비밀번호 관리자에 저장하거나 Aside 브라우저에서 미리 로그인해 두세요. 계정 ID 를 넣으면 그 계정으로 로그인하라고 알려줘요.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         Section("실행") {
@@ -96,14 +100,11 @@ struct E2ESettingsSections: View {
     }
 }
 
-/// 환경 하나의 주소·테스트 계정.
+/// 환경 하나의 주소·테스트 계정 ID.
 private struct E2EEnvFields: View {
     let env: E2EEnv
     @AppStorage private var url: String
     @AppStorage private var user: String
-    @State private var password = ""
-    @State private var hasPassword = false
-    @State private var status = ""
 
     init(env: E2EEnv) {
         self.env = env
@@ -115,38 +116,8 @@ private struct E2EEnvFields: View {
         TextField("\(env.rawValue) 주소", text: $url, prompt: Text("https://\(env.rawValue.lowercased()).example.com"))
             .onSubmit { url = Onboarding.normalizedURL(url) }
         TextField("\(env.rawValue) 계정 ID", text: $user, prompt: Text("비우면 Aside 에 저장된 로그인"))
-        HStack(spacing: 6) {
-            SecureField("\(env.rawValue) 비밀번호", text: $password, prompt: Text(hasPassword ? "저장됨 · 바꾸려면 입력" : "비밀번호"))
-                .onSubmit(save)
-            Button("저장", action: save).disabled(password.isEmpty)
-            if hasPassword { Button("지우기", action: remove) }
+        if env.forcesReadOnly {
+            Text("PR 환경은 조회만 하라고 지시해요 (쓰기 동작은 SKIPPED)").font(.caption).foregroundStyle(.secondary)
         }
-        .task {
-            let e = env
-            hasPassword = await Task.detached { SecretStore.get(service: E2ESecrets.service, account: E2ESecrets.account(e)) != nil }.value
-        }
-        if !status.isEmpty || env.forcesReadOnly {
-            Text([env.forcesReadOnly ? "PR 환경은 항상 조회만 해요 (쓰기 동작은 SKIPPED)" : nil, status.isEmpty ? nil : status]
-                .compactMap { $0 }.joined(separator: " · "))
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    private func save() {
-        guard !password.isEmpty else { return }
-        do {
-            try SecretStore.set(password, service: E2ESecrets.service, account: E2ESecrets.account(env))
-            password = ""
-            hasPassword = true
-            status = "비밀번호 저장됨"
-        } catch {
-            status = "저장 실패: \(error.localizedDescription)"
-        }
-    }
-
-    private func remove() {
-        SecretStore.delete(service: E2ESecrets.service, account: E2ESecrets.account(env))
-        hasPassword = false
-        status = "비밀번호 지움"
     }
 }

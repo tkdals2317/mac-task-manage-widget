@@ -66,6 +66,7 @@ public enum SettingsKey {
     public static let prReviewCollapsed = "prReviewCollapsed"
     public static let prMineCollapsed = "prMineCollapsed"
     public static let e2eEnv = "e2eEnv"
+    public static let e2eAllowPR = "e2eAllowPR"
     public static let e2eAsidePath = "e2eAsidePath"
     public static let e2eModel = "e2eModel"
     public static let e2eMinutesPerIssue = "e2eMinutesPerIssue"
@@ -319,6 +320,11 @@ public final class Settings {
     public func setE2EURL(_ url: String, for env: E2EEnv) { d.set(url, forKey: SettingsKey.e2eURL(env)) }
     public func e2eUser(_ env: E2EEnv) -> String { string(SettingsKey.e2eUser(env), "") }
     public func setE2EUser(_ user: String, for env: E2EEnv) { d.set(user, forKey: SettingsKey.e2eUser(env)) }
+    /// PR(운영) 환경을 고를 수 있게 할지. 기본 꺼짐.
+    public var e2eAllowPR: Bool {
+        get { bool(SettingsKey.e2eAllowPR, false) }
+        set { d.set(newValue, forKey: SettingsKey.e2eAllowPR) }
+    }
     /// "" = 자동으로 찾기
     public var e2eAsidePath: String {
         get { string(SettingsKey.e2eAsidePath, "") }

@@ -4,12 +4,14 @@ import XCTest
 /// 가짜 aside(Fixtures/fake-aside.sh)로 실행 관리 로직을 확인한다.
 final class E2ERunnerTests: XCTestCase {
     var root: URL!
+    /// Aside 계정 폴더 아래 실행용 폴더 상위를 흉내 낸다.
+    var workRoot: URL!
     var store: E2EJobStore!
     var runner: E2ERunner!
-    let secret = "s3cr\"et!"
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("e2e-run-\(UUID().uuidString)/jobs")
+        workRoot = root.deletingLastPathComponent().appendingPathComponent("aside/atm-e2e", isDirectory: true)
         store = E2EJobStore(root: root)
         runner = E2ERunner(store: store)
     }
@@ -29,31 +31,36 @@ final class E2ERunnerTests: XCTestCase {
         return j
     }
 
-    private func options(_ mode: String, timeout: TimeInterval = 20, extra: [String: String] = [:],
+    private func workDir(_ id: String) -> URL { workRoot.appendingPathComponent(id, isDirectory: true) }
+
+    private func options(_ mode: String, for j: E2EJob, timeout: TimeInterval = 20, extra: [String: String] = [:],
                          stopSession: ((String) -> Void)? = nil) -> E2ERunOptions {
         var env = ProcessInfo.processInfo.environment
         env["FAKE_ASIDE_MODE"] = mode
         for (k, v) in extra { env[k] = v }
         return E2ERunOptions(executable: "/bin/bash", arguments: [script] + AsideCLI.execArguments(prompt: "PROMPT-BODY-7731"),
-                             environment: env, timeout: timeout, password: secret, killGrace: 1, stopSession: stopSession)
+                             environment: env, timeout: timeout, workDir: workDir(j.id), killGrace: 1, stopSession: stopSession)
     }
 
-    private func run(_ suffix: String, _ o: E2ERunOptions) throws -> E2EJob {
+    private func run(_ suffix: String, _ mode: String, timeout: TimeInterval = 20, stopSession: ((String) -> Void)? = nil,
+                     edit: (inout E2ERunOptions) -> Void = { _ in }) throws -> E2EJob {
         let j = try makeJob(suffix)
+        var o = options(mode, for: j, timeout: timeout, stopSession: stopSession)
+        edit(&o)
         runner.enqueue(j, options: o)
         XCTAssertTrue(runner.waitUntilIdle(timeout: 30), "끝나지 않음")
         return try XCTUnwrap(store.load(j.id))
     }
 
-    private func assertNoSecretOnDisk(_ id: String, file: StaticString = #filePath, line: UInt = #line) throws {
-        let obj = try JSONSerialization.jsonObject(with: Data(contentsOf: store.jobFile(id))) as? [String: Any]
-        XCTAssertNil(obj?["password"], "job.json 에 password 가 남음", file: file, line: line)
+    /// 끝난 뒤 Aside 쪽 실행용 폴더가 지워졌고 job.json 은 내 계정만 읽는지.
+    private func assertCleanedUp(_ id: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workDir(id).path), "실행용 폴더가 남음", file: file, line: line)
         let perm = try FileManager.default.attributesOfItem(atPath: store.jobFile(id).path)[.posixPermissions] as? Int
         XCTAssertEqual(perm, 0o600, file: file, line: line)
-        for name in try FileManager.default.contentsOfDirectory(atPath: store.dir(id).path) {
-            let text = (try? String(contentsOf: store.dir(id).appendingPathComponent(name), encoding: .utf8)) ?? ""
-            XCTAssertFalse(text.contains("s3cr"), "\(name) 에 비밀번호가 남음", file: file, line: line)
-        }
+    }
+
+    private func exists(_ id: String, _ name: String) -> Bool {
+        FileManager.default.fileExists(atPath: store.dir(id).appendingPathComponent(name).path)
     }
 
     private func waitUntil(_ timeout: TimeInterval, _ cond: () -> Bool) -> Bool {
@@ -65,74 +72,70 @@ final class E2ERunnerTests: XCTestCase {
         return cond()
     }
 
-    private func saw(_ id: String) -> String? {
-        try? String(contentsOf: store.dir(id).appendingPathComponent("saw-password.txt"), encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func testSuccessWritesDoneAndRemovesPassword() throws {
+    func testSuccessImportsResultAndRemovesWorkDir() throws {
         var updates: [E2EJobStatus] = []
         let lock = NSLock()
         runner.onUpdate = { j in lock.lock(); updates.append(j.status); lock.unlock() }
-        let j = try run("succ", options("success"))
+        let j = try run("succ", "success")
         XCTAssertEqual(j.status, .done)
         XCTAssertNil(j.error)
         XCTAssertEqual(j.sessionId, "fake-20261109100000-succ")
         XCTAssertNotNil(j.finishedAt)
-        XCTAssertEqual(saw(j.id), "present", "실행 중에는 job.json 에 비밀번호가 있어야 함")
         guard case .ok(let r) = store.result(j.id) else { return XCTFail("결과 없음") }
         XCTAssertEqual(r.issues.first?.verdict, .pass)
         XCTAssertNotNil(store.screenshotURL(j.id, name: "ABC-1-1.png"))
+        XCTAssertFalse(exists(j.id, "request.json"), "요청 파일은 가져오지 않는다")
         let log = try String(contentsOf: store.logFile(j.id), encoding: .utf8)
         XCTAssertTrue(log.contains("ABC-1 PASS"))
         XCTAssertTrue(log.contains("[err] created new session: fake-20261109100000-succ"))
         XCTAssertFalse(log.contains("PROMPT-BODY-7731"), "지시문 본문은 로그에 넣지 않는다")
+        XCTAssertFalse(log.contains("가져오지 않은 파일"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.pidFile(j.id).path))
-        try assertNoSecretOnDisk(j.id)
+        try assertCleanedUp(j.id)
         lock.lock(); XCTAssertEqual(updates, [.running, .done]); lock.unlock()
     }
 
-    func testPasswordPrintedByAsideIsMaskedInLog() throws {
-        let j = try run("leak", options("leak"))
+    func testImportKeepsOnlyResultAndImages() throws {
+        let j = try run("junk", "junk")
         XCTAssertEqual(j.status, .done)
+        XCTAssertTrue(exists(j.id, "ABC-1-1.png"))
+        XCTAssertFalse(exists(j.id, "run.sh"), "이미지가 아닌 파일은 가져오지 않는다")
+        XCTAssertFalse(exists(j.id, "ABC-1-2.png"), "링크는 가져오지 않는다")
+        XCTAssertFalse(exists(j.id, ".hidden.png"))
+        XCTAssertNil(store.screenshotURL(j.id, name: "run.sh"))
+        XCTAssertNil(store.screenshotURL(j.id, name: "ABC-1-2.png"))
+        let shot = store.dir(j.id).appendingPathComponent("ABC-1-1.png")
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: shot.path)[.posixPermissions] as? Int, 0o600)
         let log = try String(contentsOf: store.logFile(j.id), encoding: .utf8)
-        XCTAssertTrue(log.contains("\"password\""))
-        XCTAssertTrue(log.contains("****"))
-        try assertNoSecretOnDisk(j.id)
-    }
-
-    func testNoPasswordWhenAccountEmpty() throws {
-        var o = options("success")
-        o.password = nil
-        let j = try run("nopw", o)
-        XCTAssertEqual(j.status, .done)
-        XCTAssertEqual(saw(j.id), "absent")
+        XCTAssertTrue(log.contains("가져오지 않은 파일"))
+        XCTAssertTrue(log.contains("run.sh"))
+        try assertCleanedUp(j.id)
     }
 
     func testFailureWithoutResultShowsHint() throws {
-        let j = try run("fail", options("fail-login"))
+        let j = try run("fail", "fail-login")
         XCTAssertEqual(j.status, .failed)
         XCTAssertEqual(j.error, E2EFailureHint.hint(for: "not signed in"))
-        try assertNoSecretOnDisk(j.id)
+        try assertCleanedUp(j.id)
     }
 
     func testInvalidAndEmptyResultFail() throws {
-        let a = try run("inva", options("invalid"))
+        let a = try run("inva", "invalid")
         XCTAssertEqual(a.status, .failed)
         XCTAssertEqual(a.error, "result.json 을 읽지 못했어요 (JSON 형식이 아님)")
-        try assertNoSecretOnDisk(a.id)
-        let b = try run("empt", options("empty"))
+        try assertCleanedUp(a.id)
+        let b = try run("empt", "empty")
         XCTAssertEqual(b.status, .failed)
         XCTAssertEqual(b.error, "result.json 에 이슈 결과가 없어요")
     }
 
     func testTimeoutKillsProcessTree() throws {
         let start = Date()
-        let j = try run("hang", options("hang", timeout: 1))
+        let j = try run("hang", "hang", timeout: 1)
         XCTAssertLessThan(Date().timeIntervalSince(start), 10)
         XCTAssertEqual(j.status, .failed)
         XCTAssertEqual(j.error, "제한 시간 1분을 넘겨 멈췄어요")
-        try assertNoSecretOnDisk(j.id)
+        try assertCleanedUp(j.id)
         // bash 가 SIGTERM 으로 죽어도 손자 sleep 이 남지 않아야 한다
         let left = ProcessRunner.run(executable: "/usr/bin/pgrep", arguments: ["-f", "sleep 6123"], timeout: 5)
         XCTAssertEqual(left.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "")
@@ -141,18 +144,18 @@ final class E2ERunnerTests: XCTestCase {
     func testStubbornProcessGetsKilledAndSessionStopped() throws {
         var stopped: [String] = []
         let lock = NSLock()
-        let j = try run("stub", options("stubborn", timeout: 1, stopSession: { id in lock.lock(); stopped.append(id); lock.unlock() }))
+        let j = try run("stub", "stubborn", timeout: 1, stopSession: { id in lock.lock(); stopped.append(id); lock.unlock() })
         XCTAssertEqual(j.status, .failed)
         XCTAssertTrue(waitUntil(5) { lock.lock(); defer { lock.unlock() }; return !stopped.isEmpty })
         lock.lock(); XCTAssertEqual(stopped, ["fake-20261109100000-stub"]); lock.unlock()
         XCTAssertTrue(try String(contentsOf: store.logFile(j.id), encoding: .utf8).contains("SIGKILL"))
-        try assertNoSecretOnDisk(j.id)
+        try assertCleanedUp(j.id)
     }
 
     func testCancelRunningAndQueued() throws {
         let a = try makeJob("cana"), b = try makeJob("canb")
-        runner.enqueue(a, options: options("hang"))
-        runner.enqueue(b, options: options("success"))
+        runner.enqueue(a, options: options("hang", for: a))
+        runner.enqueue(b, options: options("success", for: b))
         XCTAssertTrue(waitUntil(5) { self.runner.state.running == a.id })
         XCTAssertEqual(runner.state.queued, [b.id])
         runner.cancel(jobId: b.id)
@@ -161,17 +164,17 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(store.load(a.id)?.status, .cancelled)
         XCTAssertNil(store.load(a.id)?.error)
         XCTAssertEqual(store.load(b.id)?.status, .cancelled)
-        XCTAssertNil(saw(b.id), "취소된 대기 job 은 실행되지 않는다")
-        try assertNoSecretOnDisk(a.id)
-        try assertNoSecretOnDisk(b.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.logFile(b.id).path), "취소된 대기 job 은 실행되지 않는다")
+        try assertCleanedUp(a.id)
+        try assertCleanedUp(b.id)
     }
 
     func testQueueRunsOneAtATimeInOrder() throws {
         let order = root.deletingLastPathComponent().appendingPathComponent("order.txt")
         let a = try makeJob("quea"), b = try makeJob("queb")
         let extra = ["FAKE_ORDER_FILE": order.path, "FAKE_DELAY": "0.5"]
-        runner.enqueue(a, options: options("success", extra: extra))
-        runner.enqueue(b, options: options("success", extra: extra))
+        runner.enqueue(a, options: options("success", for: a, extra: extra))
+        runner.enqueue(b, options: options("success", for: b, extra: extra))
         XCTAssertTrue(runner.waitUntilIdle(timeout: 30))
         let lines = try String(contentsOf: order, encoding: .utf8).split(separator: "\n").map(String.init)
         XCTAssertEqual(lines, ["start \(a.id)", "end \(a.id)", "start \(b.id)", "end \(b.id)"])
@@ -179,26 +182,24 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(store.load(b.id)?.status, .done)
     }
 
-    func testShutdownStopsEverythingAndScrubs() throws {
+    func testShutdownStopsEverything() throws {
         let a = try makeJob("shua"), b = try makeJob("shub")
-        runner.enqueue(a, options: options("hang"))
-        runner.enqueue(b, options: options("success"))
+        runner.enqueue(a, options: options("hang", for: a))
+        runner.enqueue(b, options: options("success", for: b))
         XCTAssertTrue(waitUntil(5) { self.runner.state.running == a.id })
         runner.shutdown(timeout: 5)
         XCTAssertEqual(store.load(a.id)?.status, .cancelled)
         XCTAssertEqual(store.load(a.id)?.error, "ATM 을 종료해서 멈췄어요")
         XCTAssertEqual(store.load(b.id)?.status, .cancelled)
-        try assertNoSecretOnDisk(a.id)
-        try assertNoSecretOnDisk(b.id)
+        try assertCleanedUp(a.id)
+        try assertCleanedUp(b.id)
     }
 
     func testMissingExecutableFails() throws {
-        var o = options("success")
-        o.executable = "/nonexistent/aside"
-        let j = try run("miss", o)
+        let j = try run("miss", "success") { $0.executable = "/nonexistent/aside" }
         XCTAssertEqual(j.status, .failed)
         XCTAssertTrue(j.error?.hasPrefix("aside 를 실행하지 못했어요") == true, j.error ?? "")
-        try assertNoSecretOnDisk(j.id)
+        try assertCleanedUp(j.id)
     }
 
     func testOutcomeRules() {
@@ -216,11 +217,15 @@ final class E2ERunnerTests: XCTestCase {
     func testAsideHelpers() {
         XCTAssertEqual(AsideCLI.sessionId(in: "created new session: pltnf6d7zRGoVm6U"), "pltnf6d7zRGoVm6U")
         XCTAssertNil(AsideCLI.sessionId(in: "Error This operation was aborted"))
-        XCTAssertEqual(AsideCLI.execArguments(prompt: "p"), ["exec", "--permission", "full-access", "p"])
+        XCTAssertEqual(AsideCLI.execArguments(prompt: "p"), ["exec", "--permission", "guard", "p"])
         XCTAssertEqual(AsideCLI.execArguments(prompt: "p", model: " claude-sonnet-5 "),
-                       ["exec", "--permission", "full-access", "--model", "claude-sonnet-5", "p"])
+                       ["exec", "--permission", "guard", "--model", "claude-sonnet-5", "p"])
+        XCTAssertEqual(AsideCLI.workDir(accountId: 2, jobId: "20261109100000-a1b2", home: URL(fileURLWithPath: "/h")).path,
+                       "/h/.aside/u/2/atm-e2e/20261109100000-a1b2")
         XCTAssertEqual(E2EFailureHint.hint(for: "Error Requested model claude-code/x is not available for this account."),
                        "고른 모델을 이 Aside 계정에서 쓸 수 없어요 · E2E 탭 실행 버튼 옆에서 다른 모델을 고르세요")
+        XCTAssertEqual(E2EFailureHint.hint(for: "Error: Aside Browser profile for account u0 is not connected to the daemon."),
+                       "Aside 브라우저가 꺼져 있어요 · Aside 를 켠 뒤 다시 실행")
         let env = AsideCLI.environment(executable: "/x/bin/aside", base: ["PATH": "/usr/bin"], home: "/h")
         XCTAssertEqual(env["PATH"], "/x/bin:/h/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin")
         XCTAssertEqual(env["CI"], "1")
@@ -305,10 +310,21 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertNil(AsideCLI.locateWithSource(configured: "/nope", home: home.appendingPathComponent("x"), shellLookup: { "relative" }))
     }
 
+    func testWorkRootsListsAccountsThatHaveOne() throws {
+        let home = root.deletingLastPathComponent()
+        let u = home.appendingPathComponent(".aside/u")
+        try FileManager.default.createDirectory(at: u.appendingPathComponent("0/atm-e2e"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: u.appendingPathComponent("1/cache"), withIntermediateDirectories: true)
+        XCTAssertEqual(AsideCLI.workRoots(home: home).map(\.lastPathComponent), ["atm-e2e"])
+        XCTAssertEqual(AsideCLI.workRoots(home: home).first?.deletingLastPathComponent().lastPathComponent, "0")
+        XCTAssertEqual(AsideCLI.workRoots(home: home.appendingPathComponent("none")), [])
+    }
+
     func testPromptHasJobDirAndSchema() {
         let p = E2EPrompt.render(jobDir: URL(fileURLWithPath: "/tmp/a b/jobs/1", isDirectory: true))
-        XCTAssertTrue(p.contains("/tmp/a b/jobs/1/job.json"))
+        XCTAssertTrue(p.contains("/tmp/a b/jobs/1/request.json"))
         XCTAssertTrue(p.contains("/tmp/a b/jobs/1/result.json"))
+        XCTAssertFalse(p.contains("password"), "비밀번호는 넘기지 않는다")
         XCTAssertTrue(p.contains("\"verdict\": \"PASS|FAIL|BLOCKED|SKIPPED\""))
         XCTAssertFalse(p.contains("{JOB_DIR}"))
         XCTAssertFalse(p.contains("{SCHEMA}"))

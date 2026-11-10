@@ -6,8 +6,8 @@ public struct E2ERunOptions {
     public var arguments: [String]
     public var environment: [String: String]
     public var timeout: TimeInterval
-    /// 실행하는 동안만 job.json 에 들어간다. nil·"" 이면 넣지 않는다.
-    public var password: String?
+    /// Aside 가 읽고 쓰는 실행용 폴더 (`AsideCLI.workDir`). 실행 중에만 있고 끝나면 결과만 job 폴더로 가져온 뒤 지운다.
+    public var workDir: URL
     /// SIGTERM 뒤 SIGKILL 까지 기다리는 시간.
     public var killGrace: TimeInterval
     /// SIGKILL 까지 간 경우 남았을 수 있는 Aside 세션을 멈춘다 (백그라운드에서 부른다).
@@ -16,33 +16,31 @@ public struct E2ERunOptions {
     public var logNotes: [String]
 
     public init(executable: String, arguments: [String], environment: [String: String], timeout: TimeInterval,
-                password: String?, killGrace: TimeInterval = 5, stopSession: ((String) -> Void)? = nil, logNotes: [String] = []) {
+                workDir: URL, killGrace: TimeInterval = 5, stopSession: ((String) -> Void)? = nil, logNotes: [String] = []) {
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
         self.timeout = timeout
-        self.password = password
+        self.workDir = workDir
         self.killGrace = killGrace
         self.stopSession = stopSession
         self.logNotes = logNotes
     }
 }
 
-/// 실행 중 stdout/stderr 를 run.log 에 줄 단위로 적는다. 비밀번호는 쓰기 전에 가린다.
+/// 실행 중 stdout/stderr 를 run.log 에 줄 단위로 적는다.
 final class E2ERunLog {
     private let lock = NSLock()
     private let handle: FileHandle?
-    private let forms: [String]
     private var partial: [Int: Data] = [:]
     private var tailText = ""
     private var session: String?
     private static let maxLine = 64 * 1024
 
-    init(url: URL, secret: String?) {
+    init(url: URL) {
         if !FileManager.default.fileExists(atPath: url.path) { try? OwnerOnlyFile.write(Data(), to: url) }
         handle = try? FileHandle(forWritingTo: url)
         _ = try? handle?.seekToEnd()
-        forms = secret.map(E2EJobStore.secretForms) ?? []
     }
 
     var sessionId: String? { lock.lock(); defer { lock.unlock() }; return session }
@@ -50,7 +48,7 @@ final class E2ERunLog {
 
     func note(_ line: String) {
         lock.lock(); defer { lock.unlock() }
-        write("[ATM \(DiagLog.timestamp())] \(E2EJobStore.redact(line, forms: forms))")
+        write("[ATM \(DiagLog.timestamp())] \(line)")
     }
 
     /// stream 0 = stdout, 1 = stderr
@@ -77,10 +75,9 @@ final class E2ERunLog {
 
     private func emit(_ raw: String, stream: Int) {
         if stream == 1, session == nil, let id = AsideCLI.sessionId(in: raw) { session = id }
-        let line = E2EJobStore.redact(raw, forms: forms)
-        tailText += line + "\n"
+        tailText += raw + "\n"
         if tailText.count > 4000 { tailText = String(tailText.suffix(3000)) }
-        write(stream == 1 ? "[err] \(line)" : line)
+        write(stream == 1 ? "[err] \(raw)" : raw)
     }
 
     private func write(_ line: String) {
@@ -88,8 +85,8 @@ final class E2ERunLog {
     }
 }
 
-/// aside 실행을 한 번에 하나씩 돌린다 (브라우저를 같이 쓰므로). 끝나는 길(성공·실패·취소·시간 초과·앱 종료)마다
-/// `E2EJobStore.finish` 로 비밀번호를 지운다.
+/// aside 실행을 한 번에 하나씩 돌린다 (브라우저를 같이 쓰므로). 실행이 끝나면(성공·실패·취소·시간 초과·앱 종료)
+/// 실행용 폴더에서 결과만 job 폴더로 가져오고 실행용 폴더를 지운다.
 public final class E2ERunner {
     public let store: E2EJobStore
     /// job 상태가 바뀔 때 (시작·끝·대기 취소). 내부 큐에서 불린다.
@@ -146,7 +143,7 @@ public final class E2ERunner {
                 self.stop(r)
             } else if let i = self.pending.firstIndex(where: { $0.job.id == jobId }) {
                 let p = self.pending.remove(at: i)
-                self.close(p.job, status: .cancelled, error: nil, sessionId: nil, secret: p.options.password)
+                self.close(p.job, status: .cancelled, error: nil, sessionId: nil)
             }
         }
     }
@@ -156,10 +153,11 @@ public final class E2ERunner {
         idle.wait(timeout: .now() + timeout) == .success
     }
 
-    /// 앱 종료 시: 대기열을 비우고 실행 중인 것을 멈춘 뒤 잠깐 기다린다. 그래도 안 끝나면 비밀번호만이라도 지운다.
+    /// 앱 종료 시: 대기열을 비우고 실행 중인 것을 멈춘 뒤 잠깐 기다린다.
+    /// 그 안에 안 끝나면 남은 실행용 폴더는 다음 실행 때 `E2EJobStore.pruneWorkDirs` 가 지운다.
     public func shutdown(timeout: TimeInterval = 3) {
         q.sync {
-            for p in pending { close(p.job, status: .cancelled, error: "ATM 을 종료해서 취소했어요", sessionId: nil, secret: p.options.password) }
+            for p in pending { close(p.job, status: .cancelled, error: "ATM 을 종료해서 취소했어요", sessionId: nil) }
             pending = []
             if let r = current {
                 r.cancelled = true
@@ -168,12 +166,7 @@ public final class E2ERunner {
                 stop(r)
             }
         }
-        guard !waitUntilIdle(timeout: timeout) else { return }
-        q.sync {
-            guard let r = current else { return }
-            store.scrubPassword(r.job.id)
-            if let pw = r.options.password { store.redact(pw, in: r.job.id) }
-        }
+        waitUntilIdle(timeout: timeout)
     }
 
     // MARK: - 내부 (q 위에서만)
@@ -185,18 +178,20 @@ public final class E2ERunner {
     }
 
     private func start(_ job: E2EJob, _ o: E2ERunOptions) {
-        let log = E2ERunLog(url: store.logFile(job.id), secret: o.password)
+        let log = E2ERunLog(url: store.logFile(job.id))
         log.note("시작 env=\(job.env.rawValue) issues=\(job.issueKeys.joined(separator: ",")) timeout=\(Int(o.timeout))s")
         log.note("실행 \(o.executable) \(o.arguments.dropLast().joined(separator: " ")) <지시문>")
+        log.note("실행용 폴더 \(o.workDir.path)")
         for n in o.logNotes { log.note(n) }
         func fail(_ message: String) {
             log.note(message)
             log.close()
-            close(job, status: .failed, error: message, sessionId: nil, secret: o.password)
+            try? FileManager.default.removeItem(at: o.workDir)
+            close(job, status: .failed, error: message, sessionId: nil)
             pump()
         }
         do {
-            if let pw = o.password, !pw.isEmpty { try store.setPassword(pw, for: job.id) }
+            try store.prepareWorkDir(job, at: o.workDir)
             try store.patch(job.id, set: ["status": E2EJobStatus.running.rawValue])
         } catch {
             return fail("요청 파일을 쓰지 못했어요: \(error.localizedDescription)")
@@ -206,7 +201,8 @@ public final class E2ERunner {
         p.executableURL = URL(fileURLWithPath: o.executable)
         p.arguments = o.arguments
         p.environment = o.environment
-        p.currentDirectoryURL = store.dir(job.id)
+        // 실제 aside(guard)는 작업 폴더를 무시하고 계정 폴더에서 돈다. 테스트용 가짜 aside 가 $PWD 로 실행용 폴더를 안다.
+        p.currentDirectoryURL = o.workDir
         p.standardInput = FileHandle.nullDevice
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
@@ -227,10 +223,12 @@ public final class E2ERunner {
             }
         }
         p.terminationHandler = { [weak self] _ in
+            // Swift 5.10: weak self(var)를 안쪽 클로저로 바로 넘기면 막힌다. let 으로 옮겨 넘긴다.
+            let me = self
             // 손자 프로세스가 파이프를 쥐고 있으면 EOF 가 안 온다. 오래 기다리지 않는다.
             DispatchQueue.global().async {
                 let drained = r.streams.wait(timeout: .now() + 3) == .success
-                self?.q.async { self?.finalize(r, drained: drained) }
+                me?.q.async { me?.finalize(r, drained: drained) }
             }
         }
         do {
@@ -292,26 +290,23 @@ public final class E2ERunner {
         if diedBySignal, let sid = sessionId, let stopSession = r.options.stopSession {
             DispatchQueue.global().async { stopSession(sid) }
         }
+        let skipped = store.importResults(from: r.options.workDir, into: r.job.id)
+        if !skipped.isEmpty { r.log.note("가져오지 않은 파일 (이미지·result.json 이 아니거나 링크·너무 큼): \(skipped.joined(separator: ", "))") }
         let (status, error) = Self.outcome(cancelled: r.cancelled, cancelReason: r.cancelReason, timedOut: r.timedOut,
                                            timeout: r.options.timeout, result: store.result(r.job.id),
                                            exitCode: code, output: r.log.tail)
         r.log.note("결과 \(status.rawValue)\(error.map { " · \($0)" } ?? "")")
         r.log.close()
-        close(r.job, status: status, error: error, sessionId: sessionId, secret: r.options.password)
+        close(r.job, status: status, error: error, sessionId: sessionId)
         pump()
     }
 
-    /// job 을 끝내고(비밀번호 삭제) 알린다. enqueue 한 job 마다 정확히 한 번 불린다.
-    private func close(_ job: E2EJob, status: E2EJobStatus, error: String?, sessionId: String?, secret: String?) {
+    /// job 을 끝내고 알린다. enqueue 한 job 마다 정확히 한 번 불린다.
+    private func close(_ job: E2EJob, status: E2EJobStatus, error: String?, sessionId: String?) {
         var out = job
         out.status = status
         out.error = error
-        do {
-            out = try store.finish(job, status: status, error: error, sessionId: sessionId, secret: secret)
-        } catch {
-            store.scrubPassword(job.id)
-            if let secret { store.redact(secret, in: job.id) }
-        }
+        if let saved = try? store.finish(job, status: status, error: error, sessionId: sessionId) { out = saved }
         onUpdate?(out)
         idle.leave()
     }

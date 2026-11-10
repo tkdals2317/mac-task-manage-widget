@@ -150,10 +150,19 @@ final class E2EModelsTests: XCTestCase {
         XCTAssertEqual(m.count, 2)
     }
 
-    func testSecretItemsIncludeE2EAccounts() {
-        let items = SecretStore.knownItems(jiraEmail: "")
-        for env in E2EEnv.allCases {
-            XCTAssertTrue(items.contains { $0.service == E2ESecrets.service && $0.account == env.rawValue })
-        }
+    func testPRIsHiddenUnlessAllowed() {
+        XCTAssertEqual(E2EEnv.selectable(allowPR: false), [.dv, .st, .st2])
+        XCTAssertEqual(E2EEnv.selectable(allowPR: true), [.dv, .st, .st2, .pr])
+    }
+
+    func testIssueWebURLOnlyHTTP() {
+        func url(_ s: String) -> URL? { E2EIssueRef(key: "A-1", url: s, title: "").webURL }
+        XCTAssertEqual(url("https://x.atlassian.net/browse/A-1")?.absoluteString, "https://x.atlassian.net/browse/A-1")
+        XCTAssertNotNil(url("HTTP://jira.local/browse/A-1"))
+        XCTAssertNil(url("file:///Applications/Calculator.app"))
+        XCTAssertNil(url("/tmp/run.sh"))
+        XCTAssertNil(url("javascript:alert(1)"))
+        XCTAssertNil(url("https://"))
+        XCTAssertNil(url(""))
     }
 }

@@ -131,7 +131,8 @@ struct E2EResultView: View {
 
     private func issueCard(_ issue: E2EIssueResult) -> some View {
         let ref = job.issues.first { $0.key == issue.key }
-        let url = URL(string: issue.url.isEmpty ? (ref?.url ?? "") : issue.url)
+        // Aside 가 쓴 result.json 의 url 은 열지 않는다. ATM 이 만든 Jira 주소만 쓴다.
+        let url = ref?.webURL
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Button { if let url { NSWorkspace.shared.open(url) } } label: {

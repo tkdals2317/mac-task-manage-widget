@@ -99,14 +99,12 @@ public enum SecretStore {
         try? current.delete(service: service, account: account)
     }
 
-    /// 옮길 대상: Jira 토큰(이메일이 있을 때), Bitbucket 토큰(이메일이 있을 때), Teleport 비밀번호·OTP 키, 노트 Touch ID 열쇠(켜 둔 경우만 존재),
-    /// E2E 환경별 테스트 계정 비밀번호.
+    /// 옮길 대상: Jira 토큰(이메일이 있을 때), Bitbucket 토큰(이메일이 있을 때), Teleport 비밀번호·OTP 키, 노트 Touch ID 열쇠(켜 둔 경우만 존재).
     public static func knownItems(jiraEmail: String, bitbucketEmail: String = "") -> [(service: String, account: String)] {
         var items = [(service: TeleportSecrets.service, account: TeleportSecrets.account)]
         if !jiraEmail.isEmpty { items.append((Keychain.service, jiraEmail)) }
         if !bitbucketEmail.isEmpty { items.append((BitbucketSecrets.service, bitbucketEmail)) }
         items.append((NoteCrypto.touchIDService, NoteCrypto.touchIDAccount))
-        items += E2EEnv.allCases.map { (E2ESecrets.service, E2ESecrets.account($0)) }
         return items
     }
 

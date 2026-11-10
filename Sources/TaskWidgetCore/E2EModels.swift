@@ -1,11 +1,16 @@
 import Foundation
 
-/// 검증할 테스트 환경. PR(운영)은 조회만 한다.
+/// 검증할 테스트 환경. PR(운영)은 설정에서 켜야 고를 수 있고, 조회만 하라고 지시한다.
 public enum E2EEnv: String, Codable, CaseIterable, Identifiable {
     case dv = "DV", st = "ST", st2 = "ST2", pr = "PR"
 
     public var id: String { rawValue }
     public var forcesReadOnly: Bool { self == .pr }
+
+    /// 환경 칩·설정에 보일 환경. PR 은 allowPR 일 때만.
+    public static func selectable(allowPR: Bool) -> [E2EEnv] {
+        allCases.filter { $0 != .pr || allowPR }
+    }
 }
 
 public enum E2EJobStatus: String, Codable {
@@ -58,9 +63,37 @@ public struct E2EIssueRef: Codable, Equatable, Identifiable {
         self.title = title
         self.detailFile = detailFile
     }
+
+    /// 눌러서 열어도 되는 이슈 주소. ATM 이 Jira 주소로 만든 http(s) 만 받는다 (result.json 의 url 은 쓰지 않는다).
+    public var webURL: URL? {
+        guard let u = URL(string: url), let scheme = u.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              u.host?.isEmpty == false else { return nil }
+        return u
+    }
 }
 
-/// job.json 의 ATM 쪽 모델. 비밀번호는 실행 중에만 파일에 들어가고 이 모델에는 두지 않는다 (E2EJobStore.setPassword).
+/// Aside 에 넘기는 요청(request.json). 에이전트가 알아야 할 것만 담는다.
+public struct E2ERequest: Codable, Equatable {
+    public var jobId: String
+    public var env: E2EEnv
+    public var baseUrl: String
+    public var username: String
+    public var readOnly: Bool
+    public var notes: String
+    public var issues: [E2EIssueRef]
+
+    public init(_ job: E2EJob) {
+        jobId = job.id
+        env = job.env
+        baseUrl = job.baseUrl
+        username = job.username
+        readOnly = job.readOnly
+        notes = job.notes
+        issues = job.issues
+    }
+}
+
+/// job.json 의 ATM 쪽 모델. Aside 는 이 파일을 보지 않고 E2ERequest 를 받는다.
 public struct E2EJob: Codable, Equatable, Identifiable {
     public var id: String
     public var env: E2EEnv
@@ -101,7 +134,7 @@ public struct E2EJob: Codable, Equatable, Identifiable {
         case id, env, baseUrl, username, readOnly, issues, notes, requestedBy, status, createdAt, finishedAt, error, sessionId, model
     }
 
-    /// Aside 가 실행 중에 job.json 을 다시 쓰므로 모양이 조금 달라져도 읽는다.
+    /// 손으로 고쳤거나 이전 버전이 쓴 job.json 도 읽도록 모양이 조금 달라도 받아들인다.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -342,12 +375,6 @@ public enum E2ERunPolicy {
         let per = max(1, minutesPerIssue), cap = max(per, maxMinutes)
         return TimeInterval(min(per * max(1, issueCount), cap) * 60)
     }
-}
-
-/// 테스트 계정 비밀번호를 SecretStore 에 둘 때의 위치.
-public enum E2ESecrets {
-    public static let service = "com.lsm0506.TaskWidget.e2e"
-    public static func account(_ env: E2EEnv) -> String { env.rawValue }
 }
 
 extension KeyedDecodingContainer {
