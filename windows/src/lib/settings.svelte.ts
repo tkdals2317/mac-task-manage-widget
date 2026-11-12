@@ -1,7 +1,7 @@
 // 설정. Mac 판 UserDefaults 키 이름 그대로, 데이터 폴더의 settings.json 에 저장한다.
 // 패널과 설정 창이 같은 값을 보도록 저장할 때 "settings-changed" 이벤트로 알린다.
 import { emit, listen } from "@tauri-apps/api/event";
-import { readJSON, writeJSON } from "./native";
+import { readJSON, setSecretMode, writeJSON } from "./native";
 
 export const DEFAULTS = {
   opacity: 1.0,
@@ -22,7 +22,44 @@ export const DEFAULTS = {
   jiraJQL: "",
   confluenceBaseURL: "",
   lastTab: "tasks",
-  enabledTabs: "tasks,notes",
+  enabledTabs: "tasks,summary,notes",
+  // 요약 / Claude 연동
+  summaryHour: 18,
+  summaryMinute: 0,
+  summaryNotify: true,
+  summaryInstructions: "",
+  summaryWeekly: false,
+  claudeModel: "",
+  claudePath: "",
+  // 비밀 정보 저장: credman(자격 증명 관리자, Mac 의 keychain 자리) | file(secrets.json)
+  secretStorage: "credman",
+  // PR
+  prGitHubEnabled: false,
+  prBitbucketEnabled: false,
+  prBitbucketEmail: "",
+  prBitbucketWorkspace: "",
+  prBitbucketRepos: "", // "ws/repo,ws/repo2"
+  prBitbucketNoWrite: false,
+  prHiddenRepos: "", // JSON 배열
+  prCloneRoots: "", // JSON 배열. 비면 기본 폴더
+  prStaleDays: 2,
+  prHideDrafts: false,
+  prRefreshMinutes: 5,
+  prNotifyNewReview: true,
+  prNotifyApproved: true,
+  prNotifyChanges: true,
+  prNotifyComments: true,
+  prFilter: "all", // all | github | bitbucket
+  prReviewStateFilter: "",
+  prReviewRepoFilter: "",
+  prReviewAuthorFilter: "",
+  prReviewCollapsed: false,
+  prMineCollapsed: false,
+  // Teleport
+  tshPath: "",
+  teleportAutoConnect: true,
+  teleportWanted: "",
+  teleportCheckSeconds: 60,
   todoSectionCollapsed: false,
   jiraSectionCollapsed: false,
   jiraVersionFilter: "",
@@ -61,11 +98,13 @@ function apply(values: Partial<Settings>): void {
       (settings as Record<string, unknown>)[k] = values[k];
     }
   }
+  setSecretMode(settings.secretStorage);
 }
 
 /** 값 바꾸고 저장 (0.3초 모아서 한 번). */
 export function setSetting<K extends SettingsKey>(key: K, value: Settings[K]): void {
   settings[key] = value;
+  if (key === "secretStorage") setSecretMode(String(value));
   if (!loaded) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {

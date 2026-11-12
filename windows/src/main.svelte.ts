@@ -9,6 +9,13 @@ import { applyTheme } from "./lib/theme";
 import { log, native } from "./lib/native";
 import { setHotkeyError } from "./lib/hotkeyStatus.svelte";
 import { displayAccelerator } from "./lib/hotkey";
+import { listen } from "@tauri-apps/api/event";
+import { enabledTabs } from "./lib/settings.svelte";
+import { startSummaryScheduler } from "./lib/summary.svelte";
+import { refreshPR, resetBitbucketCache, startPRLoop } from "./lib/pr.svelte";
+import { locateTsh, reloadConfig, refreshStatus as refreshTeleportStatus, startTeleport, tp } from "./lib/teleport.svelte";
+import { startTasks, store } from "./lib/todos.svelte";
+import { dayKey } from "./lib/summaryCore";
 
 await loadSettings();
 const win = getCurrentWindow();
@@ -40,6 +47,9 @@ $effect.root(() => {
   });
   $effect(() => {
     const want = settings.launchAtLogin;
+    // 개발 빌드(`tauri dev`)는 임시 빌드 폴더의 exe 라서 등록하면 안 된다.
+    // 같은 "ATM" 이름이라 설치한 앱의 자동 실행 항목까지 덮어쓴다.
+    if (import.meta.env.DEV) return;
     isEnabled()
       .then((cur) => (cur === want ? undefined : want ? enable() : disable()))
       .catch(() => {});
@@ -49,5 +59,35 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
 
 mount(App, { target: document.getElementById("app")! });
 
-// 처음 실행이면 설정 창을 열어 Jira 연결부터 안내한다.
-if (!settings.onboardingDone) native.openSettings("jira");
+// ---- 백그라운드 일: 요약 자동 생성, PR 새로고침·알림, Teleport 자동 유지 ----
+// 패널 창은 숨겨도 살아 있으므로 여기서 돌린다 (Mac AppDelegate 의 Scheduler·PRModel.startLoop·TeleportManager.start).
+const ALL_TABS = ["tasks", "summary", "notes", "pr", "teleport"];
+let panelVisible = true;
+const checkVisible = () => win.isVisible().then((v) => (panelVisible = v)).catch(() => {});
+setInterval(checkVisible, 10_000);
+listen("panel-hidden", () => (panelVisible = false)).catch(() => {});
+win.onFocusChanged(({ payload }) => { if (payload) panelVisible = true; }).catch(() => {});
+
+startTasks();
+startSummaryScheduler();
+startPRLoop(() => panelVisible);
+startTeleport(() => enabledTabs(settings.enabledTabs, ALL_TABS).includes("teleport"));
+
+// 설정 창에서 바꾼 것 반영
+listen("pr-config-changed", () => { resetBitbucketCache(); void refreshPR(); }).catch(() => {});
+listen("teleport-config-changed", () => { void locateTsh().then(reloadConfig).then(refreshTeleportStatus); }).catch(() => {});
+listen("teleport-setup-requested", () => { tp.setupRequested = true; void win.show(); void win.setFocus(); }).catch(() => {});
+
+// 트레이 툴팁에 오늘·지난 마감 할 일 수 (Mac 메뉴바 숫자)
+$effect.root(() => {
+  $effect(() => {
+    if (!store.loaded) return;
+    const today = dayKey(new Date());
+    const n = store.todos.filter((t) => !t.done).reduce((c, t) =>
+      c + (t.dueDate && t.dueDate <= today ? 1 : 0) + t.subtasks.filter((s) => !s.done && s.dueDate && s.dueDate <= today).length, 0);
+    native.setTrayTooltip(n ? `ATM · 오늘까지 할 일 ${n}개` : "ATM").catch(() => {});
+  });
+});
+
+// 처음 실행이면 설정 도우미를 연다.
+if (!settings.onboardingDone) native.openSettings("onboarding");

@@ -20,7 +20,22 @@
 </script>
 
 <div class="pane">
-  <h2>모양</h2>
+  <h2>외관</h2>
+  <div class="card">
+    <div class="srow">
+      <span>투명도</span>
+      <div class="range">
+        <input type="range" min="0.6" max="1" step="0.05" value={settings.opacity} aria-label="투명도"
+          oninput={(e) => setSetting("opacity", Number(e.currentTarget.value))} />
+        <span class="val">{Math.round(settings.opacity * 100)}%</span>
+      </div>
+    </div>
+    <label class="srow">
+      <span>마우스 올리면 불투명</span>
+      <input class="switch" type="checkbox" checked={settings.hoverOpaque} onchange={(e) => setSetting("hoverOpaque", e.currentTarget.checked)} />
+    </label>
+  </div>
+
   <div class="card">
     <div class="srow">
       <span>테마</span>
@@ -30,6 +45,11 @@
     {#if settings.themePreset !== "default"}
       <div class="hint" style="padding-bottom:10px">테마 색을 쓰면 밝기는 배경에 맞춰 자동</div>
     {/if}
+    <div class="srow">
+      <span>글자 크기</span>
+      <Segmented value={settings.fontScale} onpick={(v) => setSetting("fontScale", v)}
+        options={[{ value: 0.9, label: "작게" }, { value: 1, label: "보통" }, { value: 1.15, label: "크게" }]} />
+    </div>
   </div>
 
   <div class="card-title">테마 색</div>
