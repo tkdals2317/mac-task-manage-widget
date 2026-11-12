@@ -15,6 +15,8 @@ macOS 메뉴바에 상주하는 플로팅 위젯이다. 한 패널에서 다음�
 
 ## 설치
 
+> **Windows 를 쓰나요?** [Windows 판](windows/README.md) 을 보세요. 지금은 할 일·노트 탭까지 있고, 요약·PR·Teleport 는 차례로 추가돼요.
+
 ### 준비물
 
 - macOS 14 이상, Command Line Tools 의 Swift 5.10 이상 (`swift --version` 으로 확인, `make doctor` 가 같이 점검)
