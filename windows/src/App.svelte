@@ -6,6 +6,7 @@
   import { settings, setSetting, enabledTabs } from "./lib/settings.svelte";
   import { native } from "./lib/native";
   import { toast } from "./lib/toast.svelte";
+  import { hotkeyStatus } from "./lib/hotkeyStatus.svelte";
   import { checkUpdate, type UpdateInfo } from "./lib/updater";
   import TasksTab from "./tabs/TasksTab.svelte";
   import NotesTab from "./tabs/NotesTab.svelte";
@@ -70,6 +71,12 @@
     </button>
   </div>
 
+  {#if hotkeyStatus.error}
+    <button class="hotkey-warn" onclick={() => native.openSettings("window")}>
+      단축키: {hotkeyStatus.error} · 설정 &gt; 창 에서 바꾸기
+    </button>
+  {/if}
+
   {#if enabled.length > 1}
     <div class="tabbar-wrap">
       <div class="tabbar" bind:this={bar}>
@@ -129,6 +136,10 @@
     color: var(--fg2); cursor: pointer; border-radius: 6px; font-size: 1.05em;
   }
   .tab.on { color: var(--accent); }
+  .hotkey-warn {
+    margin: 0 10px 6px; padding: 5px 10px; border-radius: 6px; border: none; text-align: left; cursor: pointer;
+    background: var(--warn-soft); color: var(--warn); font-size: 0.92em; flex: none;
+  }
   .divider { height: 1px; background: var(--line); flex: none; }
   .content { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .footer { display: flex; align-items: center; padding: 3px 10px; flex: none; }
