@@ -1,6 +1,7 @@
 <script lang="ts">
   // 패널 셸: 맨 위 끌기 줄(− ✕), 탭 바(미끄러지는 알약), 탭 내용, 아래 설정 버튼, 복사 알림.
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { emit } from "@tauri-apps/api/event";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { settings, setSetting, enabledTabs } from "./lib/settings.svelte";
   import { native } from "./lib/native";
@@ -37,10 +38,16 @@
     return () => clearInterval(t);
   });
 
+  // 숨길 때 잠긴 메모를 다시 잠그도록 알린다 (트레이·단축키로 숨길 때는 Rust 가 보낸다).
+  function hidePanel() {
+    emit("panel-hidden").catch(() => {});
+    win.hide();
+  }
+
   function onKey(e: KeyboardEvent) {
     // Esc: 패널 숨김 (입력 중이 아닐 때)
     const tag = (e.target as HTMLElement)?.tagName;
-    if (e.key === "Escape" && tag !== "INPUT" && tag !== "TEXTAREA") win.hide();
+    if (e.key === "Escape" && tag !== "INPUT" && tag !== "TEXTAREA") hidePanel();
     if (e.key === "," && e.ctrlKey) native.openSettings();
   }
 </script>
@@ -58,7 +65,7 @@
     <button class="win-btn" aria-label="최소화" title="최소화" onclick={() => win.minimize()}>
       <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 5h8" stroke="currentColor" stroke-width="1" /></svg>
     </button>
-    <button class="win-btn close" aria-label="숨기기" title="숨기기 (트레이에서 다시 열기)" onclick={() => win.hide()}>
+    <button class="win-btn close" aria-label="숨기기" title="숨기기 (트레이에서 다시 열기)" onclick={hidePanel}>
       <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1" /></svg>
     </button>
   </div>

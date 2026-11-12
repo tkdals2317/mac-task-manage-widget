@@ -80,6 +80,27 @@ fn move_aside(name: String, to: String) -> Result<(), String> {
     fs::rename(from, dest).map_err(|e| e.to_string())
 }
 
+/// 폴더 안 파일 이름 목록 (하위 폴더 제외). 폴더가 없으면 만든다.
+/// inbox 는 처리한 파일을 옮길 done/·bad/ 도 같이 만든다.
+#[tauri::command]
+fn list_dir(name: String) -> Result<Vec<String>, String> {
+    let dir = safe_path(&name)?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if name == "inbox" {
+        let _ = fs::create_dir_all(dir.join("done"));
+        let _ = fs::create_dir_all(dir.join("bad"));
+    }
+    let mut out = Vec::new();
+    for e in fs::read_dir(&dir).map_err(|e| e.to_string())? {
+        let e = e.map_err(|e| e.to_string())?;
+        if e.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            out.push(e.file_name().to_string_lossy().into_owned());
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// logs/app.log 에 한 줄. 비밀값은 넘기지 않는다.
 #[tauri::command]
 fn log_line(line: String) -> Result<(), String> {
@@ -166,6 +187,7 @@ async fn hello_verify(reason: String) -> bool {
 fn toggle_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         if w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) {
+            let _ = app.emit("panel-hidden", ());
             let _ = w.hide();
         } else {
             let _ = w.show();
@@ -226,6 +248,7 @@ pub fn run() {
             read_text,
             write_text,
             move_aside,
+            list_dir,
             log_line,
             secret_get,
             secret_set,
@@ -272,6 +295,7 @@ pub fn run() {
             if let WindowEvent::CloseRequested { api, .. } = e {
                 if w.label() == "main" {
                     api.prevent_close();
+                    let _ = w.emit("panel-hidden", ());
                     let _ = w.hide();
                 }
             }
