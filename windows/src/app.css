@@ -1,0 +1,67 @@
+/* 공용 바탕. 색은 theme.ts 가 루트 CSS 변수로 넣는다. 글자 크기는 --scale 배수. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  font-size: calc(13px * var(--scale, 1));
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+#app { height: 100%; }
+input, textarea, button, select { font: inherit; color: inherit; }
+.mono { font-family: "Cascadia Mono", Consolas, monospace; }
+.muted { color: var(--fg2); }
+.faint { color: var(--fg3); }
+.selectable { user-select: text; }
+
+/* 입력칸: 옅은 바탕, 포커스 시 강조색 테두리 (Mac ThemedTextField) */
+.field {
+  width: 100%; padding: 6px 10px; border-radius: 6px;
+  background: var(--fill); border: 1px solid var(--line); outline: none;
+}
+.field:focus { border-color: var(--accent); }
+.field::placeholder { color: var(--fg3); }
+
+/* 칩·버튼 */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 6px;
+  font-size: 0.88em; white-space: nowrap; background: var(--fill2); color: var(--fg2); border: none;
+}
+.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.chip.danger { background: var(--danger-soft); color: var(--danger); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.info { background: var(--info-soft); color: var(--info); }
+button.chip { cursor: pointer; }
+.btn {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--fill); cursor: pointer;
+}
+.btn:hover { background: var(--fill2); }
+.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent;
+  color: var(--fg2); cursor: pointer; padding: 0;
+}
+.icon-btn:hover { background: var(--fill2); color: var(--fg); }
+
+/* 섹션 머리 (⌄ 내 할 일 6) */
+.section-header {
+  display: flex; align-items: center; gap: 6px; padding: 10px 2px 6px;
+  color: var(--fg2); cursor: pointer;
+}
+.row { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid var(--line); }
+
+/* 팝오버 (DuePopover, TagPopover 등) */
+.popover {
+  position: absolute; z-index: 50; min-width: 200px; padding: 10px; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+
+/* 얇은 스크롤바: 기본 투명, 호버 때 강조색 (Mac AccentScrollBar) */
+.scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.scroll:hover { scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent; }

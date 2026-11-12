@@ -6,8 +6,10 @@ name: build-compat
 # 남은 이미지 중 가장 낮은 macos-15 + Xcode 16.0(Swift 6.0, macOS 15 SDK)을 쓴다. Swift 5.10 호환은 이 job 으로 확인되지 않는다.
 on:
   pull_request:
+    paths-ignore: [windows/**, .github/workflows/windows.yml]
   push:
     branches: [main]
+    paths-ignore: [windows/**, .github/workflows/windows.yml]
 
 jobs:
   swift510:
