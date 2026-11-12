@@ -10,10 +10,14 @@ import { log, native } from "./lib/native";
 
 await loadSettings();
 const win = getCurrentWindow();
+let hovering = $state(false);
+document.documentElement.addEventListener("mouseenter", () => (hovering = true));
+document.documentElement.addEventListener("mouseleave", () => (hovering = false));
 
 // 설정이 바뀔 때마다 테마·항상 위·단축키·자동 실행을 다시 맞춘다.
 $effect.root(() => {
-  $effect(() => applyTheme(settings));
+  // 마우스를 올리면 불투명 (hoverOpaque, Mac 과 같음)
+  $effect(() => applyTheme(hovering && settings.hoverOpaque ? { ...settings, opacity: 1 } : settings));
   $effect(() => {
     win.setAlwaysOnTop(settings.alwaysOnTop).catch(() => {});
   });

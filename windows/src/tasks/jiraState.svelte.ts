@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 // Jira 상태 (Mac AppState 의 Jira 부분). 토큰은 자격 증명 관리자에서 읽는다 (service = Mac 키체인과 같은 문자열).
 import { log, native } from "../lib/native";
 import { settings } from "../lib/settings.svelte";
@@ -17,6 +18,12 @@ export const jira = $state({
 });
 
 let cachedToken: { account: string; token: string } | null = null;
+
+// 설정 창에서 토큰을 저장하면 캐시를 버리고 바로 다시 불러온다.
+listen("jira-token-saved", () => {
+  cachedToken = null;
+  refreshJira().catch(() => {});
+}).catch(() => {});
 
 async function token(account: string): Promise<string | null> {
   if (cachedToken?.account === account) return cachedToken.token;
