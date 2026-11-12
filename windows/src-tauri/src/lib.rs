@@ -198,24 +198,30 @@ fn toggle_main(app: &AppHandle) {
 }
 
 /// 설정 창. 이미 있으면 앞으로.
+/// 창을 만드는 명령은 반드시 async 여야 한다. 동기 명령에서 만들면 Windows 에서 교착이 걸려
+/// 새 창이 빈 화면으로 멈추고 숨기기·닫기·종료까지 전부 막힌다 (Tauri 문서의 경고).
 #[tauri::command]
-fn open_settings(app: AppHandle, pane: Option<String>) -> Result<(), String> {
+async fn open_settings(app: AppHandle, pane: Option<String>) -> Result<(), String> {
+    // 화면 id 는 영문 소문자만 (스크립트에 넣으므로)
+    let pane = pane.filter(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_lowercase()));
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.show();
+        let _ = w.unminimize();
         let _ = w.set_focus();
         if let Some(p) = pane {
             let _ = w.emit("settings-pane", p);
         }
         return Ok(());
     }
-    let url = match pane {
-        Some(p) => format!("settings.html#{p}"),
-        None => "settings.html".into(),
-    };
-    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url.into()))
+    // 처음 열 화면은 URL 해시 대신 초기화 스크립트로 넘긴다 (Windows 의 앱 경로에서 #이 파일 이름으로 인코딩될 수 있음).
+    let init = format!("window.__ATM_PANE = {};", pane.map(|p| format!("\"{p}\"")).unwrap_or("null".into()));
+    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
         .title("ATM 설정")
         .inner_size(760.0, 620.0)
         .min_inner_size(640.0, 480.0)
+        // 패널이 항상 위라서 설정 창도 위로 띄워야 가려지지 않는다
+        .always_on_top(true)
+        .initialization_script(&init)
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -260,6 +266,10 @@ pub fn run() {
         ])
         .setup(|app| {
             let _ = fs::create_dir_all(data_dir().join("logs"));
+            // 패널은 트레이 앱이라 작업 표시줄에 띄우지 않는다 (설정 창은 일반 창이라 보인다)
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_skip_taskbar(true);
+            }
             let open = MenuItem::with_id(app, "open", "ATM 열기", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "설정…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
@@ -272,7 +282,10 @@ pub fn run() {
                 .on_menu_event(|app, e| match e.id.as_ref() {
                     "open" => toggle_main(app),
                     "settings" => {
-                        let _ = open_settings(app.clone(), None);
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = open_settings(app, None).await;
+                        });
                     }
                     "quit" => app.exit(0),
                     _ => {}

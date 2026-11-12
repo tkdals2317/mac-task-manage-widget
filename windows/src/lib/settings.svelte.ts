@@ -14,7 +14,8 @@ export const DEFAULTS = {
   alwaysOnTop: true,
   launchAtLogin: true,
   globalHotKeyEnabled: true,
-  globalHotKey: "Ctrl+Alt+Space", // Tauri 단축키 문자열
+  // Tauri 단축키 문자열. Ctrl+Alt+Space 는 Claude 데스크톱 앱 빠른 입력과 겹쳐서 Ctrl+Alt+Q.
+  globalHotKey: "Ctrl+Alt+Q",
   jiraBaseURL: "",
   jiraEmail: "",
   jiraRefreshMinutes: 5,
@@ -69,7 +70,11 @@ export function setSetting<K extends SettingsKey>(key: K, value: Settings[K]): v
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const snapshot = { ...settings };
-    writeJSON(FILE, snapshot).catch(() => {});
+    // 기본값과 다른 것만 파일에 남긴다 (나중에 기본값을 바꾸면 안 건드린 사용자에게 적용되게)
+    const changed = Object.fromEntries(
+      Object.entries(snapshot).filter(([k, v]) => v !== DEFAULTS[k as SettingsKey]),
+    );
+    writeJSON(FILE, changed).catch(() => {});
     emit("settings-changed", { source, values: snapshot }).catch(() => {});
   }, 300);
 }

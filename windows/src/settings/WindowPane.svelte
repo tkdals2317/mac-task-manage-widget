@@ -2,6 +2,8 @@
   import { setSetting, settings } from "../lib/settings.svelte";
   import Segmented from "./Segmented.svelte";
   import HotKeyRecorder from "./HotKeyRecorder.svelte";
+  import { hotkeyStatus, watchHotkeyStatus } from "../lib/hotkeyStatus.svelte";
+  $effect(() => watchHotkeyStatus());
 </script>
 
 <div class="pane">
@@ -42,6 +44,9 @@
       <div class="srow col">
         <HotKeyRecorder />
         <div class="hint">Ctrl·Alt·Win 중 하나를 함께 눌러야 해요.</div>
+        {#if hotkeyStatus.error}
+          <div class="hint warn">{hotkeyStatus.error}. 다른 조합으로 바꿔 주세요.</div>
+        {/if}
       </div>
     {/if}
   </div>
