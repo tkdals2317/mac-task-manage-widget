@@ -7,6 +7,8 @@ import App from "./App.svelte";
 import { loadSettings, settings } from "./lib/settings.svelte";
 import { applyTheme } from "./lib/theme";
 import { log, native } from "./lib/native";
+import { setHotkeyError } from "./lib/hotkeyStatus.svelte";
+import { displayAccelerator } from "./lib/hotkey";
 
 await loadSettings();
 const win = getCurrentWindow();
@@ -25,8 +27,16 @@ $effect.root(() => {
     const on = settings.globalHotKeyEnabled;
     const key = settings.globalHotKey;
     unregisterAll()
-      .then(() => (on && key ? register(key, (e) => e.state === "Pressed" && native.togglePanel()) : undefined))
-      .catch((e) => log(`단축키 등록 실패 ${key}: ${e}`));
+      .then(async () => {
+        if (!on || !key) return setHotkeyError("");
+        await register(key, (e) => e.state === "Pressed" && native.togglePanel());
+        setHotkeyError("");
+      })
+      .catch((e) => {
+        // 대부분 다른 앱이 이미 쓰는 조합 (예: Claude 데스크톱의 Ctrl+Alt+Space)
+        log(`단축키 등록 실패 ${key}: ${e}`);
+        setHotkeyError(`${displayAccelerator(key)} 를 다른 앱이 쓰고 있어요`);
+      });
   });
   $effect(() => {
     const want = settings.launchAtLogin;

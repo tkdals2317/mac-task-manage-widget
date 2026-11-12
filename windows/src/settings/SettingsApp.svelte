@@ -30,7 +30,11 @@
   let pane = $state<PaneId>("window");
   let hasToken = $state(false);
 
-  const fromHash = () => { const h = location.hash.slice(1); if (known(h)) pane = h; };
+  // 처음 열 화면: Rust 가 넣어 주는 window.__ATM_PANE, 개발 서버에서는 #해시도 받는다
+  const fromHash = () => {
+    const h = (window as unknown as { __ATM_PANE?: string | null }).__ATM_PANE ?? location.hash.slice(1);
+    if (known(h)) pane = h;
+  };
 
   async function refreshToken() {
     const email = settings.jiraEmail.trim();
