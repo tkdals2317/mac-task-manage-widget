@@ -15,12 +15,14 @@ describe("summaryCore", () => {
   });
 
   it("activity.jsonl 은 그날 것만, 깨진 줄은 건너뛴다", () => {
+    // "그날" 은 실행하는 PC 의 시간대 기준이라, 시각도 로컬 시간으로 만든다 (CI 는 UTC).
     const day = new Date(2026, 10, 13);
+    const at = (d: number, h: number) => new Date(2026, 10, d, h).toISOString();
     const lines = [
-      JSON.stringify({ ts: "2026-11-13T09:00:00+09:00", event: "prompt", session: "a", cwd: "C:\\p", text: "hi" }),
+      JSON.stringify({ ts: at(13, 9), event: "prompt", session: "a", cwd: "C:\\p", text: "hi" }),
       "{broken",
-      JSON.stringify({ ts: "2026-11-12T09:00:00+09:00", event: "stop", session: "a", cwd: "C:\\p", text: "old" }),
-      JSON.stringify({ ts: "2026-11-13T08:00:00+09:00", event: "stop", session: "a", cwd: "C:\\p", text: "first" }),
+      JSON.stringify({ ts: at(12, 9), event: "stop", session: "a", cwd: "C:\\p", text: "old" }),
+      JSON.stringify({ ts: at(13, 8), event: "stop", session: "a", cwd: "C:\\p", text: "first" }),
     ].join("\n");
     const r = parseActivity(lines, day);
     expect(r.map((x) => x.text)).toEqual(["first", "hi"]);
