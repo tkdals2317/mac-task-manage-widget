@@ -79,7 +79,8 @@ public enum E2EWebURL {
 
 /// 환경 로그인에 막힌 이유 (result.json 의 loginBlocked). 사용자가 Aside 에서 무엇을 하면 되는지 고르는 데 쓴다.
 public enum E2ELoginBlock: String, CaseIterable {
-    case vaultLocked = "VAULT_LOCKED", noSavedLogin = "NO_SAVED_LOGIN", other = "OTHER"
+    case vaultNotSetUp = "VAULT_NOT_SETUP", vaultLocked = "VAULT_LOCKED", noSavedLogin = "NO_SAVED_LOGIN"
+    case wrongAccount = "WRONG_ACCOUNT", rejected = "LOGIN_REJECTED", twoFactor = "TWO_FACTOR", other = "OTHER"
 
     /// 비었거나 NONE·false 면 nil, 모르는 값은 other.
     public init?(lenient raw: String) {
@@ -90,15 +91,24 @@ public enum E2ELoginBlock: String, CaseIterable {
 
     public var reason: String {
         switch self {
+        case .vaultNotSetUp: return "Aside Vault(비밀번호 관리자)를 아직 만들지 않았어요."
         case .vaultLocked: return "Aside Vault 가 잠겨 있어 저장된 로그인을 꺼내지 못했어요."
         case .noSavedLogin: return "Aside Vault 에 이 환경의 로그인이 없어요."
-        case .other: return "자동 로그인이 끝까지 되지 않았어요 (2단계 인증·SSO 등)."
+        case .wrongAccount: return "Aside Vault 에 저장된 로그인이 설정한 테스트 계정과 달라요."
+        case .rejected: return "저장된 로그인으로 시도했지만 사이트가 받아 주지 않았어요 (비밀번호 변경·만료, 계정 잠김 등)."
+        case .twoFactor: return "2단계 인증 코드가 필요한데 Aside 가 넣을 수 없었어요."
+        case .other: return "자동 로그인이 끝까지 되지 않았어요 (SSO 등)."
         }
     }
 
-    /// 사용자가 할 일. account 는 "테스트 계정(qa)" 처럼 보여줄 이름.
+    /// 사용자가 할 일 (마지막은 늘 다시 실행). account 는 "테스트 계정(qa)" 처럼 보여줄 이름.
     public func steps(account: String) -> [String] {
         switch self {
+        case .vaultNotSetUp:
+            return ["Aside 에서 로그인 페이지를 열어요",
+                    "\(account)으로 직접 로그인해요",
+                    "로그인 정보를 저장할지 물으면 Aside Vault 를 만들고 저장해요",
+                    "다시 실행해요"]
         case .vaultLocked:
             return ["Aside 에서 로그인 페이지를 열어요",
                     "아이디 칸의 자동 채우기에서 Vault 잠금을 풀어요",
@@ -108,6 +118,19 @@ public enum E2ELoginBlock: String, CaseIterable {
                     "\(account)으로 직접 로그인해요",
                     "로그인 정보를 저장할지 물으면 Aside Vault 에 저장해요",
                     "다시 실행해요"]
+        case .wrongAccount:
+            return ["Aside 에서 로그인 페이지를 열어 \(account)으로 직접 로그인하고 Aside Vault 에 저장해요",
+                    "저장돼 있는 계정으로 검증하려면 설정 > E2E 의 계정 ID 를 그 계정으로 바꾸거나 비워요",
+                    "다시 실행해요"]
+        case .rejected:
+            return ["Aside 에서 로그인 페이지를 열어 \(account)으로 직접 로그인해 봐요",
+                    "비밀번호가 바뀌었으면 새 비밀번호로 로그인하고 Aside Vault 의 저장된 로그인을 바꿔요",
+                    "계정이 잠겼으면 잠금을 먼저 풀어요 (여러 번 다시 실행하면 더 오래 잠길 수 있어요)",
+                    "다시 실행해요"]
+        case .twoFactor:
+            return ["Aside 에서 로그인 페이지를 열어 \(account)으로 직접 로그인하고 인증까지 마쳐요",
+                    "인증기(OTP)를 Aside Vault 의 그 로그인에 등록해 두면 다음부터 Aside 가 코드를 넣어요",
+                    "로그인이 남아 있는 동안 다시 실행해요"]
         case .other:
             return ["Aside 에서 로그인 페이지를 열어 \(account)으로 직접 로그인해 두면 다음 실행이 그 로그인을 이어 써요",
                     "다시 실행해요"]

@@ -49,7 +49,7 @@ private struct E2ERequestView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 envRow
-                if let p = e2e.aside.problem, e2e.aside != .checking, e2e.aside != .unchecked { asideProblem(p) }
+                E2ESetupSection(e2e: e2e, env: env).id(env)
 
                 SectionHeader(title: "이슈 선택", count: keys.count, collapsed: $issuesCollapsed) {
                     JiraVersionMenu()
@@ -71,7 +71,7 @@ private struct E2ERequestView: View {
         }
         .themedScrollbar()
         .task {
-            if e2e.aside == .unchecked { await e2e.checkAside() }
+            if e2e.report == nil { await e2e.checkAside() }
             if state.jiraUpdatedAt == nil { await state.refreshJira() }
         }
         .onAppear { e2e.reload() }
@@ -99,24 +99,6 @@ private struct E2ERequestView: View {
             .buttonStyle(.plain).foregroundStyle(.secondary).help("E2E 설정")
         }
         .padding(.top, 8)
-    }
-
-    private func asideProblem(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(text).font(.system(size: 11 * scale)).foregroundStyle(.orange).lineLimit(3)
-            HStack(spacing: 6) {
-                AsideFixButton(e2e: e2e)
-                Button { Task { await e2e.checkAside() } } label: { AccentChip(icon: "arrow.clockwise", text: "다시 확인", style: .soft) }
-                    .buttonStyle(.plain)
-                Button { openSettings() } label: { AccentChip(icon: "gearshape", text: "설정", style: .plain) }
-                    .buttonStyle(.plain)
-                Spacer(minLength: 0)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.1)))
-        .padding(.top, 6)
     }
 
     private func openSettings() { NotificationCenter.default.post(name: .openSettings, object: "e2e") }

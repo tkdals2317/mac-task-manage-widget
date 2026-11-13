@@ -317,7 +317,9 @@ public final class E2ERunner {
         if case .ok(let r) = result {
             return r.issues.isEmpty ? (.failed, "result.json 에 이슈 결과가 없어요") : (.done, nil)
         }
-        if timedOut { return (.failed, "제한 시간 \(max(1, Int(timeout / 60)))분을 넘겨 멈췄어요") }
+        if timedOut {
+            return (.failed, "제한 시간 \(max(1, Int(timeout / 60)))분을 넘겨 멈췄어요 · 이슈를 나눠 실행하거나 설정 > E2E 에서 제한 시간을 늘려 보세요")
+        }
         if case .invalid(let m) = result { return (.failed, "result.json 을 읽지 못했어요 (\(m))") }
         return (.failed, E2EFailureHint.missingResult(exitCode: exitCode, output: output))
     }

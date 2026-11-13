@@ -134,7 +134,7 @@ final class E2ERunnerTests: XCTestCase {
         let j = try run("hang", "hang", timeout: 1)
         XCTAssertLessThan(Date().timeIntervalSince(start), 10)
         XCTAssertEqual(j.status, .failed)
-        XCTAssertEqual(j.error, "제한 시간 1분을 넘겨 멈췄어요")
+        XCTAssertTrue(j.error?.hasPrefix("제한 시간 1분을 넘겨 멈췄어요 · ") == true, j.error ?? "")
         try assertCleanedUp(j.id)
         // bash 가 SIGTERM 으로 죽어도 손자 sleep 이 남지 않아야 한다
         let left = ProcessRunner.run(executable: "/usr/bin/pgrep", arguments: ["-f", "sleep 6123"], timeout: 5)
@@ -207,7 +207,7 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(E2ERunner.outcome(cancelled: true, cancelReason: nil, timedOut: false, timeout: 60, result: ok, exitCode: 0, output: "").0, .cancelled)
         XCTAssertEqual(E2ERunner.outcome(cancelled: false, cancelReason: nil, timedOut: true, timeout: 600, result: ok, exitCode: 15, output: "").0, .done)
         let t = E2ERunner.outcome(cancelled: false, cancelReason: nil, timedOut: true, timeout: 600, result: .invalid("x"), exitCode: 15, output: "")
-        XCTAssertEqual(t.1, "제한 시간 10분을 넘겨 멈췄어요")
+        XCTAssertTrue(t.1?.hasPrefix("제한 시간 10분을 넘겨 멈췄어요 · ") == true, t.1 ?? "")
         let m = E2ERunner.outcome(cancelled: false, cancelReason: nil, timedOut: false, timeout: 60, result: .missing, exitCode: 0,
                                   output: "I couldn't write\n마지막 줄\n\n")
         XCTAssertEqual(m.0, .failed)
@@ -218,10 +218,10 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(AsideCLI.sessionId(in: "created new session: pltnf6d7zRGoVm6U"), "pltnf6d7zRGoVm6U")
         XCTAssertNil(AsideCLI.sessionId(in: "Error This operation was aborted"))
         // 경로에 공백·따옴표가 있어도 찾은 aside 그대로 부른다
-        let script = AsideCLI.loginScript(executable: "/Users/a b/it's/aside")
+        let script = AsideCLI.updateScript(executable: "/Users/a b/it's/aside")
         XCTAssertTrue(script.hasPrefix("#!/bin/zsh\n"))
-        XCTAssertTrue(script.contains("\n'/Users/a b/it'\\''s/aside' login\n"))
-        XCTAssertTrue(script.hasSuffix("'/Users/a b/it'\\''s/aside' account status"))
+        XCTAssertTrue(script.contains("\n'/Users/a b/it'\\''s/aside' update || {\n"))
+        XCTAssertFalse(script.contains("aside' login"), "이 Mac 에서 돌릴 땐 aside login 이 필요 없다")
         XCTAssertEqual(AsideCLI.execArguments(prompt: "p"), ["exec", "--permission", "guard", "p"])
         XCTAssertEqual(AsideCLI.execArguments(prompt: "p", model: " claude-sonnet-5 "),
                        ["exec", "--permission", "guard", "--model", "claude-sonnet-5", "p"])
@@ -229,8 +229,17 @@ final class E2ERunnerTests: XCTestCase {
                        "/h/.aside/u/2/atm-e2e/20261109100000-a1b2")
         XCTAssertEqual(E2EFailureHint.hint(for: "Error Requested model claude-code/x is not available for this account."),
                        "고른 모델을 이 Aside 계정에서 쓸 수 없어요 · E2E 탭 실행 버튼 옆에서 다른 모델을 고르세요")
-        XCTAssertEqual(E2EFailureHint.hint(for: "Error: Aside Browser profile for account u0 is not connected to the daemon."),
-                       "Aside 브라우저가 꺼져 있어요 · Aside 를 켠 뒤 다시 실행")
+        XCTAssertEqual(E2EFailureKind.detect(in: "Error: Aside Browser profile for account u0 is not connected to the daemon."), .windowClosed)
+        XCTAssertEqual(E2EFailureKind.detect(in: "connect ECONNREFUSED 127.0.0.1:1"), .asideDown)
+        XCTAssertEqual(E2EFailureKind.detect(in: "Aside needs sign-in again\nSign in again before using built-in Aside models."), .signedOut)
+        XCTAssertEqual(E2EFailureKind.detect(in: #"TRPCClientError: No procedure found on path "cli.browserProfiles""#), .versionMismatch)
+        XCTAssertEqual(E2EFailureKind.detect(in: "error: unknown command 'exec'"), .cliOutdated)
+        XCTAssertNil(E2EFailureKind.detect(in: "ABC-1 PASS"))
+        // 결과 화면이 job.error 문장으로 원인을 다시 찾으므로 문장이 서로 달라야 한다
+        XCTAssertEqual(Set(E2EFailureKind.allCases.map(\.message)).count, E2EFailureKind.allCases.count)
+        for k in E2EFailureKind.allCases { XCTAssertEqual(k.steps.last, "다시 실행해요", "\(k)") }
+        XCTAssertEqual(E2EFailureKind.cliOutdated.fix, .updateCLI)
+        XCTAssertEqual(E2EFailureKind.windowClosed.fix, .openAside)
         let env = AsideCLI.environment(executable: "/x/bin/aside", base: ["PATH": "/usr/bin"], home: "/h")
         XCTAssertEqual(env["PATH"], "/x/bin:/h/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin")
         XCTAssertEqual(env["CI"], "1")
@@ -240,9 +249,14 @@ final class E2ERunnerTests: XCTestCase {
         let noPlan = #"{"account":{"name":"Me","authStatus":"active"}}"#
         XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: noPlan, exitCode: 0), .signedIn(email: "Me", accountId: 0, plan: ""))
         let expired = #"{"account":{"email":"me@x.com","authStatus":"expired","hasSession":false}}"#
-        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: expired, exitCode: 0), .signedOut)
-        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: #"{"account":null}"#, exitCode: 0), .signedOut)
-        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: "Not signed in. Run aside login", exitCode: 1), .signedOut)
+        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: expired, exitCode: 0), .signedOut(who: "me@x.com", reason: .noSession))
+        let paused = #"{"account":{"email":"me@x.com","mode":"cloud","authStatus":"paused","authPausedReason":"device_mismatch","hasSession":true}}"#
+        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: paused, exitCode: 0), .signedOut(who: "me@x.com", reason: .paused("device_mismatch")))
+        // Aside 계정으로 로그인한 적 없는 브라우저 (local 계정)
+        let local = #"{"account":{"id":0,"name":"Guest","provider":"anonymous","mode":"local","authStatus":"active"}}"#
+        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: local, exitCode: 0), .signedOut(who: "Guest", reason: .never))
+        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: #"{"account":null}"#, exitCode: 0), .signedOut(who: "", reason: .never))
+        XCTAssertEqual(AsideCLI.parseAccountStatus(stdout: "Not signed in. Run aside login", exitCode: 1), .signedOut(who: "", reason: .never))
         if case .unknown = AsideCLI.parseAccountStatus(stdout: "boom", exitCode: 2) {} else { XCTFail("unknown 이어야 함") }
 
         XCTAssertFalse(AsideCLI.isAsideProcess(getpid()))
@@ -330,9 +344,10 @@ final class E2ERunnerTests: XCTestCase {
                        .signedIn(email: "me@example.com", accountId: 0, plan: ""))
         XCTAssertEqual(AsideCLI.parsePlainAccountStatus("  u0  a@example.com  signed in\n* u2  b@example.com  signed in"),
                        .signedIn(email: "b@example.com", accountId: 2, plan: ""))
-        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  signed out"), .signedOut)
-        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  not signed in"), .signedOut)
-        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("Not signed in. Run aside login"), .signedOut)
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  signed out"), .signedOut(who: "a@example.com", reason: .noSession))
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  signed out/paused"), .signedOut(who: "a@example.com", reason: .paused("")))
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("* u1  a@example.com  not signed in"), .signedOut(who: "a@example.com", reason: .noSession))
+        XCTAssertEqual(AsideCLI.parsePlainAccountStatus("Not signed in. Run aside login"), .signedOut(who: "", reason: .never))
         XCTAssertEqual(AsideCLI.parsePlainAccountStatus("something else"), .unknown(AsideCLI.updateHint))
         XCTAssertEqual(E2EFailureHint.hint(for: "Error: Unknown option '--permission'\n(add --help for usage)"), AsideCLI.updateHint)
     }
@@ -352,8 +367,8 @@ final class E2ERunnerTests: XCTestCase {
         XCTAssertEqual(AsideCLI.accountStatus(executable: exe.path), .signedIn(email: "old@example.com", accountId: 3, plan: ""))
     }
 
-    /// 설치한 셸에는 아직 PATH 가 없어도 설치 위치(~/.local/bin/aside)의 aside 로 이어서 로그인한다.
-    func testInstallScriptLogsInWithInstalledAside() throws {
+    /// 설치한 셸에는 아직 PATH 가 없어도 설치 위치(~/.local/bin/aside)의 aside 로 계정 상태를 보여준다. 터미널 로그인은 시키지 않는다.
+    func testInstallScriptShowsAccountStatus() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("aside-install-\(UUID().uuidString)")
         let bin = home.appendingPathComponent(".local/bin")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
@@ -371,13 +386,24 @@ final class E2ERunnerTests: XCTestCase {
         let ok = try run("echo installed")
         XCTAssertEqual(ok.status, 0, ok.stdout + ok.stderr)
         XCTAssertTrue(ok.stdout.contains("installed"))
-        XCTAssertTrue(ok.stdout.contains("fake-aside login"))
+        XCTAssertFalse(ok.stdout.contains("fake-aside login"))
         XCTAssertTrue(ok.stdout.contains("fake-aside account status"))
+        XCTAssertTrue(ok.stdout.contains("설정 > 계정"))
 
         let failed = try run("false")
         XCTAssertEqual(failed.status, 1)
         XCTAssertTrue(failed.stdout.contains("설치에 실패했어요"))
-        XCTAssertFalse(failed.stdout.contains("fake-aside login"))
+        XCTAssertFalse(failed.stdout.contains("fake-aside account status"))
+
+        // aside update 가 실패하면(구버전) 설치 명령으로 다시 설치한다
+        try Data("#!/bin/sh\n[ \"$1\" = update ] && exit 1\necho \"fake-aside $*\"\n".utf8).write(to: exe)
+        let update = home.appendingPathComponent("update.command")
+        try Data(AsideCLI.updateScript(executable: exe.path, installCommand: "echo reinstalled").utf8).write(to: update)
+        let updated = ProcessRunner.run(executable: "/bin/zsh", arguments: [update.path],
+                                        environment: ["HOME": home.path, "PATH": "/usr/bin:/bin", "TERM": "dumb"], timeout: 20)
+        XCTAssertEqual(updated.status, 0, updated.stdout + updated.stderr)
+        XCTAssertTrue(updated.stdout.contains("reinstalled"))
+        XCTAssertTrue(updated.stdout.contains("지금 버전: fake-aside --version"))
     }
 
     func testPromptHasJobDirAndSchema() {

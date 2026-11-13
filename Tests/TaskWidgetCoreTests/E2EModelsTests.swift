@@ -175,6 +175,10 @@ final class E2EModelsTests: XCTestCase {
         XCTAssertEqual(try blocked(#""VAULT_LOCKED""#), .vaultLocked)
         XCTAssertEqual(try blocked(#"" no_saved_login ""#), .noSavedLogin)
         XCTAssertEqual(try blocked(#""2FA""#), .other)
+        XCTAssertEqual(try blocked(#""vault_not_setup""#), .vaultNotSetUp)
+        XCTAssertEqual(try blocked(#""WRONG_ACCOUNT""#), .wrongAccount)
+        XCTAssertEqual(try blocked(#""LOGIN_REJECTED""#), .rejected)
+        XCTAssertEqual(try blocked(#""TWO_FACTOR""#), .twoFactor)
         XCTAssertEqual(try blocked("true"), .other)
         XCTAssertNil(try blocked(#""""#))
         XCTAssertNil(try blocked("null"))
@@ -183,6 +187,10 @@ final class E2EModelsTests: XCTestCase {
 
         let steps = E2ELoginBlock.noSavedLogin.steps(account: "테스트 계정(qa)")
         XCTAssertTrue(steps.contains { $0.contains("테스트 계정(qa)") })
-        XCTAssertEqual(E2ELoginBlock.allCases.map { $0.steps(account: "a").last ?? "" }, Array(repeating: "다시 실행해요", count: 3))
+        for b in E2ELoginBlock.allCases {
+            XCTAssertTrue(b.steps(account: "a").last?.hasSuffix("다시 실행해요") == true, b.rawValue)
+            XCTAssertFalse(b.reason.isEmpty)
+        }
+        XCTAssertEqual(Set(E2ELoginBlock.allCases.map(\.reason)).count, E2ELoginBlock.allCases.count)
     }
 }

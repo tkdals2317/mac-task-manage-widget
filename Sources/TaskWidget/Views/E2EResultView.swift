@@ -24,7 +24,14 @@ struct E2EResultView: View {
                             .buttonStyle(.plain)
                     }
                 }
-                if let error = job.error { errorBox(error) }
+                if let error = job.error {
+                    // 알아본 실패 원인이면 할 일과 버튼을 같이 보여준다
+                    if job.status == .failed, let kind = E2EFailureKind.allCases.first(where: { $0.message == error }) {
+                        failureHelp(kind)
+                    } else {
+                        errorBox(error)
+                    }
+                }
                 content
                 Text("자동 검증 결과는 참고용이에요. 가정과 스크린샷을 같이 확인해 주세요.")
                     .font(.system(size: 10 * scale)).foregroundStyle(.tertiary)
@@ -140,24 +147,42 @@ struct E2EResultView: View {
         let site = E2EWebURL.parse(job.baseUrl)
         let canOpen = site != nil && AsideBrowser.appURL != nil
         let steps = block.steps(account: job.username.isEmpty ? "테스트 계정" : "테스트 계정(\(job.username))")
-        return VStack(alignment: .leading, spacing: 4) {
-            Label("환경 로그인에서 막혔어요", systemImage: "key.fill")
+        return helpBox("환경 로그인에서 막혔어요", icon: "key.fill", reason: block.reason, steps: steps,
+                       note: "비밀번호는 Aside 에서 직접 입력해요. ATM 과 Aside 에이전트는 비밀번호를 보지 않아요.") {
+            Button { if let site { AsideBrowser.open(site) } } label: {
+                AccentChip(icon: "arrow.up.right.square", text: "Aside 에서 로그인 페이지 열기", style: .soft)
+            }
+            .buttonStyle(.plain).disabled(!canOpen)
+            .help(canOpen ? (site?.host ?? "") : "환경 주소나 Aside 브라우저를 찾지 못했어요")
+            retryButton(style: .plain)
+        }
+    }
+
+    /// 실행 자체가 실패했을 때 (구버전 CLI·로그아웃·Aside 창 닫힘 등): 이유와 할 일, 그 단계를 푸는 버튼·다시 실행.
+    private func failureHelp(_ kind: E2EFailureKind) -> some View {
+        helpBox("검증을 돌리지 못했어요", icon: "exclamationmark.triangle.fill", reason: kind.message, steps: kind.steps) {
+            if let fix = kind.fix {
+                Button { e2e.perform(fix, env: job.env) } label: { AccentChip(icon: fix.icon, text: fix.label, style: .soft) }
+                    .buttonStyle(.plain)
+            }
+            retryButton(style: .plain)
+        }
+    }
+
+    private func helpBox<Buttons: View>(_ title: String, icon: String, reason: String, steps: [String], note: String = "",
+                                        @ViewBuilder buttons: () -> Buttons) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: icon)
                 .font(.system(size: 12 * scale, weight: .semibold)).foregroundStyle(.orange)
-            Text(block.reason).font(.system(size: 11.5 * scale))
+            Text(reason).font(.system(size: 11.5 * scale)).textSelection(.enabled)
             ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
                 Text("\(i + 1). \(step)").font(.system(size: 11 * scale)).foregroundStyle(.secondary)
             }
-            HStack(spacing: 6) {
-                Button { if let site { AsideBrowser.open(site) } } label: {
-                    AccentChip(icon: "arrow.up.right.square", text: "Aside 에서 로그인 페이지 열기", style: .soft)
-                }
-                .buttonStyle(.plain).disabled(!canOpen)
-                .help(canOpen ? (site?.host ?? "") : "환경 주소나 Aside 브라우저를 찾지 못했어요")
-                retryButton(style: .plain)
+            HStack(spacing: 6) { buttons() }
+                .padding(.top, 2)
+            if !note.isEmpty {
+                Text(note).font(.system(size: 10 * scale)).foregroundStyle(.tertiary)
             }
-            .padding(.top, 2)
-            Text("비밀번호는 Aside 에서 직접 입력해요. ATM 과 Aside 에이전트는 비밀번호를 보지 않아요.")
-                .font(.system(size: 10 * scale)).foregroundStyle(.tertiary)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)

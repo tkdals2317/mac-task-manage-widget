@@ -2,38 +2,24 @@ import AppKit
 import SwiftUI
 import TaskWidgetCore
 
-/// Aside CLI 준비 상태 (경로 + 로그인).
-enum AsideStatus: Equatable {
-    case unchecked
-    case checking
-    /// CLI 도 Aside 브라우저도 없다. 브라우저부터 설치해야 한다.
-    case browserMissing
-    case missing
-    case signedOut(path: String)
-    /// accountId: 실행용 폴더(`~/.aside/u/<id>/atm-e2e`)를 정하는 Aside 계정 번호
-    case ready(path: String, account: String, accountId: Int)
-    case failed(path: String, message: String)
+/// Aside 준비 상태를 한 번 살펴본 결과.
+struct AsideReport: Equatable {
+    var browserInstalled: Bool
+    var browserVersion: String
+    /// Aside CLI 를 못 찾았으면 nil
+    var probe: AsideProbe?
 
-    var isReady: Bool { if case .ready = self { return true }; return false }
-
-    /// 찾은 aside 경로. 못 찾았거나 확인 전이면 nil.
-    var path: String? {
-        switch self {
-        case .signedOut(let p), .ready(let p, _, _), .failed(let p, _): return p
-        case .unchecked, .checking, .browserMissing, .missing: return nil
+    /// 진단 로그용 한 줄 (계정 이메일은 넣지 않는다).
+    var diagLine: String {
+        guard let p = probe else { return "browser=\(browserInstalled ? browserVersion : "없음") cli=없음" }
+        let account: String
+        switch p.account {
+        case .signedIn(_, let id, _): account = "signedIn(u\(id))"
+        case .signedOut(_, let reason): account = "signedOut(\(reason))"
+        case .unknown(let m): account = "unknown(\(m.replacingOccurrences(of: "[^\\s@]+@[^\\s@]+", with: "<이메일>", options: .regularExpression)))"
         }
-    }
-
-    /// 실행을 막는 이유. 준비됐으면 nil.
-    var problem: String? {
-        switch self {
-        case .unchecked, .checking: return "Aside CLI 를 확인하는 중이에요"
-        case .browserMissing: return "Aside 브라우저가 없어요 · 'Aside 다운로드'로 설치하고 켠 뒤 다시 확인"
-        case .missing: return "Aside CLI 가 없어요 · '터미널에서 설치'를 누르면 설치하고 로그인까지 이어서 해요"
-        case .signedOut: return "Aside CLI 로그인이 필요해요 · '터미널에서 로그인' 후 Aside 설정 > 계정 > 기기에서 승인"
-        case .failed(_, let m): return "Aside CLI 확인 실패 · \(m)"
-        case .ready: return nil
-        }
+        return "browser=\(browserInstalled ? browserVersion : "없음") cli=\(p.version)(\(p.source), 최신 \(p.latestVersion)) "
+            + "runnable=\(p.runnable) account=\(account) others=\(p.otherAccounts.count) window=\(p.windowOpen.map(String.init) ?? "?")"
     }
 }
 
@@ -47,13 +33,16 @@ final class E2EModel: ObservableObject {
     @Published private(set) var running: String?
     @Published private(set) var runningSince: Date?
     @Published private(set) var queued: [String] = []
-    @Published private(set) var aside: AsideStatus = .unchecked
-    @Published private(set) var asideSource = ""
+    /// 마지막 Aside 점검 결과. 아직 점검 전이면 nil. 다시 점검하는 동안에도 이전 결과를 그대로 보여준다.
+    @Published private(set) var report: AsideReport?
+    @Published private(set) var checkingAside = false
     /// Aside 가 받아 둔 모델 목록과 내 요금제 (모델 메뉴용). 못 읽으면 빈 목록.
     @Published private(set) var asideModels: [AsideModel] = []
     @Published private(set) var asidePlan = ""
     @Published private(set) var submitting = false
     @Published var submitError: String?
+    /// 준비 점검의 동작(계정 바꾸기·터미널 열기)이 실패했을 때 보여줄 한 줄
+    @Published private(set) var setupError: String?
     /// 결과 상세로 열린 job. nil 이면 목록.
     @Published var openJobId: String? { didSet { submitError = nil } }
     /// 요청 화면에서 고르고 쓰던 것. 결과를 보거나 탭을 옮겨도 남게 모델에 둔다.
@@ -63,8 +52,10 @@ final class E2EModel: ObservableObject {
 
     let store: E2EJobStore
     private let runner: E2ERunner
-    /// 터미널 로그인 뒤 승인될 때까지 상태를 다시 확인하는 작업.
-    private var loginWatch: Task<Void, Never>?
+    /// 진행 중인 Aside 점검. 겹쳐 부르면 같은 점검을 기다린다.
+    private var checkTask: Task<Void, Never>?
+    /// 사용자가 Aside 쪽 할 일을 마칠 때까지 다시 확인하는 작업.
+    private var asideWatch: Task<Void, Never>?
 
     init(store: E2EJobStore = E2EJobStore()) {
         self.store = store
@@ -154,70 +145,141 @@ final class E2EModel: ObservableObject {
         }
     }
 
-    // MARK: - Aside CLI
+    // MARK: - Aside 준비 점검
 
-    /// quiet: 확인 중 표시 없이 결과만 바꾼다 (로그인 대기 중 반복 확인용).
+    var probe: AsideProbe? { report?.probe }
+
+    /// 실행에 쓸 aside 경로와 Aside 계정 번호 (실행용 폴더 `~/.aside/u/<id>/atm-e2e` 를 정한다). 준비가 안 됐으면 nil.
+    var runTarget: (path: String, accountId: Int)? {
+        guard let p = probe, p.runnable, case .signedIn(_, let id, _) = p.account else { return nil }
+        return (p.path, id)
+    }
+    var asideReady: Bool { runTarget != nil }
+
+    /// 준비 항목. env 를 주면 그 환경의 주소·로그인 항목까지 본다 (url·user 는 설정에 넣은 값 그대로).
+    func setupItems(env: E2EEnv? = nil, url: String = "", user: String = "") -> [E2ESetupItem] {
+        guard let report else { return [] }
+        let base = Onboarding.normalizedURL(url)
+        var finished: [(job: E2EJob, result: E2EResult)] = []
+        if env != nil {
+            for j in jobs where j.status == .done {
+                if case .ok(let r) = results[j.id] { finished.append((j, r)) }
+            }
+        }
+        return E2ESetup.items(E2ESetupInput(
+            browserInstalled: report.browserInstalled, browserVersion: report.browserVersion, probe: report.probe,
+            env: env, envURL: base, envUser: user.trimmingCharacters(in: .whitespaces),
+            lastLogin: env.map { E2ELoginHistory.latest(env: $0, baseUrl: base, finished: finished) } ?? .none))
+    }
+
+    /// quiet: 확인 중 표시 없이 결과만 바꾼다 (사용자를 기다리며 반복 확인할 때, 실행 직전).
+    /// 이미 점검 중이면 그 점검이 끝나기를 기다린다.
     func checkAside(quiet: Bool = false) async {
-        guard aside != .checking else { return }
+        if let t = checkTask { await t.value; return }
+        let t = Task { await runCheck(quiet: quiet) }
+        checkTask = t
+        await t.value
+        checkTask = nil
+    }
+
+    private func runCheck(quiet: Bool) async {
         // 스크린샷 데모는 실제 CLI 를 부르지 않는다
-        if DemoFixtures.isOn { aside = .ready(path: "aside", account: "demo@example.com", accountId: 0); asideSource = "데모"; return }
-        if !quiet { aside = .checking }
-        let configured = Settings.shared.e2eAsidePath
-        let found = await Task.detached { () -> (path: String, source: String, account: AsideAccountStatus)? in
-            guard let f = AsideCLI.locateWithSource(configured: configured) else { return nil }
-            return (f.path, f.source, AsideCLI.accountStatus(executable: f.path))
-        }.value
-        guard let found else {
-            aside = AsideBrowser.appURL == nil ? .browserMissing : .missing
-            asideSource = ""
+        if DemoFixtures.isOn {
+            let demo = AsideProbe(path: "aside", source: "데모", account: .signedIn(email: "demo@example.com", accountId: 0, plan: ""),
+                                  windowOpen: true)
+            report = AsideReport(browserInstalled: true, browserVersion: "", probe: demo)
             return
         }
-        asideSource = found.source
-        switch found.account {
-        case .signedIn(let who, let accountId, let plan):
-            aside = .ready(path: found.path, account: who, accountId: accountId)
+        if !quiet { checkingAside = true }
+        defer { checkingAside = false }
+        let configured = Settings.shared.e2eAsidePath
+        let app = AsideBrowser.appURL
+        let probe = await Task.detached { () -> AsideProbe? in
+            guard let f = AsideCLI.locateWithSource(configured: configured) else { return nil }
+            return AsideCLI.probe(executable: f.path, source: f.source)
+        }.value
+        let next = AsideReport(browserInstalled: app != nil, browserVersion: app.map(AsideBrowser.version) ?? "", probe: probe)
+        if next != report { DiagLog.append("e2e aside: \(next.diagLine)") }
+        report = next
+        if case .signedIn(_, let accountId, let plan) = probe?.account {
             asidePlan = plan
             asideModels = await Task.detached { AsideCLI.models(accountId: accountId) }.value
-        case .signedOut: aside = .signedOut(path: found.path)
-        case .unknown(let m): aside = .failed(path: found.path, message: m)
         }
     }
 
-    /// 찾은 aside 로 로그인하는 터미널 창을 연다. 승인될 때까지 다시 확인한다 (최대 5분).
-    func openLoginTerminal() {
-        guard let exe = aside.path else { return }
-        openTerminal(AsideCLI.loginScript(executable: exe), name: "ATM-aside-login.command", watchMinutes: 5)
+    /// 준비 항목의 버튼. env 는 환경을 여는 동작에만 쓴다.
+    func perform(_ fix: E2ESetupFix, env: E2EEnv? = nil) {
+        setupError = nil
+        switch fix {
+        case .downloadBrowser:
+            if let u = URL(string: AsideCLI.browserDownloadURL) { NSWorkspace.shared.open(u) }
+            watchAside(minutes: 10) { $0.browserInstalled }
+        case .installCLI:
+            guard openTerminal(AsideCLI.installScript(), name: "ATM-aside-install.command") else { return }
+            watchAside(minutes: 10) { $0.probe != nil }
+        case .updateCLI:
+            guard let p = probe, openTerminal(AsideCLI.updateScript(executable: p.path), name: "ATM-aside-update.command") else { return }
+            let before = p.version
+            watchAside(minutes: 5) { $0.probe?.version != before }
+        case .openAside:
+            AsideBrowser.launch()
+            watchAside(minutes: 5) { r in
+                guard let p = r.probe, case .signedIn = p.account else { return false }
+                return p.windowOpen != false
+            }
+        case .switchAccount(let id, _):
+            guard let exe = probe?.path else { return }
+            Task {
+                setupError = await Task.detached { AsideCLI.useAccount(executable: exe, id: id) }.value
+                await checkAside()
+            }
+        case .openSettings:
+            NotificationCenter.default.post(name: .openSettings, object: "e2e")
+        case .openEnvironment:
+            guard let env, let site = E2EWebURL.parse(Onboarding.normalizedURL(Settings.shared.e2eURL(env))) else { return }
+            AsideBrowser.open(site)
+        }
     }
 
-    /// CLI 를 설치하고 이어서 로그인하는 터미널 창을 연다. 설치·승인까지 기다린다 (최대 10분).
-    func openInstallTerminal() {
-        openTerminal(AsideCLI.installScript(), name: "ATM-aside-install.command", watchMinutes: 10)
-    }
-
-    /// 스크립트를 .command 로 써서 터미널로 열고, 승인 화면이 보이게 Aside 를 앞으로 띄운다.
-    /// 준비될 때까지 3초마다 조용히 다시 확인한다.
-    private func openTerminal(_ text: String, name: String, watchMinutes: Int) {
+    /// 스크립트를 .command 로 써서 터미널로 연다.
+    private func openTerminal(_ text: String, name: String) -> Bool {
         let script = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         do {
             try Data(text.utf8).write(to: script, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
         } catch {
-            submitError = "터미널 스크립트를 만들지 못했어요 · \(error.localizedDescription)"
-            return
-        }
-        if let app = AsideBrowser.appURL {
-            NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
+            setupError = "터미널 스크립트를 만들지 못했어요 · \(error.localizedDescription)"
+            return false
         }
         NSWorkspace.shared.open(script)
-        loginWatch?.cancel()
-        loginWatch = Task { [weak self] in
-            for _ in 0..<(watchMinutes * 20) {
+        return true
+    }
+
+    /// 사용자가 Aside·터미널에서 할 일을 마칠 때까지 3초마다 조용히 다시 확인한다. done 이 true 가 되면 멈춘다.
+    private func watchAside(minutes: Int, until done: @escaping (AsideReport) -> Bool) {
+        asideWatch?.cancel()
+        asideWatch = Task { [weak self] in
+            for _ in 0..<(minutes * 20) {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled, let me = self else { return }
                 await me.checkAside(quiet: true)
-                if me.aside.isReady { return }
+                if let r = me.report, done(r) { return }
             }
         }
+    }
+
+    /// Aside 창이 닫혀 있으면 실행이 바로 실패한다. Aside 를 열고 창이 연결될 때까지 잠깐 기다린다.
+    private func openAsideWindow(executable: String) async -> Bool {
+        AsideBrowser.launch(activate: false)
+        for _ in 0..<15 {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            // 확인하지 못한 경우(nil)는 막지 않고 실행에 맡긴다
+            if await Task.detached(operation: { AsideCLI.windowOpen(executable: executable) }).value != false {
+                report?.probe?.windowOpen = true
+                return true
+            }
+        }
+        return false
     }
 
     // MARK: - 실행
@@ -257,8 +319,17 @@ final class E2EModel: ObservableObject {
         submitting = true
         defer { submitting = false }
 
-        if !aside.isReady { await checkAside() }
-        guard case .ready(let exe, _, let accountId) = aside else { submitError = aside.problem; return false }
+        // 실행 직전 상태로 다시 본다 (그사이 로그아웃했거나 Aside 창을 닫았을 수 있다)
+        await checkAside(quiet: true)
+        guard let target = runTarget else {
+            submitError = E2ESetup.blocker(setupItems())?.detail ?? "Aside 준비 상태를 확인하지 못했어요 · '다시 확인'을 눌러 주세요"
+            return false
+        }
+        let exe = target.path, accountId = target.accountId
+        if probe?.windowOpen == false, !(await openAsideWindow(executable: exe)) {
+            submitError = "Aside 브라우저 창을 열지 못했어요 · Aside 를 직접 연 뒤 다시 실행해 주세요"
+            return false
+        }
 
         // 비밀번호는 넘기지 않는다. 로그인은 Aside Vault 나 이미 로그인된 세션으로 한다.
         let user = s.e2eUser(env).trimmingCharacters(in: .whitespaces)
@@ -354,8 +425,20 @@ final class E2EModel: ObservableObject {
 enum AsideBrowser {
     static var appURL: URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: AsideCLI.browserBundleId) }
 
+    static func version(_ app: URL) -> String {
+        Bundle(url: app)?.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
+
     static func open(_ url: URL) {
         guard let app = appURL else { return }
         NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// Aside 를 켠다. 이미 켜져 있고 창이 없으면 새 창이 뜬다. activate 가 false 면 앞으로 가져오지 않는다.
+    static func launch(activate: Bool = true) {
+        guard let app = appURL else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = activate
+        NSWorkspace.shared.openApplication(at: app, configuration: config)
     }
 }

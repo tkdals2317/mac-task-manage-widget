@@ -76,6 +76,7 @@ public enum SettingsKey {
     public static let e2eRetentionDays = "e2eRetentionDays"
     public static let e2eIssuesCollapsed = "e2eIssuesCollapsed"
     public static let e2eHistoryCollapsed = "e2eHistoryCollapsed"
+    public static let e2eSetupCollapsed = "e2eSetupCollapsed"
     public static func e2eURL(_ env: E2EEnv) -> String { "e2eURL.\(env.rawValue)" }
     public static func e2eUser(_ env: E2EEnv) -> String { "e2eUser.\(env.rawValue)" }
 }
