@@ -11,5 +11,6 @@ let allTabs: [TabDef] = [
     TabDef(id: "summary", title: "요약"),
     TabDef(id: "notes", title: "노트"),
     TabDef(id: "pr", title: "PR"),
+    TabDef(id: "e2e", title: "E2E"),
     TabDef(id: "teleport", title: "Teleport"),
 ]

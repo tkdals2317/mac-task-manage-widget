@@ -33,7 +33,9 @@ final class AppState: ObservableObject {
     let teleport = TeleportManager()
     let notes = NotesModel()
     let pr = PRModel()
+    let e2e = E2EModel()
     private var prSub: AnyCancellable?
+    private var e2eSub: AnyCancellable?
 
     /// Jira 탭을 안 열어도 18시 자동 요약이 키를 알도록 마지막으로 본 프로젝트 접두사를 저장해 둔다.
     nonisolated static let jiraPrefixesKey = "jiraProjectPrefixes"
@@ -55,8 +57,11 @@ final class AppState: ObservableObject {
         consumeUpdateFailure()
         NotesModel.introduceTabIfNeeded()
         PRModel.introduceTabIfNeeded()
+        E2EModel.introduceTabIfNeeded()
         // 탭 바 배지가 pr 의 변화를 따라가도록 (RootView 는 AppState 만 관찰한다)
         prSub = pr.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        // Jira 목록의 E2E 판정 뱃지가 검증 결과를 따라가도록
+        e2eSub = e2e.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: - Update

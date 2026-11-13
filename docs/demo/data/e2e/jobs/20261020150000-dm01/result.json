@@ -1,0 +1,48 @@
+{
+  "status": "done",
+  "startedAt": "2026-10-20T06:00:05Z",
+  "finishedAt": "2026-10-20T06:07:35Z",
+  "summary": "2건 중 1건 통과. 장바구니에서 같은 쿠폰이 두 번 적용되는 문제가 아직 재현돼요.",
+  "issues": [
+    {
+      "key": "SHOP-1234", "title": "주문 취소 시 쿠폰 복원 처리", "url": "https://example.atlassian.net/browse/SHOP-1234",
+      "verdict": "PASS",
+      "assumptions": ["부분 취소는 이번 범위가 아니라고 봤어요"],
+      "scenarios": [
+        {
+          "name": "쿠폰을 쓴 주문을 전체 취소",
+          "steps": ["주문 #20481 상세 열기", "주문 취소 클릭", "취소 사유 선택 후 확인"],
+          "expected": "주문이 취소되고 사용한 쿠폰이 다시 사용 가능 상태가 된다",
+          "actual": "주문 상태가 취소됨으로 바뀌고 쿠폰이 '사용 가능 (복원됨)'으로 보여요",
+          "verdict": "PASS",
+          "screenshots": ["SHOP-1234-1.png"]
+        },
+        {
+          "name": "내 쿠폰함에서 복원된 쿠폰 확인",
+          "steps": ["마이페이지 > 쿠폰함 열기"],
+          "expected": "복원된 쿠폰이 원래 만료일과 함께 보인다",
+          "actual": "신규가입 10% 쿠폰이 2026-11-30 만료로 보여요",
+          "verdict": "PASS",
+          "screenshots": ["SHOP-1234-2.png"]
+        }
+      ],
+      "notes": "콘솔 에러 없음"
+    },
+    {
+      "key": "SHOP-1241", "title": "장바구니 쿠폰 중복 적용 오류", "url": "https://example.atlassian.net/browse/SHOP-1241",
+      "verdict": "FAIL",
+      "assumptions": [],
+      "scenarios": [
+        {
+          "name": "같은 쿠폰을 두 번 적용 시도",
+          "steps": ["장바구니에 상품 2개 담기", "신규가입 10% 쿠폰 적용", "쿠폰 다시 적용 클릭"],
+          "expected": "두 번째 적용은 막히고 할인은 한 번만 들어간다",
+          "actual": "할인이 두 번 들어가 결제 예정 금액이 46,400원으로 보여요 (기대 52,200원)",
+          "verdict": "FAIL",
+          "screenshots": ["SHOP-1241-1.png"]
+        }
+      ],
+      "notes": "POST /api/cart/coupons 가 두 번 모두 200 을 돌려줘요"
+    }
+  ]
+}

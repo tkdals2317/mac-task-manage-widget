@@ -65,6 +65,20 @@ public enum SettingsKey {
     public static let prReviewAuthorFilter = "prReviewAuthorFilter"
     public static let prReviewCollapsed = "prReviewCollapsed"
     public static let prMineCollapsed = "prMineCollapsed"
+    public static let e2eEnv = "e2eEnv"
+    public static let e2eAllowPR = "e2eAllowPR"
+    public static let e2eTabIntroduced = "e2eTabIntroduced"
+    public static let e2eAsidePath = "e2eAsidePath"
+    public static let e2eModel = "e2eModel"
+    public static let e2eMinutesPerIssue = "e2eMinutesPerIssue"
+    public static let e2eMaxMinutes = "e2eMaxMinutes"
+    public static let e2eMaxIssues = "e2eMaxIssues"
+    public static let e2eRetentionDays = "e2eRetentionDays"
+    public static let e2eIssuesCollapsed = "e2eIssuesCollapsed"
+    public static let e2eHistoryCollapsed = "e2eHistoryCollapsed"
+    public static let e2eSetupCollapsed = "e2eSetupCollapsed"
+    public static func e2eURL(_ env: E2EEnv) -> String { "e2eURL.\(env.rawValue)" }
+    public static func e2eUser(_ env: E2EEnv) -> String { "e2eUser.\(env.rawValue)" }
 }
 
 public final class Settings {
@@ -297,6 +311,48 @@ public final class Settings {
             return LocalRepos.uniqueDirs(LocalRepos.defaultRoots().map(\.path).filter { FileManager.default.fileExists(atPath: $0) })
         }
         set { d.set(Self.encodeList(LocalRepos.uniqueDirs(newValue)), forKey: SettingsKey.prCloneRoots) }
+    }
+
+    // MARK: - E2E 탭
+    public var e2eEnv: E2EEnv {
+        get { E2EEnv(rawValue: string(SettingsKey.e2eEnv, "")) ?? .st }
+        set { d.set(newValue.rawValue, forKey: SettingsKey.e2eEnv) }
+    }
+    public func e2eURL(_ env: E2EEnv) -> String { string(SettingsKey.e2eURL(env), "") }
+    public func setE2EURL(_ url: String, for env: E2EEnv) { d.set(url, forKey: SettingsKey.e2eURL(env)) }
+    public func e2eUser(_ env: E2EEnv) -> String { string(SettingsKey.e2eUser(env), "") }
+    public func setE2EUser(_ user: String, for env: E2EEnv) { d.set(user, forKey: SettingsKey.e2eUser(env)) }
+    /// PR(운영) 환경을 고를 수 있게 할지. 기본 꺼짐.
+    public var e2eAllowPR: Bool {
+        get { bool(SettingsKey.e2eAllowPR, false) }
+        set { d.set(newValue, forKey: SettingsKey.e2eAllowPR) }
+    }
+    /// "" = 자동으로 찾기
+    public var e2eAsidePath: String {
+        get { string(SettingsKey.e2eAsidePath, "") }
+        set { d.set(newValue, forKey: SettingsKey.e2eAsidePath) }
+    }
+    /// aside --model. "" = Aside 기본 모델
+    public var e2eModel: String {
+        get { string(SettingsKey.e2eModel, "") }
+        set { d.set(newValue, forKey: SettingsKey.e2eModel) }
+    }
+    public var e2eMinutesPerIssue: Int {
+        get { min(30, max(1, int(SettingsKey.e2eMinutesPerIssue, 10))) }
+        set { d.set(newValue, forKey: SettingsKey.e2eMinutesPerIssue) }
+    }
+    public var e2eMaxMinutes: Int {
+        get { min(120, max(1, int(SettingsKey.e2eMaxMinutes, 30))) }
+        set { d.set(newValue, forKey: SettingsKey.e2eMaxMinutes) }
+    }
+    public var e2eMaxIssues: Int {
+        get { min(20, max(1, int(SettingsKey.e2eMaxIssues, 5))) }
+        set { d.set(newValue, forKey: SettingsKey.e2eMaxIssues) }
+    }
+    /// 이 날짜보다 오래된 job 폴더는 지운다. 0 = 지우지 않음.
+    public var e2eRetentionDays: Int {
+        get { max(0, int(SettingsKey.e2eRetentionDays, 30)) }
+        set { d.set(newValue, forKey: SettingsKey.e2eRetentionDays) }
     }
 
     public static func decodeList(_ raw: String) -> [String] {

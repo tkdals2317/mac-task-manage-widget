@@ -68,7 +68,7 @@ public struct JiraClient {
         return try JSONDecoder().decode(Me.self, from: data).displayName
     }
 
-    private func get(_ url: URL) async throws -> Data {
+    func get(_ url: URL) async throws -> Data {
         let (data, code) = try await send(url)
         switch code {
         case 200...299: return data
@@ -78,12 +78,14 @@ public struct JiraClient {
         }
     }
 
-    private func send(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, Int) {
+    func send(_ url: URL, method: String = "GET", body: Data? = nil, contentType: String = "application/json",
+              headers: [String: String] = [:], timeout: TimeInterval = 20) async throws -> (Data, Int) {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.httpBody = body
-        if body != nil { req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        req.timeoutInterval = 20
+        if body != nil { req.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        req.timeoutInterval = timeout
         req.setValue("Basic " + Data("\(email):\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         let data: Data
@@ -120,6 +122,57 @@ public struct JiraClient {
         case 401: return .message("토큰 만료 — 설정에서 토큰을 다시 입력하세요")
         case 403: return .message("권한 없음")
         case 404: return .message("이슈 없음")
+        default: return .http(code)
+        }
+    }
+
+    // MARK: - 댓글·첨부
+
+    /// ADF 문서를 이슈 댓글로 남기고 댓글 id 를 돌려준다.
+    @discardableResult
+    public func addComment(issueKey: String, document: [String: Any]) async throws -> String {
+        struct Created: Decodable { let id: String }
+        let body = try JSONSerialization.data(withJSONObject: ["body": document])
+        let (data, code) = try await send(try issueURL(issueKey, "comment"), method: "POST", body: body)
+        guard (200...299).contains(code) else { throw Self.writeError(code, data: data, what: "댓글") }
+        return (try? JSONDecoder().decode(Created.self, from: data))?.id ?? ""
+    }
+
+    /// 파일 하나를 이슈에 첨부한다.
+    public func addAttachment(issueKey: String, fileName: String, mime: String, data file: Data) async throws {
+        let boundary = "atm-\(UUID().uuidString)"
+        let body = Self.multipart(boundary: boundary, fileName: fileName, mime: mime, data: file)
+        // X-Atlassian-Token 이 없으면 Jira 가 첨부 요청을 거절한다 (XSRF 검사).
+        let (data, code) = try await send(try issueURL(issueKey, "attachments"), method: "POST", body: body,
+                                          contentType: "multipart/form-data; boundary=\(boundary)",
+                                          headers: ["X-Atlassian-Token": "no-check"], timeout: 120)
+        guard (200...299).contains(code) else { throw Self.writeError(code, data: data, what: "첨부") }
+    }
+
+    /// 주소에 넣기 전에 이슈 키 모양인지 본다 (경로 조작 방지).
+    private func issueURL(_ key: String, _ tail: String) throws -> URL {
+        guard E2EIssueKeys.isKey(key) else { throw JiraError.message("이슈 키가 올바르지 않아요 (\(key))") }
+        return baseURL.appendingPathComponent("rest/api/3/issue/\(key)/\(tail)")
+    }
+
+    static func multipart(boundary: String, fileName: String, mime: String, data: Data) -> Data {
+        // "\r\n" 은 Character 하나라 isNewline 으로 거른다 (헤더에 줄이 끼어들지 않게).
+        let name = fileName.filter { !$0.isNewline && $0 != "\"" && $0 != "\\" }
+        var body = Data()
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(mime)\r\n\r\n".utf8))
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        return body
+    }
+
+    static func writeError(_ code: Int, data: Data, what: String) -> JiraError {
+        switch code {
+        case 400: return .message("Jira 가 \(what) 요청을 받아 주지 않았어요 (\(errorMessage(data)))")
+        case 401: return .message("토큰 만료 — 설정에서 토큰을 다시 입력하세요")
+        case 403: return .message("이 이슈에 \(what) 권한이 없어요")
+        case 404: return .message("이슈를 찾지 못했어요 (없거나 볼 권한이 없어요)")
+        case 413: return .message("너무 커서 Jira 가 받지 않았어요 (\(what))")
         default: return .http(code)
         }
     }

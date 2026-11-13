@@ -32,12 +32,12 @@ struct JiraSection: View {
                 let mode: JiraRow.Trailing = filter != .all ? .none : (groupByVersion ? .status : .version)
                 if groupByVersion {
                     ForEach(Array(JiraVersions.grouped(filtered).enumerated()), id: \.offset) { _, group in
-                        groupHeader("\(group.title.map { JiraVersions.display($0, prefix: prefix) } ?? "버전 없음") · \(group.issues.count)")
+                        JiraGroupHeader(text: "\(group.title.map { JiraVersions.display($0, prefix: prefix) } ?? "버전 없음") · \(group.issues.count)")
                         ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, prefix: prefix, trailing: mode == .version ? .status : mode) }
                     }
                 } else {
                     ForEach(JiraClient.grouped(filtered), id: \.status) { group in
-                        groupHeader("\(group.status) · \(group.issues.count)")
+                        JiraGroupHeader(text: "\(group.status) · \(group.issues.count)")
                         ForEach(group.issues) { JiraRow(issue: $0, baseURL: jiraBaseURL, prefix: prefix, trailing: mode) }
                     }
                 }
@@ -65,14 +65,6 @@ struct JiraSection: View {
         }
     }
 
-    private func groupHeader(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10.5 * scale, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.top, 8)
-            .padding(.bottom, 2)
-    }
-
     private var footer: some View {
         HStack(spacing: 6) {
             if let e = state.jiraError {
@@ -90,6 +82,20 @@ struct JiraSection: View {
         .font(.system(size: 10.5 * scale))
         .foregroundStyle(.secondary)
         .padding(.top, 6)
+    }
+}
+
+/// Jira 목록의 묶음 머리글 (상태별·버전별). 할 일 탭과 E2E 탭의 이슈 선택이 같이 쓴다.
+struct JiraGroupHeader: View {
+    let text: String
+    @Environment(\.fontScale) private var scale
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10.5 * scale, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
     }
 }
 
@@ -229,6 +235,9 @@ struct JiraRow: View {
     @State fileprivate var showTransitions = false
     @Environment(\.fontScale) private var scale
     @Environment(\.atmAccent) private var accent
+    @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
+
+    private var e2eOn: Bool { TabConfig.enabled(from: enabledTabs, all: allTabs.map(\.id)).contains("e2e") }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -266,6 +275,14 @@ struct JiraRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        if e2eOn, let v = state.e2e.verdictByKey[issue.id] {
+            Button {
+                state.e2e.openJobId = v.jobId
+                UserDefaults.standard.set("e2e", forKey: SettingsKey.lastTab)
+            } label: { E2EVerdictBadge(verdict: v.verdict) }
+                .buttonStyle(.plain)
+                .help("최근 E2E 검증 결과 · 눌러서 보기")
+        }
         if state.jiraBusyKeys.contains(issue.id) {
             ProgressView().controlSize(.mini)
         } else {
