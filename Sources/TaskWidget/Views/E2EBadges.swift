@@ -2,9 +2,6 @@ import SwiftUI
 import TaskWidgetCore
 
 extension E2EVerdict {
-    /// 판정 수를 늘어놓는 순서 (나쁜 것부터).
-    static let displayOrder: [E2EVerdict] = [.fail, .blocked, .pass, .skipped]
-
     var color: Color {
         switch self {
         case .pass: return .green

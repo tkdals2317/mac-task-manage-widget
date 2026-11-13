@@ -132,6 +132,49 @@ final class JiraTransitionTests: XCTestCase {
         catch { XCTFail("\(error)") }
     }
 
+    func testAddCommentPostsDocument() async throws {
+        let c = client(status: 201, body: #"{"id":"10042","body":{}}"#)
+        let doc: [String: Any] = ["type": "doc", "version": 1, "content": [["type": "paragraph", "content": [["type": "text", "text": "hi"]]]]]
+        let id = try await c.addComment(issueKey: "NMRS-1", document: doc)
+        XCTAssertEqual(id, "10042")
+        XCTAssertEqual(Stub.last?.httpMethod, "POST")
+        XCTAssertEqual(Stub.last?.url?.path, "/rest/api/3/issue/NMRS-1/comment")
+        XCTAssertEqual(Stub.last?.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: Stub.lastBody ?? Data()) as? [String: Any])
+        XCTAssertEqual((sent["body"] as? [String: Any])?["type"] as? String, "doc")
+    }
+
+    func testAddAttachmentSendsMultipartWithNoCheckHeader() async throws {
+        let c = client(status: 200, body: "[]")
+        try await c.addAttachment(issueKey: "NMRS-1", fileName: "shot.png", mime: "image/png", data: Data([9, 8, 7]))
+        XCTAssertEqual(Stub.last?.httpMethod, "POST")
+        XCTAssertEqual(Stub.last?.url?.path, "/rest/api/3/issue/NMRS-1/attachments")
+        XCTAssertEqual(Stub.last?.value(forHTTPHeaderField: "X-Atlassian-Token"), "no-check")
+        let type = try XCTUnwrap(Stub.last?.value(forHTTPHeaderField: "Content-Type"))
+        XCTAssertTrue(type.hasPrefix("multipart/form-data; boundary=atm-"))
+        let boundary = String(type.dropFirst("multipart/form-data; boundary=".count))
+        XCTAssertEqual(Stub.lastBody, JiraClient.multipart(boundary: boundary, fileName: "shot.png", mime: "image/png", data: Data([9, 8, 7])))
+    }
+
+    func testCommentAndAttachmentErrors() async {
+        let expect: [(Int, String)] = [(400, "Jira 가 댓글 요청을 받아 주지 않았어요 (본문 오류)"), (401, "토큰 만료"),
+                                       (403, "이 이슈에 댓글 권한이 없어요"), (404, "이슈를 찾지 못했어요"), (500, "HTTP 500")]
+        for (code, text) in expect {
+            let c = client(status: code, body: #"{"errorMessages":["본문 오류"]}"#)
+            do { _ = try await c.addComment(issueKey: "NMRS-1", document: [:]); XCTFail("\(code)") }
+            catch let e as JiraError { XCTAssertTrue(e.userMessage.hasPrefix(text), "\(code): \(e.userMessage)") }
+            catch { XCTFail("\(error)") }
+        }
+        let big = client(status: 413)
+        do { try await big.addAttachment(issueKey: "NMRS-1", fileName: "a.png", mime: "image/png", data: Data()); XCTFail() }
+        catch let e as JiraError { XCTAssertEqual(e.userMessage, "너무 커서 Jira 가 받지 않았어요 (첨부)") }
+        catch { XCTFail("\(error)") }
+        // 이슈 키 모양이 아니면 요청을 보내지 않는다
+        let c = client(status: 201)
+        do { _ = try await c.addComment(issueKey: "../x", document: [:]); XCTFail() }
+        catch { XCTAssertNil(Stub.last) }
+    }
+
     func testDecodePageWithExpandedTransitions() throws {
         let json = #"{"issues":[{"key":"NMRS-1","fields":{"summary":"s","status":{"name":"진행 중","statusCategory":{"key":"indeterminate"}},"priority":null,"updated":"2026-10-01T10:00:00.000+0900"},"transitions":[{"id":"31","name":"Done","to":{"name":"완료","statusCategory":{"key":"done"}}}]},{"key":"NMRS-2","fields":{"summary":"t","status":{"name":"할 일","statusCategory":{"key":"new"}},"priority":null,"updated":"2026-10-01T10:00:00.000+0900"}}],"isLast":true}"#
         let issues = try JiraClient.decodePage(Data(json.utf8)).issues

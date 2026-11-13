@@ -32,6 +32,9 @@ public enum E2EJobStatus: String, Codable {
 public enum E2EVerdict: String, Codable, CaseIterable {
     case pass = "PASS", fail = "FAIL", blocked = "BLOCKED", skipped = "SKIPPED"
 
+    /// 판정 수를 늘어놓는 순서 (나쁜 것부터).
+    public static let displayOrder: [E2EVerdict] = [.fail, .blocked, .pass, .skipped]
+
     /// 대소문자·공백이 달라도 받아들인다. 모르는 값이면 nil.
     public init?(lenient raw: String?) {
         guard let raw else { return nil }
@@ -176,6 +179,8 @@ public struct E2EJob: Codable, Equatable, Identifiable {
     public var sessionId: String?
     /// aside --model 로 넘긴 모델. nil 이면 Aside 기본.
     public var model: String?
+    /// 결과를 Jira 댓글로 남긴 이슈 키 → 남긴 시각(ISO8601). 같은 결과를 실수로 두 번 남기지 않게 보여준다.
+    public var jiraComments: [String: String] = [:]
 
     public init(id: String, env: E2EEnv, baseUrl: String, username: String, issues: [E2EIssueRef],
                 notes: String = "", requestedBy: String = "", status: E2EJobStatus = .queued, createdAt: Date = Date(),
@@ -198,6 +203,7 @@ public struct E2EJob: Codable, Equatable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, env, baseUrl, username, readOnly, issues, notes, requestedBy, status, createdAt, finishedAt, error, sessionId, model
+        case jiraComments
     }
 
     /// 손으로 고쳤거나 이전 버전이 쓴 job.json 도 읽도록 모양이 조금 달라도 받아들인다.
@@ -217,6 +223,7 @@ public struct E2EJob: Codable, Equatable, Identifiable {
         error = c.lenientString(.error).nilIfEmpty
         sessionId = c.lenientString(.sessionId).nilIfEmpty
         model = c.lenientString(.model).nilIfEmpty
+        jiraComments = (try? c.decodeIfPresent([String: String].self, forKey: .jiraComments)) ?? [:]
         if env.forcesReadOnly { readOnly = true }
     }
 

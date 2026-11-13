@@ -217,6 +217,13 @@ public struct E2EJobStore {
         return text.split(separator: "\n").lazy.compactMap { AsideCLI.sessionId(in: String($0)) }.first
     }
 
+    /// run.log 마지막 몇 줄 (실패 원인 보기).
+    public func logTail(_ id: String, lines: Int = 15) -> String {
+        guard let text = try? String(contentsOf: logFile(id), encoding: .utf8) else { return "" }
+        return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public func delete(_ id: String) throws {
         guard E2EJobID.isValid(id) else { throw E2EStoreError.invalidId }
         try FileManager.default.removeItem(at: dir(id))

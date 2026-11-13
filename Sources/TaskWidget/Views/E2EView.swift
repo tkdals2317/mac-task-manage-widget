@@ -23,6 +23,7 @@ private struct E2ERequestView: View {
     @AppStorage(SettingsKey.e2eEnv) private var envRaw = E2EEnv.st.rawValue
     @AppStorage(SettingsKey.e2eAllowPR) private var allowPR = false
     @AppStorage(SettingsKey.jiraVersionFilter) private var versionFilter = ""
+    @AppStorage(SettingsKey.jiraGroupByVersion) private var groupByVersion = false
     @AppStorage(SettingsKey.e2eIssuesCollapsed) private var issuesCollapsed = false
     @AppStorage(SettingsKey.e2eHistoryCollapsed) private var historyCollapsed = false
     @State private var confirmPR = false
@@ -112,7 +113,15 @@ private struct E2ERequestView: View {
                 .font(.system(size: 11 * scale)).foregroundStyle(.secondary).padding(.vertical, 6)
         } else {
             let issues = JiraVersions.filter(state.jiraIssues, VersionFilter(storage: versionFilter))
-            ForEach(issues) { issueRow($0) }
+            if groupByVersion {
+                let prefix = JiraVersions.commonPrefix(state.jiraIssues.flatMap(\.fixVersions))
+                ForEach(Array(JiraVersions.grouped(issues).enumerated()), id: \.offset) { _, group in
+                    JiraGroupHeader(text: "\(group.title.map { JiraVersions.display($0, prefix: prefix) } ?? "버전 없음") · \(group.issues.count)")
+                    ForEach(group.issues) { issueRow($0) }
+                }
+            } else {
+                ForEach(issues) { issueRow($0) }
+            }
             if issues.isEmpty && state.jiraUpdatedAt != nil {
                 Text("보여줄 이슈가 없어요").font(.system(size: 11.5 * scale)).foregroundStyle(.tertiary).padding(.vertical, 6)
             }
@@ -151,7 +160,7 @@ private struct E2ERequestView: View {
     private var inputs: some View {
         VStack(alignment: .leading, spacing: 6) {
             field("이슈 키·링크 직접 입력 (쉼표·줄바꿈으로 여러 개)", text: $e2e.draftKeys, focused: .keys)
-            field("메모 (선택) · 테스트 데이터, 허용하는 동작 등", text: $e2e.draftNotes, focused: .notes)
+            field("Aside 에 추가 요청사항 · 테스트 데이터, 허용할 동작", text: $e2e.draftNotes, focused: .notes)
         }
         .padding(.top, 8)
     }
@@ -245,6 +254,7 @@ private struct E2ERequestView: View {
                     Button("취소") { e2e.cancel(job.id) }
                 } else {
                     Button("다시 실행") { retry(job) }
+                    Button("파일로 내보내기") { e2e.exportReport(job.id) }
                     Button("삭제") { e2e.delete(job.id) }
                 }
             }

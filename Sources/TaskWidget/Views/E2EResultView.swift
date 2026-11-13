@@ -10,6 +10,8 @@ struct E2EResultView: View {
     @Environment(\.atmAccent) private var accent
     @State private var confirmDelete = false
     @State private var confirmPR = false
+    /// Jira 댓글로 남길지 묻는 중인 이슈
+    @State private var commentTarget: E2EIssueResult?
 
     var body: some View {
         ScrollView {
@@ -38,6 +40,17 @@ struct E2EResultView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
+            .confirmationDialog(commentTarget.map { "\($0.key) 이슈에 검증 결과를 댓글로 남길까요?" } ?? "",
+                                isPresented: Binding(get: { commentTarget != nil }, set: { if !$0 { commentTarget = nil } }),
+                                presenting: commentTarget) { issue in
+                let shots = e2e.commentScreenshots(job.id, issue: issue).count
+                Button("댓글 남기기") { postComment(issue, withScreenshots: false) }
+                if shots > 0 { Button("댓글 + 스크린샷 \(shots)장 첨부") { postComment(issue, withScreenshots: true) } }
+                Button("취소", role: .cancel) {}
+            } message: { issue in
+                Text("Jira 에 내 이름으로 댓글이 달리고, 이슈를 보는 사람에게 알림이 갈 수 있어요. 판정·시나리오·기대·실제 결과와 환경 주소가 들어가요."
+                     + (job.jiraComments[issue.key] == nil ? "" : "\n이 결과는 이미 한 번 남겼어요."))
+            }
         }
         .themedScrollbar()
         .e2ePRConfirm(isPresented: $confirmPR) { retry() }
@@ -49,17 +62,30 @@ struct E2EResultView: View {
         }
     }
 
+    /// 좁은 창에서는 폴더·로그를 아이콘만으로 줄여 한 줄에 넣는다.
     private var topBar: some View {
+        ViewThatFits(in: .horizontal) {
+            topBarRow(compact: false)
+            topBarRow(compact: true)
+        }
+    }
+
+    private func topBarRow(compact: Bool) -> some View {
         HStack(spacing: 6) {
             Button { e2e.openJobId = nil } label: { AccentChip(icon: "chevron.left", text: "목록", style: .plain) }
                 .buttonStyle(.plain)
             Spacer()
             if !e2e.isActive(job.id) {
                 retryButton(style: job.status == .done ? .plain : .soft)
+                Button { e2e.exportReport(job.id) } label: {
+                    AccentChip(icon: "square.and.arrow.up", text: e2e.exporting ? "내보내는 중…" : "내보내기", style: .plain)
+                }
+                .buttonStyle(.plain).disabled(e2e.exporting)
+                .help("결과를 HTML 파일 하나로 바탕화면에 저장 (스크린샷 포함 · 이슈 첨부용)")
             }
-            Button { e2e.revealInFinder(job.id) } label: { AccentChip(icon: "folder", text: "폴더", style: .plain) }
+            Button { e2e.revealInFinder(job.id) } label: { AccentChip(icon: "folder", text: compact ? nil : "폴더", style: .plain) }
                 .buttonStyle(.plain).help("job 폴더를 Finder 에서 열기")
-            Button { e2e.openLog(job.id) } label: { AccentChip(icon: "doc.text", text: "로그", style: .plain) }
+            Button { e2e.openLog(job.id) } label: { AccentChip(icon: "doc.text", text: compact ? nil : "로그", style: .plain) }
                 .buttonStyle(.plain).help("run.log 열기")
             if !e2e.isActive(job.id) {
                 Button { confirmDelete = true } label: { AccentChip(icon: "trash", text: nil, style: .plain) }
@@ -72,7 +98,7 @@ struct E2EResultView: View {
         Button { if job.env.forcesReadOnly { confirmPR = true } else { retry() } } label: {
             AccentChip(icon: "arrow.clockwise", text: "다시 실행", style: style)
         }
-        .buttonStyle(.plain).disabled(e2e.submitting).help("같은 이슈·메모로 다시 실행 (지금 고른 모델로)")
+        .buttonStyle(.plain).disabled(e2e.submitting).help("같은 이슈·추가 요청사항으로 다시 실행 (지금 고른 모델로)")
     }
 
     /// 다시 실행하면 목록으로 돌아가 새 job 이 도는 걸 보여준다.
@@ -97,7 +123,7 @@ struct E2EResultView: View {
                 Text(e).font(.system(size: 11 * scale)).foregroundStyle(.red).lineLimit(3)
             }
             if !job.notes.isEmpty {
-                Text("메모: \(job.notes)").font(.system(size: 11 * scale)).foregroundStyle(.secondary).textSelection(.enabled)
+                Text("추가 요청사항: \(job.notes)").font(.system(size: 11 * scale)).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
     }
@@ -220,10 +246,42 @@ struct E2EResultView: View {
             if !issue.notes.isEmpty {
                 Text(issue.notes).font(.system(size: 11 * scale)).foregroundStyle(.secondary).textSelection(.enabled)
             }
+            if url != nil, !e2e.isActive(job.id) { commentRow(issue) }
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+    }
+
+    /// 이 이슈의 결과를 Jira 댓글로 남기는 버튼. 남긴 적이 있으면 언제 남겼는지 보여준다.
+    private func commentRow(_ issue: E2EIssueResult) -> some View {
+        let id = E2EModel.commentId(job.id, issue.key)
+        let posted = job.jiraComments[issue.key].flatMap(E2EDate.parse)
+        return VStack(alignment: .trailing, spacing: 3) {
+            HStack(spacing: 6) {
+                Spacer(minLength: 0)
+                if let posted {
+                    Text("\(posted.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())) 댓글 남김")
+                        .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
+                }
+                Button { commentTarget = issue } label: {
+                    AccentChip(icon: posted == nil ? "text.bubble" : "checkmark",
+                               text: e2e.commenting == id ? "남기는 중…" : (posted == nil ? "Jira 댓글로 남기기" : "한 번 더"), style: .plain)
+                }
+                .buttonStyle(.plain).disabled(e2e.commenting != nil)
+                .help("이 이슈의 검증 결과를 Jira 댓글로 남겨요 (누르면 한 번 더 물어봐요)")
+            }
+            if let note = e2e.commentNote, note.id == id {
+                Text(note.text).font(.system(size: 11 * scale)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private func postComment(_ issue: E2EIssueResult, withScreenshots: Bool) {
+        let id = job.id, key = issue.key
+        Task { await e2e.postComment(id, key: key, withScreenshots: withScreenshots) }
     }
 
     private func scenario(_ s: E2EScenario) -> some View {

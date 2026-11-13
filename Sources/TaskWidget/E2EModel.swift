@@ -40,6 +40,11 @@ final class E2EModel: ObservableObject {
     @Published private(set) var asideModels: [AsideModel] = []
     @Published private(set) var asidePlan = ""
     @Published private(set) var submitting = false
+    @Published private(set) var exporting = false
+    /// Jira 댓글을 남기는 중인 대상 (commentId)
+    @Published private(set) var commenting: String?
+    /// 마지막 Jira 댓글 시도가 남긴 안내 (실패·일부 실패)
+    @Published private(set) var commentNote: (id: String, text: String)?
     @Published var submitError: String?
     /// 준비 점검의 동작(계정 바꾸기·터미널 열기)이 실패했을 때 보여줄 한 줄
     @Published private(set) var setupError: String?
@@ -293,7 +298,7 @@ final class E2EModel: ObservableObject {
         return true
     }
 
-    /// 끝난 job 을 같은 환경·이슈·메모로 다시 실행한다. 모델과 환경 주소는 지금 설정을 쓴다.
+    /// 끝난 job 을 같은 환경·이슈·추가 요청사항으로 다시 실행한다. 모델과 환경 주소는 지금 설정을 쓴다.
     func retry(_ id: String) async -> Bool {
         guard let job = job(id), !isActive(id) else { return false }
         let titles = Dictionary(job.issues.map { ($0.key, $0.title) }, uniquingKeysWith: { a, _ in a })
@@ -396,6 +401,86 @@ final class E2EModel: ObservableObject {
         return (files, notes)
     }
 
+    // MARK: - Jira 댓글
+
+    static func commentId(_ jobId: String, _ key: String) -> String { "\(jobId)/\(key)" }
+
+    /// 이 이슈 결과의 스크린샷 중 결과 폴더에 실제로 있는 것.
+    func commentScreenshots(_ jobId: String, issue: E2EIssueResult) -> [String] {
+        E2EJiraComment.screenshots(issue).filter { store.screenshotURL(jobId, name: $0) != nil }
+    }
+
+    /// 검증 결과를 그 Jira 이슈의 댓글로 남긴다. withScreenshots 면 스크린샷을 이슈에 첨부하고 댓글에 첨부 이름을 적는다.
+    func postComment(_ jobId: String, key: String, withScreenshots: Bool) async {
+        guard commenting == nil, !isActive(jobId), let job = job(jobId), let ref = job.issues.first(where: { $0.key == key }),
+              case .ok(let result) = results[jobId], let issue = result.issues.first(where: { $0.key == key }) else { return }
+        let id = Self.commentId(jobId, key)
+        commenting = id
+        commentNote = nil
+        defer { commenting = nil }
+        if DemoFixtures.isOn { markCommented(job, key: key); return }
+        guard let client = await jiraClient() else {
+            commentNote = (id, "Jira 주소·이메일·토큰이 필요해요 · 설정 > Jira 에서 연결해 주세요")
+            return
+        }
+        // 검증을 돌린 뒤 Jira 주소를 바꿨으면 다른 사이트의 같은 키에 남기게 된다.
+        guard ref.webURL?.host == client.baseURL.host else {
+            commentNote = (id, "이 검증을 돌릴 때와 지금 설정의 Jira 주소가 달라 남기지 않았어요")
+            return
+        }
+
+        var attached: [String: String] = [:]
+        var failures: [String] = []
+        if withScreenshots {
+            for name in commentScreenshots(jobId, issue: issue) {
+                guard let url = store.screenshotURL(jobId, name: name),
+                      let data = await Task.detached(operation: { try? Data(contentsOf: url) }).value else { continue }
+                let upload = E2EJiraComment.attachmentName(job, screenshot: name)
+                do {
+                    try await client.addAttachment(issueKey: key, fileName: upload, mime: E2EReport.mime(url.pathExtension), data: data)
+                    attached[name] = upload
+                } catch {
+                    failures.append(Self.jiraMessage(error))
+                }
+            }
+        }
+        do {
+            let doc = E2EJiraComment.document(job: job, issue: issue, modelName: modelName(job.model), attached: attached)
+            try await client.addComment(issueKey: key, document: doc)
+        } catch {
+            let m = Self.jiraMessage(error)
+            commentNote = (id, attached.isEmpty ? "댓글을 남기지 못했어요 · \(m)"
+                                                : "스크린샷 \(attached.count)장은 첨부됐지만 댓글을 남기지 못했어요 · \(m)")
+            DiagLog.append("e2e jira comment error \(key): \(m)")
+            return
+        }
+        markCommented(job, key: key)
+        DiagLog.append("e2e jira comment \(key) job=\(jobId) 첨부=\(attached.count) 실패=\(failures.count)")
+        if let first = failures.first {
+            commentNote = (id, "댓글은 남겼지만 스크린샷 \(failures.count)장은 첨부하지 못했어요 · \(first)")
+        }
+    }
+
+    private func markCommented(_ job: E2EJob, key: String) {
+        var map = job.jiraComments
+        map[key] = E2EDate.string(Date())
+        try? store.patch(job.id, set: ["jiraComments": map])
+        reload()
+    }
+
+    private static func jiraMessage(_ error: Error) -> String {
+        (error as? JiraError)?.userMessage ?? error.localizedDescription
+    }
+
+    private func jiraClient() async -> JiraClient? {
+        let s = Settings.shared
+        let email = s.jiraEmail.trimmingCharacters(in: .whitespaces), base = Onboarding.normalizedURL(s.jiraBaseURL)
+        guard !email.isEmpty, !base.isEmpty, let url = URL(string: base),
+              let token = await Task.detached(operation: { SecretStore.get(service: Keychain.service, account: email) }).value
+        else { return nil }
+        return JiraClient(baseURL: url, email: email, token: token)
+    }
+
     func cancel(_ id: String) { runner.cancel(jobId: id) }
 
     func delete(_ id: String) {
@@ -412,11 +497,27 @@ final class E2EModel: ObservableObject {
         NSWorkspace.shared.open(store.logFile(id))
     }
 
-    /// run.log 마지막 몇 줄 (실패 원인 보기).
-    func logTail(_ id: String, lines: Int = 15) -> String {
-        guard let text = try? String(contentsOf: store.logFile(id), encoding: .utf8) else { return "" }
-        return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    func logTail(_ id: String) -> String { store.logTail(id) }
+
+    /// 결과를 HTML 파일 하나(스크린샷 포함)로 바탕화면에 내보내고 Finder 에서 보여준다. 크게 보거나 이슈에 첨부할 때 쓴다.
+    func exportReport(_ id: String) {
+        guard let job = job(id), !isActive(id), !exporting else { return }
+        let store = store, model = modelName(job.model)
+        exporting = true
+        submitError = nil
+        Task {
+            let r = await Task.detached { () -> Result<URL, Error> in
+                Result {
+                    let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)[0]
+                    return try E2EReport.export(job, store: store, modelName: model, to: desktop)
+                }
+            }.value
+            exporting = false
+            switch r {
+            case .success(let url): NSWorkspace.shared.activateFileViewerSelecting([url])
+            case .failure(let e): submitError = "내보내기 실패: \(e.localizedDescription)"
+            }
+        }
     }
 }
 
