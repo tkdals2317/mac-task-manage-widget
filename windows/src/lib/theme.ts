@@ -58,33 +58,61 @@ function alpha(hex: string, a: number): string {
 
 /** 설정 → 루트 CSS 변수. 기본 테마는 시스템(또는 고른) 밝기를 따른다. */
 export function applyTheme(s: Settings, root: HTMLElement = document.documentElement): void {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  for (const [k, v] of Object.entries(themeVars(s))) root.style.setProperty(k, v);
+  const dark = root.style.getPropertyValue("--dark") === "1";
+  root.style.colorScheme = dark ? "dark" : "light";
+  root.dataset.themed = resolveTheme(s.themePreset, s.customBackground, s.customAccent) ? "1" : "0";
+  // 창이 투명이라 Mac 처럼 뒤가 비쳐 보인다 (NSPanel.alphaValue)
+  root.style.opacity = String(s.opacity);
+}
+
+/** 테마 → CSS 변수. 기본 테마는 macOS 기본 창 색(밝은 회색 / 어두운 회색)과 시스템 파랑. */
+export function themeVars(s: Pick<Settings, "theme" | "themePreset" | "customBackground" | "customAccent" | "fontScale">): Record<string, string> {
+  const prefersDark = typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   const c = resolveTheme(s.themePreset, s.customBackground, s.customAccent);
-  const dark = c ? isDark(c) : s.theme === "dark" || (s.theme === "system" && prefersDark);
-  const bg = c?.background ?? (dark ? "#202020" : "#F3F3F3");
-  const accent = c?.accent ?? (dark ? "#4CC2FF" : "#0067C0");
-  const fg = dark ? "#F2F2F2" : "#1B1B1B";
-  const vars: Record<string, string> = {
+  const dark = c ? isDark(c) : s.theme === "dark" || (s.theme === "system" && !!prefersDark);
+  const bg = c?.background ?? (dark ? "#2B2B2D" : "#EFEFF1");
+  const accent = c?.accent ?? (dark ? "#0A84FF" : "#007AFF");
+  const fg = dark ? "#F2F2F4" : "#1D1D1F";
+  // 밝은 강조색(민트·샌드 등) 위 글자는 어둡게
+  const onAccent = luminance(accent) > 0.72 ? "#1D1D1F" : "#FFFFFF";
+  return {
+    "--dark": dark ? "1" : "0",
     "--bg": bg,
     "--fg": fg,
-    "--fg2": alpha(fg, 0.62),
-    "--fg3": alpha(fg, 0.42),
-    "--line": alpha(fg, 0.1),
-    "--fill": alpha(fg, 0.06),
-    "--fill2": alpha(fg, 0.1),
+    "--fg2": alpha(fg, dark ? 0.62 : 0.6),
+    "--fg3": alpha(fg, dark ? 0.4 : 0.36),
+    "--line": alpha(fg, dark ? 0.12 : 0.1),
+    "--line2": alpha(fg, dark ? 0.18 : 0.16),
+    "--fill": alpha(fg, dark ? 0.06 : 0.05),
+    "--fill2": alpha(fg, dark ? 0.1 : 0.08),
+    "--pop": c ? mix(bg, dark ? "#FFFFFF" : "#FFFFFF", dark ? 0.06 : 0.55) : dark ? "#333336" : "#F8F8FA",
+    "--btn": dark ? alpha("#FFFFFF", 0.12) : "#FFFFFF",
+    "--switch-off": dark ? alpha("#FFFFFF", 0.18) : alpha("#000000", 0.12),
+    // 기본 테마: macOS segmented (흰 알약), 테마: 옅은 강조
+    "--seg-on": c ? alpha(accent, dark ? 0.32 : 0.2) : dark ? alpha("#FFFFFF", 0.22) : "#FFFFFF",
+    "--seg-on-text": c ? (dark ? "#FFFFFF" : accent) : fg,
     "--accent": accent,
-    "--accent-soft": alpha(accent, dark ? 0.24 : 0.16),
-    "--danger": dark ? "#FF6B6B" : "#C42B1C",
-    "--danger-soft": dark ? "rgba(255,107,107,0.2)" : "rgba(196,43,28,0.12)",
-    "--warn": dark ? "#FFC857" : "#9D5D00",
-    "--warn-soft": dark ? "rgba(255,200,87,0.2)" : "rgba(157,93,0,0.12)",
-    "--ok": dark ? "#6CCB5F" : "#0F7B0F",
-    "--ok-soft": dark ? "rgba(108,203,95,0.2)" : "rgba(15,123,15,0.12)",
-    "--info": dark ? "#99C2FF" : "#3A5FCD",
-    "--info-soft": dark ? "rgba(153,194,255,0.2)" : "rgba(58,95,205,0.12)",
+    "--accent-text": dark && c ? mix(accent, "#FFFFFF", 0.2) : accent,
+    "--accent-soft": alpha(accent, dark ? 0.26 : 0.16),
+    "--accent-soft2": alpha(accent, dark ? 0.36 : 0.26),
+    "--on-accent": onAccent,
+    "--danger": dark ? "#FF6961" : "#E5342B",
+    "--danger-soft": dark ? "rgba(255,105,97,0.2)" : "rgba(229,52,43,0.12)",
+    "--warn": dark ? "#FFB340" : "#D9820B",
+    "--warn-soft": dark ? "rgba(255,179,64,0.2)" : "rgba(255,149,0,0.14)",
+    "--ok": dark ? "#32D74B" : "#1E9E3E",
+    "--ok-soft": dark ? "rgba(50,215,75,0.18)" : "rgba(52,199,89,0.14)",
+    "--info": dark ? "#64D2FF" : "#0A7AD6",
+    "--info-soft": dark ? "rgba(100,210,255,0.18)" : "rgba(10,132,255,0.12)",
     "--scale": String(s.fontScale),
   };
-  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
-  root.style.colorScheme = dark ? "dark" : "light";
-  root.style.opacity = String(s.opacity);
+}
+
+/** 두 색을 t(0..1) 만큼 섞는다. */
+function mix(a: string, b: string, t: number): string {
+  const x = rgb(a), y = rgb(b);
+  if (!x || !y) return a;
+  const h = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
+  return "#" + h(x.r + (y.r - x.r) * t) + h(x.g + (y.g - x.g) * t) + h(x.b + (y.b - x.b) * t);
 }

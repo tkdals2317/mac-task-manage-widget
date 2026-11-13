@@ -1,67 +1,148 @@
-/* 공용 바탕. 색은 theme.ts 가 루트 CSS 변수로 넣는다. 글자 크기는 --scale 배수. */
+/* 공용 바탕. 색은 theme.ts 가 루트 CSS 변수로 넣는다. 글자 크기는 --scale 배수.
+   모양은 Mac 판(SwiftUI 기본 컨트롤 + AccentChip)을 따른다. 글꼴은 Apple SD Gothic Neo 와 가장 닮은 Pretendard 를 앱에 넣어 쓴다. */
+@import "pretendard/dist/web/variable/pretendardvariable.css";
+
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+html { background: transparent; }
 body {
-  background: var(--bg);
+  background: transparent;
   color: var(--fg);
-  font-family: "Segoe UI Variable Text", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  font-family: "Pretendard Variable", Pretendard, "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
   font-size: calc(13px * var(--scale, 1));
+  font-feature-settings: "tnum" 0, "ss06";
+  letter-spacing: -0.005em;
+  line-height: 1.35;
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
+  cursor: default;
 }
 #app { height: 100%; }
-input, textarea, button, select { font: inherit; color: inherit; }
-.mono { font-family: "Cascadia Mono", Consolas, monospace; }
+input, textarea, button, select { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: default; }
+.mono { font-family: "Cascadia Mono", "SF Mono", Consolas, monospace; letter-spacing: 0; }
 .muted { color: var(--fg2); }
 .faint { color: var(--fg3); }
-.selectable { user-select: text; }
+.selectable { user-select: text; cursor: text; }
+.tnum { font-variant-numeric: tabular-nums; }
 
-/* 입력칸: 옅은 바탕, 포커스 시 강조색 테두리 (Mac ThemedTextField) */
+/* 입력칸: 옅은 바탕, 포커스 시 강조색 1.5px 테두리 (Mac ThemedTextField) */
 .field {
-  width: 100%; padding: 6px 10px; border-radius: 6px;
-  background: var(--fill); border: 1px solid var(--line); outline: none;
+  width: 100%; padding: 5px 8px; border-radius: 6px;
+  background: var(--fill); border: 0.5px solid var(--line2); outline: none;
+  box-shadow: inset 0 0 0 0 transparent; transition: box-shadow 0.1s, border-color 0.1s;
 }
-.field:focus { border-color: var(--accent); }
+.field:focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .field::placeholder { color: var(--fg3); }
+textarea.field { resize: none; line-height: 1.45; }
 
-/* 칩·버튼 */
+/* 알약 (Mac AccentChip). soft: 옅은 강조, solid: 주 버튼, plain: 흐린 버튼 */
 .chip {
-  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 6px;
-  font-size: 0.88em; white-space: nowrap; background: var(--fill2); color: var(--fg2); border: none;
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.85em; font-weight: 500; white-space: nowrap; background: var(--fill2); color: var(--fg2); border: none;
+  line-height: 1.5;
 }
-.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.chip.accent, .chip.soft { background: var(--accent-soft); color: var(--accent-text); }
+.chip.solid { background: var(--accent); color: var(--on-accent); }
+.chip.plain { background: transparent; color: var(--fg2); }
 .chip.danger { background: var(--danger-soft); color: var(--danger); }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
 .chip.ok { background: var(--ok-soft); color: var(--ok); }
 .chip.info { background: var(--info-soft); color: var(--info); }
-button.chip { cursor: pointer; }
+button.chip { transition: background 0.1s, filter 0.1s; }
+button.chip:hover { filter: brightness(0.97); }
+button.chip.soft:hover, button.chip.accent:hover { background: var(--accent-soft2); }
+button.chip.plain:hover { background: var(--fill2); }
+button.chip.solid:hover { filter: brightness(1.08); }
+button.chip:disabled { opacity: 0.5; filter: none; }
+.chip.lg { font-size: 0.96em; padding: 4px 11px; gap: 4px; }
+
+/* 일반 버튼 (macOS push button) */
 .btn {
-  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line);
-  background: var(--fill); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 3px 11px; border-radius: 6px; border: 0.5px solid var(--line2);
+  background: var(--btn); color: var(--fg); box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.12);
+  white-space: nowrap; min-height: 24px;
 }
-.btn:hover { background: var(--fill2); }
-.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn:hover { filter: brightness(0.98); }
+.btn:active { filter: brightness(0.94); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn:disabled { opacity: 0.5; filter: none; }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent;
-  color: var(--fg2); cursor: pointer; padding: 0;
+  width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent;
+  color: var(--fg2); padding: 0; flex: none;
 }
 .icon-btn:hover { background: var(--fill2); color: var(--fg); }
+.icon-btn:disabled { opacity: 0.4; background: transparent; }
 
-/* 섹션 머리 (⌄ 내 할 일 6) */
+/* 섹션 머리 (⌄ 내 할 일 6). Mac SectionHeader: 11pt semibold, 개수는 흐리게 */
 .section-header {
-  display: flex; align-items: center; gap: 6px; padding: 10px 2px 6px;
-  color: var(--fg2); cursor: pointer;
+  display: flex; align-items: center; gap: 6px; padding: 10px 0 4px;
+  color: var(--fg2); font-size: 0.86em; font-weight: 600;
 }
-.row { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid var(--line); }
+.section-header .count { font-weight: 400; color: var(--fg3); }
+.row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 0.5px solid var(--line); }
 
-/* 팝오버 (DuePopover, TagPopover 등) */
+/* 팝오버 (DuePopover, TagPopover 등): Mac 팝오버처럼 둥글고 그림자 */
 .popover {
-  position: absolute; z-index: 50; min-width: 200px; padding: 10px; border-radius: 8px;
-  background: var(--bg); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  position: absolute; z-index: 50; min-width: 200px; padding: 10px; border-radius: 10px;
+  background: var(--pop); border: 0.5px solid var(--line2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* 얇은 스크롤바: 기본 투명, 호버 때 강조색 (Mac AccentScrollBar) */
-.scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.scroll:hover { scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent; }
+/* 켜기/끄기 스위치 (macOS) */
+.switch {
+  appearance: none; width: 32px; height: 18px; border-radius: 9px; margin: 0; flex: none; position: relative;
+  background: var(--switch-off); border: none; transition: background 0.18s;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform 0.18s cubic-bezier(.3, .7, .3, 1);
+}
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(14px); }
+.switch:disabled { opacity: 0.45; }
+.switch:focus-visible { outline: 2px solid var(--accent-soft2); outline-offset: 2px; }
+
+/* 나눠 고르기 (macOS segmented). 선택 칸은 흰 알약 + 그림자, 테마를 쓰면 강조색 */
+.seg {
+  display: inline-flex; padding: 2px; gap: 2px; border-radius: 7px; background: var(--fill2); flex: none;
+}
+.seg button {
+  padding: 2px 12px; border: none; border-radius: 5px; background: transparent; color: var(--fg); min-height: 20px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.seg button:hover:not(.on):not(:disabled) { background: var(--fill); }
+.seg button.on { background: var(--seg-on); color: var(--seg-on-text); box-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.18); font-weight: 500; }
+.seg button:disabled { opacity: 0.45; }
+.seg.full { display: flex; }
+.seg.full button { flex: 1; }
+
+input[type="range"] { accent-color: var(--accent); }
+input[type="checkbox"]:not(.switch) { accent-color: var(--accent); }
+
+/* 얇은 스크롤바: 평소 숨김, 호버·스크롤 때 강조색 (Mac AccentScrollBar) */
+.scroll { overflow-y: auto; scrollbar-gutter: stable; }
+.scroll::-webkit-scrollbar { width: 10px; }
+.scroll::-webkit-scrollbar-track { background: transparent; }
+.scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
+.scroll:hover::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.scroll::-webkit-scrollbar-thumb:active { background-color: color-mix(in srgb, var(--accent) 85%, transparent); }
+
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 확인 대화상자 (Mac confirmationDialog) */
+.modal-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.18); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal {
+  width: min(320px, 88%); padding: 16px; border-radius: 12px; background: var(--pop);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25); border: 0.5px solid var(--line2); display: flex; flex-direction: column; gap: 10px;
+}
+.modal .title { font-weight: 600; }
+.modal .msg { color: var(--fg2); font-size: 0.92em; line-height: 1.45; }
+.modal .acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }

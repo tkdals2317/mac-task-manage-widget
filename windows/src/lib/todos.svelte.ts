@@ -16,6 +16,8 @@ export const expanded = new SvelteSet<string>();
 let saveChain: Promise<void> = Promise.resolve();
 /** 저장은 순서대로 한 줄로 (연속 편집이 뒤섞여 옛 값이 덮어쓰지 않게). */
 function persist(): void {
+  // 불러오기 전에 저장하면 todos.json 을 빈 목록으로 덮어쓴다
+  if (!store.loaded) { log("todos 저장 건너뜀: 아직 불러오기 전"); return; }
   const snapshot = $state.snapshot(store.todos);
   saveChain = saveChain.then(() => writeJSON(FILE, snapshot)).catch((e) => log(`todos 저장 실패: ${e}`));
 }

@@ -1,9 +1,8 @@
 <script lang="ts">
   // 할 일 탭 (Mac TasksView): 내 할 일 + 완료 + Jira.
-  import { onMount } from "svelte";
   import { filterByVersion, parseVersionFilter } from "../lib/jira";
   import { setSetting, settings } from "../lib/settings.svelte";
-  import { addTodo, clearDone, doneTodos, openTodos, startTasks } from "../lib/todos.svelte";
+  import { addTodo, clearDone, doneTodos, openTodos } from "../lib/todos.svelte";
   import Icon from "../tasks/Icon.svelte";
   import JiraSection from "../tasks/JiraSection.svelte";
   import JiraVersionMenu from "../tasks/JiraVersionMenu.svelte";
@@ -14,7 +13,7 @@
   let newTitle = $state("");
   let doneExpanded = $state(false);
 
-  onMount(startTasks);
+  // 할 일 저장소는 main.svelte.ts 가 앱 시작 때 한 번 띄운다 (다른 탭의 "할 일로" 가 불러오기 전 목록을 저장하지 않게)
 
   const open = $derived(openTodos(settings.sortTodosByTag));
   const done = $derived(doneTodos());
