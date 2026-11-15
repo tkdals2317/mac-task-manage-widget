@@ -1,10 +1,10 @@
 import "./app.css";
 import { mount } from "svelte";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, availableMonitors, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
 import { register, unregisterAll } from "@tauri-apps/plugin-global-shortcut";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import App from "./App.svelte";
-import { loadSettings, settings } from "./lib/settings.svelte";
+import { loadSettings, settings, setSetting } from "./lib/settings.svelte";
 import { applyTheme } from "./lib/theme";
 import { log, native } from "./lib/native";
 import { setHotkeyError } from "./lib/hotkeyStatus.svelte";
@@ -58,6 +58,35 @@ $effect.root(() => {
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme(settings));
 
 mount(App, { target: document.getElementById("app")! });
+
+// ---- 패널 위치·크기 기억 (Mac 의 frame autosave) ----
+// 지난 자리가 지금 연결된 모니터 안에 있을 때만 되돌린다 (모니터를 뺐으면 처음 자리).
+(async () => {
+  const f = settings.panelFrame.split(",").map(Number);
+  if (f.length === 4 && f.every(Number.isFinite) && f[2] >= 300 && f[3] >= 300) {
+    const [x, y, w, h] = f;
+    const mons = await availableMonitors().catch(() => []);
+    const onScreen = mons.some((m) => x + 40 >= m.position.x && y >= m.position.y && x + 40 < m.position.x + m.size.width && y + 20 < m.position.y + m.size.height);
+    if (onScreen) {
+      await win.setSize(new PhysicalSize(w, h)).catch(() => {});
+      await win.setPosition(new PhysicalPosition(x, y)).catch(() => {});
+    }
+  }
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const save = () => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      if (await win.isMinimized().catch(() => true)) return;
+      const p = await win.outerPosition().catch(() => null);
+      const s = await win.outerSize().catch(() => null);
+      if (!p || !s || p.x <= -30000) return;
+      const v = `${p.x},${p.y},${s.width},${s.height}`;
+      if (v !== settings.panelFrame) setSetting("panelFrame", v);
+    }, 600);
+  };
+  win.onMoved(save).catch(() => {});
+  win.onResized(save).catch(() => {});
+})();
 
 // ---- 백그라운드 일: 요약 자동 생성, PR 새로고침·알림, Teleport 자동 유지 ----
 // 패널 창은 숨겨도 살아 있으므로 여기서 돌린다 (Mac AppDelegate 의 Scheduler·PRModel.startLoop·TeleportManager.start).

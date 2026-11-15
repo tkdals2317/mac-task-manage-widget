@@ -22,6 +22,8 @@ export const DEFAULTS = {
   jiraJQL: "",
   confluenceBaseURL: "",
   lastTab: "tasks",
+  // 패널 위치·크기 (물리 픽셀, "x,y,w,h"). 비면 처음 자리.
+  panelFrame: "",
   enabledTabs: "tasks,summary,notes",
   // 요약 / Claude 연동
   summaryHour: 18,
