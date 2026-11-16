@@ -75,6 +75,7 @@ final class JiraTransitionTests: XCTestCase {
         nonisolated(unsafe) static var body = Data()
         nonisolated(unsafe) static var last: URLRequest?
         nonisolated(unsafe) static var lastBody: Data?
+        nonisolated(unsafe) static var headers: [String: String]?
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for r: URLRequest) -> URLRequest { r }
         override func startLoading() {
@@ -85,7 +86,7 @@ final class JiraTransitionTests: XCTestCase {
                 while s.hasBytesAvailable { let n = s.read(&buf, maxLength: 1024); if n <= 0 { break }; d.append(buf, count: n) }
                 Self.lastBody = d
             } else { Self.lastBody = request.httpBody }
-            let r = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: nil)!
+            let r = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: Self.headers)!
             client?.urlProtocol(self, didReceive: r, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: Self.body)
             client?.urlProtocolDidFinishLoading(self)
@@ -94,7 +95,7 @@ final class JiraTransitionTests: XCTestCase {
     }
 
     func client(status: Int, body: String = "") -> JiraClient {
-        Stub.status = status; Stub.body = Data(body.utf8); Stub.last = nil; Stub.lastBody = nil
+        Stub.status = status; Stub.body = Data(body.utf8); Stub.last = nil; Stub.lastBody = nil; Stub.headers = nil
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [Stub.self]
         return JiraClient(baseURL: URL(string: "https://x.example.com")!, email: "a@b.c", token: "t", session: URLSession(configuration: cfg))
@@ -154,6 +155,43 @@ final class JiraTransitionTests: XCTestCase {
         XCTAssertTrue(type.hasPrefix("multipart/form-data; boundary=atm-"))
         let boundary = String(type.dropFirst("multipart/form-data; boundary=".count))
         XCTAssertEqual(Stub.lastBody, JiraClient.multipart(boundary: boundary, fileName: "shot.png", mime: "image/png", data: Data([9, 8, 7])))
+    }
+
+    func testAddAttachmentReturnsAttachmentId() async throws {
+        let c = client(status: 200, body: #"[{"id":"243883","filename":"shot.png"}]"#)
+        let id = try await c.addAttachment(issueKey: "NMRS-1", fileName: "shot.png", mime: "image/png", data: Data([1]))
+        XCTAssertEqual(id, "243883")
+        let odd = client(status: 200, body: "{}")
+        let none = try await odd.addAttachment(issueKey: "NMRS-1", fileName: "shot.png", mime: "image/png", data: Data([1]))
+        XCTAssertEqual(none, "")
+    }
+
+    func testMediaFileIdReadsRedirectLocation() async {
+        let c = client(status: 303)
+        Stub.headers = ["Location": "https://api.media.atlassian.com/file/aeffdd59-91ff-4f91-b887-707f290ef51c/binary?token=t&dl=true&name=a.png"]
+        let id = await c.mediaFileId(attachmentId: "243883")
+        XCTAssertEqual(id, "aeffdd59-91ff-4f91-b887-707f290ef51c")
+        XCTAssertEqual(Stub.last?.httpMethod, "GET")
+        XCTAssertEqual(Stub.last?.url?.path, "/rest/api/3/attachment/content/243883")
+
+        // 넘겨 주지 않거나(200·404) 모양이 다르면 nil
+        let direct = await client(status: 200).mediaFileId(attachmentId: "1")
+        XCTAssertNil(direct)
+        let missing = await client(status: 404).mediaFileId(attachmentId: "1")
+        XCTAssertNil(missing)
+        // 숫자 id 가 아니면 요청을 보내지 않는다
+        let bad = client(status: 303)
+        let badId = await bad.mediaFileId(attachmentId: "../1")
+        XCTAssertNil(badId)
+        XCTAssertNil(Stub.last)
+    }
+
+    func testMediaFileIdFromLocation() {
+        XCTAssertEqual(JiraClient.mediaFileId(location: "https://api.media.atlassian.com/file/aeffdd59-91ff-4f91-b887-707f290ef51c/binary?x=1"),
+                       "aeffdd59-91ff-4f91-b887-707f290ef51c")
+        XCTAssertNil(JiraClient.mediaFileId(location: "https://api.media.atlassian.com/file/not-a-uuid/binary"))
+        XCTAssertNil(JiraClient.mediaFileId(location: "https://example.com/download/a.png"))
+        XCTAssertNil(JiraClient.mediaFileId(location: nil))
     }
 
     func testCommentAndAttachmentErrors() async {

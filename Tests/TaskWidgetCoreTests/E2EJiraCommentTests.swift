@@ -57,6 +57,40 @@ final class E2EJiraCommentTests: XCTestCase {
         XCTAssertFalse(all.contains(""), "ADF 는 빈 텍스트 노드를 받지 않는다")
     }
 
+    /// 문서 안의 media 노드 id 를 순서대로 모은다.
+    private func mediaIds(_ node: Any) -> [String] {
+        guard let n = node as? [String: Any] else { return [] }
+        if n["type"] as? String == "media" { return [(n["attrs"] as? [String: Any])?["id"] as? String ?? ""] }
+        return (n["content"] as? [Any] ?? []).flatMap(mediaIds)
+    }
+
+    func testDocumentEmbedsScreenshotsWithMediaId() throws {
+        let issue = E2EIssueResult(key: "ABC-1", scenarios: [
+            E2EScenario(name: "주문 취소", actual: "오류", verdict: .fail, screenshots: ["ABC-1-1.png", "dir/ABC-1-2.png", "ABC-1-1.png"]),
+            E2EScenario(name: "조회", verdict: .pass, screenshots: ["ABC-1-3.png"]),
+        ])
+        let doc = E2EJiraComment.document(job: job(), issue: issue, modelName: "m",
+                                          attached: ["ABC-1-1.png": "E2E-1.png", "ABC-1-2.png": "E2E-2.png", "ABC-1-3.png": "E2E-3.png"],
+                                          media: ["ABC-1-1.png": "11111111-1111-1111-1111-111111111111",
+                                                  "ABC-1-3.png": "33333333-3333-3333-3333-333333333333"],
+                                          timeZone: utc)
+        XCTAssertTrue(JSONSerialization.isValidJSONObject(doc))
+        XCTAssertTrue(types(doc).isSuperset(of: ["mediaSingle", "media"]))
+        // 시나리오 순서대로, 한 시나리오 안의 같은 스크린샷은 한 번만
+        XCTAssertEqual(mediaIds(doc), ["11111111-1111-1111-1111-111111111111", "33333333-3333-3333-3333-333333333333"])
+        // 이미지로 넣은 것은 이름을 적지 않고, media id 를 못 얻은 첨부만 이름을 적는다
+        let all = texts(doc)
+        XCTAssertTrue(all.contains("E2E-2.png"))
+        XCTAssertFalse(all.contains { $0.contains("E2E-1.png") || $0.contains("E2E-3.png") })
+
+        let content = try XCTUnwrap(doc["content"] as? [[String: Any]])
+        let single = try XCTUnwrap(content.first { $0["type"] as? String == "mediaSingle" })
+        XCTAssertEqual(single["attrs"] as? [String: String], ["layout": "center"])
+        let media = try XCTUnwrap((single["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(media["attrs"] as? [String: String],
+                       ["type": "file", "id": "11111111-1111-1111-1111-111111111111", "collection": ""])
+    }
+
     func testDocumentForReadOnlyAndEmptyResult() {
         let doc = E2EJiraComment.document(job: job(env: .pr), issue: E2EIssueResult(key: "ABC-1", reportedVerdict: .skipped),
                                           modelName: "m", timeZone: utc)

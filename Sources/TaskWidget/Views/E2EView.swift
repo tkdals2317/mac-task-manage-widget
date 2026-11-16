@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TaskWidgetCore
 
@@ -29,6 +30,7 @@ private struct E2ERequestView: View {
     @State private var confirmPR = false
     /// PR 환경 job 을 다시 실행하기 전 확인 중인 job id
     @State private var prRetry: String?
+    @State private var commentTarget: E2ECommentTarget?
     @FocusState private var focus: Field?
     private enum Field { case keys, notes }
 
@@ -80,6 +82,7 @@ private struct E2ERequestView: View {
         .e2ePRConfirm(isPresented: Binding(get: { prRetry != nil }, set: { if !$0 { prRetry = nil } })) {
             if let id = prRetry { Task { _ = await e2e.retry(id) } }
         }
+        .e2eCommentConfirm(e2e, target: $commentTarget)
     }
 
     // MARK: - 환경
@@ -221,44 +224,8 @@ private struct E2ERequestView: View {
             Text("아직 실행한 검증이 없어요").font(.system(size: 11.5 * scale)).foregroundStyle(.tertiary).padding(.vertical, 6)
         }
         ForEach(e2e.jobs) { job in
-            HStack(spacing: 6) {
-                Button { e2e.openJobId = job.id } label: {
-                    HStack(spacing: 6) {
-                        Text(job.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
-                            .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary).monospacedDigit()
-                        E2EEnvTag(env: job.env)
-                        Text(job.issueKeys.joined(separator: ", ")).font(.system(size: 11.5 * scale)).lineLimit(1)
-                        Spacer(minLength: 4)
-                        E2EJobStatusView(e2e: e2e, job: job)
-                    }
-                    .padding(.vertical, 5)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                if e2e.isActive(job.id) {
-                    Button { e2e.cancel(job.id) } label: {
-                        Image(systemName: "xmark.circle").font(.system(size: 11 * scale))
-                    }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("취소")
-                } else if job.status == .failed || job.status == .cancelled {
-                    Button { retry(job) } label: {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 11 * scale))
-                    }
-                    .buttonStyle(.plain).foregroundStyle(accent).help("다시 실행 (지금 고른 모델로)")
-                }
-            }
-            .contextMenu {
-                Button("결과 보기") { e2e.openJobId = job.id }
-                Button("Finder 에서 보기") { e2e.revealInFinder(job.id) }
-                if e2e.isActive(job.id) {
-                    Button("취소") { e2e.cancel(job.id) }
-                } else {
-                    Button("다시 실행") { retry(job) }
-                    Button("파일로 내보내기") { e2e.exportReport(job.id) }
-                    Button("삭제") { e2e.delete(job.id) }
-                }
-            }
-            Divider()
+            E2EHistoryRow(e2e: e2e, job: job, onRetry: { retry(job) },
+                          onComment: { commentTarget = E2ECommentTarget(job: job, issue: $0) })
         }
     }
 }
@@ -339,6 +306,183 @@ extension View {
         } message: {
             Text("운영 환경에서는 조회만 하고, 쓰기 동작이 필요한 시나리오는 SKIPPED 로 남겨요.")
         }
+    }
+
+    /// Jira 댓글로 남기기 전 확인. 결과 폴더에 스크린샷이 있으면 같이 첨부할지도 고른다.
+    @MainActor
+    func e2eCommentConfirm(_ e2e: E2EModel, target: Binding<E2ECommentTarget?>) -> some View {
+        confirmationDialog(target.wrappedValue.map { "\($0.issue.key) 이슈에 검증 결과를 댓글로 남길까요?" } ?? "",
+                           isPresented: Binding(get: { target.wrappedValue != nil }, set: { if !$0 { target.wrappedValue = nil } }),
+                           presenting: target.wrappedValue) { t in
+            let shots = e2e.commentScreenshots(t.job.id, issue: t.issue).count
+            if shots > 0 { Button("댓글 + 스크린샷 \(shots)장") { t.post(e2e, withScreenshots: true) } }
+            Button(shots > 0 ? "댓글만 (스크린샷 없이)" : "댓글 남기기") { t.post(e2e, withScreenshots: false) }
+            Button("취소", role: .cancel) {}
+        } message: { t in
+            Text("Jira 에 내 이름으로 댓글이 달리고, 이슈를 보는 사람에게 알림이 갈 수 있어요. 판정·시나리오·기대·실제 결과와 환경 주소가 들어가요."
+                 + (e2e.commentScreenshots(t.job.id, issue: t.issue).isEmpty ? "" : "\n스크린샷은 이슈에 첨부되고 댓글 안 시나리오 아래에 이미지로 보여요.")
+                 + (t.job.jiraComments[t.issue.key] == nil ? "" : "\n이 결과는 이미 한 번 남겼어요."))
+        }
+    }
+}
+
+/// Jira 댓글로 남길지 묻는 중인 결과.
+struct E2ECommentTarget {
+    let job: E2EJob
+    let issue: E2EIssueResult
+
+    @MainActor
+    func post(_ e2e: E2EModel, withScreenshots: Bool) {
+        let id = job.id, key = issue.key
+        Task { await e2e.postComment(id, key: key, withScreenshots: withScreenshots) }
+    }
+}
+
+/// 이력 한 줄. 누르면 결과 상세, 판정 옆에 Jira 댓글 · Jira 이슈 열기 · 다시 실행 버튼.
+private struct E2EHistoryRow: View {
+    @ObservedObject var e2e: E2EModel
+    let job: E2EJob
+    let onRetry: () -> Void
+    let onComment: (E2EIssueResult) -> Void
+    @Environment(\.fontScale) private var scale
+    private typealias IssueLink = (key: String, title: String, url: URL)
+
+    var body: some View {
+        let issues = e2e.commentableIssues(job)
+        let links = job.issues.compactMap { r in r.webURL.map { (key: r.key, title: r.title, url: $0) } }
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                // 다 들어가면 한 줄, 아니면 판정·버튼을 둘째 줄로 내린다 (기본 폭 320 에서 줄이 넘치면 패널 전체가 잘린다)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        openButton {
+                            HStack(spacing: 6) { title; Spacer(minLength: 4); E2EJobStatusView(e2e: e2e, job: job) }
+                                .padding(.vertical, 5)
+                        }
+                        HStack(spacing: 2) { actions(issues, links: links) }
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        openButton { HStack(spacing: 6) { title; Spacer(minLength: 0) }.padding(.top, 5) }
+                        HStack(spacing: 6) {
+                            openButton { HStack { Spacer(minLength: 0); E2EJobStatusView(e2e: e2e, job: job) } }
+                            HStack(spacing: 2) { actions(issues, links: links) }
+                        }
+                        .padding(.bottom, 4)
+                    }
+                }
+                if let note = commentNote(issues) {
+                    Text(note).font(.system(size: 10.5 * scale)).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        .padding(.bottom, 4)
+                }
+            }
+            .contextMenu { menu(issues, links: links) }
+            Divider()
+        }
+    }
+
+    private var title: some View {
+        HStack(spacing: 6) {
+            Text(job.createdAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute()))
+                .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary).monospacedDigit()
+            E2EEnvTag(env: job.env)
+            Text(job.issueKeys.joined(separator: ", ")).font(.system(size: 11.5 * scale)).lineLimit(1)
+        }
+    }
+
+    private func openButton<Label: View>(@ViewBuilder _ label: () -> Label) -> some View {
+        Button { e2e.openJobId = job.id } label: { label().contentShape(Rectangle()) }
+            .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func actions(_ issues: [E2EIssueResult], links: [IssueLink]) -> some View {
+        if !e2e.isActive(job.id) { commentButton(issues) }
+        jiraButton(links)
+        if e2e.isActive(job.id) {
+            Button { e2e.cancel(job.id) } label: { AccentChip(icon: "xmark.circle", text: nil, style: .plain) }
+                .buttonStyle(.plain).help("취소")
+        } else if job.status == .failed || job.status == .cancelled {
+            Button(action: onRetry) { AccentChip(icon: "arrow.clockwise", text: nil, style: .soft) }
+                .buttonStyle(.plain).help("다시 실행 (지금 고른 모델로)")
+        }
+    }
+
+    /// 주소는 ATM 이 만든 Jira 링크만 쓴다. 이슈가 하나면 바로 열고, 여럿이면 메뉴에서 고른다.
+    @ViewBuilder
+    private func jiraButton(_ links: [IssueLink]) -> some View {
+        let chip = AccentChip(icon: "arrow.up.right.square", text: nil, style: .plain)
+        if links.count == 1, let link = links.first {
+            Button { NSWorkspace.shared.open(link.url) } label: { chip }
+                .buttonStyle(.plain).help("\(link.key) Jira 에서 열기")
+        } else if !links.isEmpty {
+            Menu {
+                ForEach(links, id: \.key) { link in
+                    Button(link.title.isEmpty ? link.key : "\(link.key) · \(link.title)") { NSWorkspace.shared.open(link.url) }
+                }
+            } label: { chip }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("이슈를 골라 Jira 에서 열기")
+        }
+    }
+
+    /// 이슈가 하나면 바로 묻고, 여럿이면 메뉴에서 고른다. 다 남겼으면 체크 표시로 바뀐다.
+    @ViewBuilder
+    private func commentButton(_ issues: [E2EIssueResult]) -> some View {
+        let done = !issues.isEmpty && issues.allSatisfy { job.jiraComments[$0.key] != nil }
+        let chip = AccentChip(icon: done ? "checkmark.bubble" : "text.bubble", text: nil, style: done ? .plain : .soft)
+        if issues.contains(where: { e2e.commenting == E2EModel.commentId(job.id, $0.key) }) {
+            ProgressView().controlSize(.mini).frame(width: 24)
+        } else if issues.count == 1, let issue = issues.first {
+            Button { onComment(issue) } label: { chip }
+                .buttonStyle(.plain).disabled(e2e.commenting != nil)
+                .help(posted(issue.key).map { "\($0) Jira 댓글 남김 · 누르면 한 번 더 남겨요" } ?? "Jira 댓글로 남기기 (누르면 한 번 더 물어봐요)")
+        } else if !issues.isEmpty {
+            Menu {
+                ForEach(issues, id: \.key) { i in
+                    Button(menuTitle(i)) { onComment(i) }
+                }
+            } label: { chip }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .disabled(e2e.commenting != nil)
+            .help("이슈를 골라 Jira 댓글로 남기기")
+        }
+    }
+
+    @ViewBuilder
+    private func menu(_ issues: [E2EIssueResult], links: [IssueLink]) -> some View {
+        Button("결과 보기") { e2e.openJobId = job.id }
+        ForEach(links, id: \.key) { link in
+            Button(links.count == 1 ? "Jira 에서 열기" : "Jira 에서 열기 · \(link.key)") { NSWorkspace.shared.open(link.url) }
+        }
+        Button("Finder 에서 보기") { e2e.revealInFinder(job.id) }
+        if e2e.isActive(job.id) {
+            Button("취소") { e2e.cancel(job.id) }
+        } else {
+            Button("다시 실행", action: onRetry)
+            ForEach(issues, id: \.key) { i in
+                Button(issues.count == 1 ? "Jira 댓글로 남기기" : "Jira 댓글로 남기기 · \(menuTitle(i))") { onComment(i) }
+                    .disabled(e2e.commenting != nil)
+            }
+            Button("파일로 내보내기") { e2e.exportReport(job.id) }
+            Button("삭제") { e2e.delete(job.id) }
+        }
+    }
+
+    private func menuTitle(_ issue: E2EIssueResult) -> String {
+        let verdict = issue.verdict?.rawValue ?? "?"
+        return posted(issue.key).map { "\(issue.key) · \(verdict) · \($0) 남김" } ?? "\(issue.key) · \(verdict)"
+    }
+
+    private func posted(_ key: String) -> String? {
+        job.jiraComments[key].flatMap(E2EDate.parse)?.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())
+    }
+
+    /// 이 줄의 댓글 시도가 실패했을 때 안내. 이슈가 여럿이면 어느 이슈인지 앞에 붙인다.
+    private func commentNote(_ issues: [E2EIssueResult]) -> String? {
+        guard let note = e2e.commentNote,
+              let issue = issues.first(where: { E2EModel.commentId(job.id, $0.key) == note.id }) else { return nil }
+        return issues.count == 1 ? note.text : "\(issue.key) · \(note.text)"
     }
 }
 

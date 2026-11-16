@@ -11,7 +11,7 @@ struct E2EResultView: View {
     @State private var confirmDelete = false
     @State private var confirmPR = false
     /// Jira 댓글로 남길지 묻는 중인 이슈
-    @State private var commentTarget: E2EIssueResult?
+    @State private var commentTarget: E2ECommentTarget?
 
     var body: some View {
         ScrollView {
@@ -40,17 +40,7 @@ struct E2EResultView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .confirmationDialog(commentTarget.map { "\($0.key) 이슈에 검증 결과를 댓글로 남길까요?" } ?? "",
-                                isPresented: Binding(get: { commentTarget != nil }, set: { if !$0 { commentTarget = nil } }),
-                                presenting: commentTarget) { issue in
-                let shots = e2e.commentScreenshots(job.id, issue: issue).count
-                Button("댓글 남기기") { postComment(issue, withScreenshots: false) }
-                if shots > 0 { Button("댓글 + 스크린샷 \(shots)장 첨부") { postComment(issue, withScreenshots: true) } }
-                Button("취소", role: .cancel) {}
-            } message: { issue in
-                Text("Jira 에 내 이름으로 댓글이 달리고, 이슈를 보는 사람에게 알림이 갈 수 있어요. 판정·시나리오·기대·실제 결과와 환경 주소가 들어가요."
-                     + (job.jiraComments[issue.key] == nil ? "" : "\n이 결과는 이미 한 번 남겼어요."))
-            }
+            .e2eCommentConfirm(e2e, target: $commentTarget)
         }
         .themedScrollbar()
         .e2ePRConfirm(isPresented: $confirmPR) { retry() }
@@ -264,7 +254,7 @@ struct E2EResultView: View {
                     Text("\(posted.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())) 댓글 남김")
                         .font(.system(size: 10.5 * scale)).foregroundStyle(.secondary)
                 }
-                Button { commentTarget = issue } label: {
+                Button { commentTarget = E2ECommentTarget(job: job, issue: issue) } label: {
                     AccentChip(icon: posted == nil ? "text.bubble" : "checkmark",
                                text: e2e.commenting == id ? "남기는 중…" : (posted == nil ? "Jira 댓글로 남기기" : "한 번 더"), style: .plain)
                 }
@@ -277,11 +267,6 @@ struct E2EResultView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    private func postComment(_ issue: E2EIssueResult, withScreenshots: Bool) {
-        let id = job.id, key = issue.key
-        Task { await e2e.postComment(id, key: key, withScreenshots: withScreenshots) }
     }
 
     private func scenario(_ s: E2EScenario) -> some View {

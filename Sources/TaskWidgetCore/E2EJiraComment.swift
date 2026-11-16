@@ -2,6 +2,7 @@ import Foundation
 
 /// 검증 결과를 Jira 이슈 댓글(ADF 문서)로 만든다.
 /// Aside 가 쓴 글자는 모두 텍스트 노드로만 넣어 멘션·링크·마크업으로 살아나지 않는다.
+/// 스크린샷은 ATM 이 이슈에 올린 첨부만 이미지(media) 노드로 넣는다.
 public enum E2EJiraComment {
     static let maxText = 1500
     static let maxScenarios = 30
@@ -23,8 +24,9 @@ public enum E2EJiraComment {
     }
 
     /// attached: 스크린샷 이름 → Jira 에 올린 첨부 이름 (올린 것만).
+    /// media: 스크린샷 이름 → 그 첨부의 Media 파일 id. 있으면 시나리오 아래 이미지로 넣고, 없으면 첨부 이름만 적는다.
     public static func document(job: E2EJob, issue: E2EIssueResult, modelName: String, attached: [String: String] = [:],
-                                timeZone: TimeZone = .current) -> [String: Any] {
+                                media: [String: String] = [:], timeZone: TimeZone = .current) -> [String: Any] {
         var content: [[String: Any]] = []
         content.append(node("heading", attrs: ["level": 3],
                             [text("E2E 자동 검증 · "), text(issue.verdict?.rawValue ?? "판정 없음", strong: true)]))
@@ -45,9 +47,12 @@ public enum E2EJiraComment {
             var lines: [[[String: Any]]] = []
             if !s.expected.isEmpty { lines.append([text("기대: ", strong: true)] + inline(s.expected)) }
             if !s.actual.isEmpty { lines.append([text("실제: ", strong: true)] + inline(s.actual)) }
-            let shots = s.screenshots.compactMap { attached[($0 as NSString).lastPathComponent] }
-            if !shots.isEmpty { lines.append([text("스크린샷(첨부): ", strong: true), text(shots.joined(separator: ", "))]) }
+            var seen = Set<String>()
+            let shots = s.screenshots.map { ($0 as NSString).lastPathComponent }.filter { seen.insert($0).inserted }
+            let named = shots.filter { media[$0] == nil }.compactMap { attached[$0] }
+            if !named.isEmpty { lines.append([text("스크린샷(첨부): ", strong: true), text(named.joined(separator: ", "))]) }
             if !lines.isEmpty { content.append(paragraph(broken(lines))) }
+            content.append(contentsOf: shots.compactMap { media[$0] }.map(image))
         }
         if issue.scenarios.count > maxScenarios {
             content.append(paragraph([text("… 시나리오 \(issue.scenarios.count - maxScenarios)개는 줄였어요")]))
@@ -68,6 +73,11 @@ public enum E2EJiraComment {
     }
 
     private static func paragraph(_ content: [[String: Any]]) -> [String: Any] { node("paragraph", content) }
+
+    /// 이슈 첨부 이미지. Jira 편집기가 붙여 넣은 이미지와 같은 모양(collection 은 빈 값)이다.
+    private static func image(_ mediaId: String) -> [String: Any] {
+        node("mediaSingle", attrs: ["layout": "center"], [["type": "media", "attrs": ["type": "file", "id": mediaId, "collection": ""]]])
+    }
 
     private static func list(_ type: String, _ items: [String]) -> [String: Any] {
         node(type, items.map { node("listItem", [paragraph(inline($0))]) })

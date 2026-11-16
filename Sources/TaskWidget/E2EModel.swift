@@ -405,12 +405,19 @@ final class E2EModel: ObservableObject {
 
     static func commentId(_ jobId: String, _ key: String) -> String { "\(jobId)/\(key)" }
 
+    /// 댓글로 남길 수 있는 이슈: 끝난 job 의 결과 중 ATM 이 만든 Jira 주소가 있는 것.
+    func commentableIssues(_ job: E2EJob) -> [E2EIssueResult] {
+        guard !isActive(job.id), case .ok(let r) = results[job.id] else { return [] }
+        return r.issues.filter { i in job.issues.first { $0.key == i.key }?.webURL != nil }
+    }
+
     /// 이 이슈 결과의 스크린샷 중 결과 폴더에 실제로 있는 것.
     func commentScreenshots(_ jobId: String, issue: E2EIssueResult) -> [String] {
         E2EJiraComment.screenshots(issue).filter { store.screenshotURL(jobId, name: $0) != nil }
     }
 
-    /// 검증 결과를 그 Jira 이슈의 댓글로 남긴다. withScreenshots 면 스크린샷을 이슈에 첨부하고 댓글에 첨부 이름을 적는다.
+    /// 검증 결과를 그 Jira 이슈의 댓글로 남긴다. withScreenshots 면 스크린샷을 이슈에 첨부하고 댓글 안에 이미지로 넣는다.
+    /// 이미지로 넣지 못한 스크린샷은 댓글에 첨부 이름만 적는다.
     func postComment(_ jobId: String, key: String, withScreenshots: Bool) async {
         guard commenting == nil, !isActive(jobId), let job = job(jobId), let ref = job.issues.first(where: { $0.key == key }),
               case .ok(let result) = results[jobId], let issue = result.issues.first(where: { $0.key == key }) else { return }
@@ -430,6 +437,7 @@ final class E2EModel: ObservableObject {
         }
 
         var attached: [String: String] = [:]
+        var media: [String: String] = [:]
         var failures: [String] = []
         if withScreenshots {
             for name in commentScreenshots(jobId, issue: issue) {
@@ -437,15 +445,16 @@ final class E2EModel: ObservableObject {
                       let data = await Task.detached(operation: { try? Data(contentsOf: url) }).value else { continue }
                 let upload = E2EJiraComment.attachmentName(job, screenshot: name)
                 do {
-                    try await client.addAttachment(issueKey: key, fileName: upload, mime: E2EReport.mime(url.pathExtension), data: data)
+                    let attachmentId = try await client.addAttachment(issueKey: key, fileName: upload, mime: E2EReport.mime(url.pathExtension), data: data)
                     attached[name] = upload
+                    media[name] = await client.mediaFileId(attachmentId: attachmentId)
                 } catch {
                     failures.append(Self.jiraMessage(error))
                 }
             }
         }
         do {
-            let doc = E2EJiraComment.document(job: job, issue: issue, modelName: modelName(job.model), attached: attached)
+            let doc = E2EJiraComment.document(job: job, issue: issue, modelName: modelName(job.model), attached: attached, media: media)
             try await client.addComment(issueKey: key, document: doc)
         } catch {
             let m = Self.jiraMessage(error)
@@ -455,7 +464,7 @@ final class E2EModel: ObservableObject {
             return
         }
         markCommented(job, key: key)
-        DiagLog.append("e2e jira comment \(key) job=\(jobId) 첨부=\(attached.count) 실패=\(failures.count)")
+        DiagLog.append("e2e jira comment \(key) job=\(jobId) 첨부=\(attached.count) 본문이미지=\(media.count) 실패=\(failures.count)")
         if let first = failures.first {
             commentNote = (id, "댓글은 남겼지만 스크린샷 \(failures.count)장은 첨부하지 못했어요 · \(first)")
         }
