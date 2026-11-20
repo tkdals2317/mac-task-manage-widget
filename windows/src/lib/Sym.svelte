@@ -5,7 +5,7 @@
     | "link" | "globe" | "sparkles" | "tag" | "doc" | "info" | "window" | "palette" | "branch" | "terminal" | "bell"
     | "arrow-right-circle" | "minus-circle" | "lock" | "key" | "folder" | "external" | "plus" | "play" | "stop"
     | "jira" | "notes" | "tabs" | "plug" | "power" | "wand" | "warning" | "check-circle" | "x-circle" | "dot" | "list-check"
-    | "arrow-down-circle" | "person" | "eye-slash" | "trash" | "qr";
+    | "arrow-down-circle" | "person" | "eye-slash" | "trash" | "qr" | "bubble" | "bubble-check" | "cpu" | "share" | "seal";
 </script>
 
 <script lang="ts">
@@ -60,6 +60,11 @@
   {:else if name === "eye-slash"}<path d="M2 8s2.2-4.2 6-4.2S14 8 14 8s-2.2 4.2-6 4.2S2 8 2 8zM2.5 2.5l11 11" /><circle cx="8" cy="8" r="1.8" />
   {:else if name === "trash"}<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
   {:else if name === "qr"}<rect x="2" y="2" width="4.5" height="4.5" rx=".6" /><rect x="9.5" y="2" width="4.5" height="4.5" rx=".6" /><rect x="2" y="9.5" width="4.5" height="4.5" rx=".6" /><path d="M9.5 9.5h1.8v1.8M14 9.5v.01M12.2 12.2H14V14M9.5 14h.01" />
+  {:else if name === "bubble"}<path d="M2.5 3h11v7.2h-5.2L5 13v-2.8H2.5z" />
+  {:else if name === "bubble-check"}<path d="M2.5 3h11v7.2h-5.2L5 13v-2.8H2.5z" /><path d="M5.4 6.6l1.7 1.7 3.3-3.2" />
+  {:else if name === "cpu"}<rect x="4" y="4" width="8" height="8" rx="1.4" /><path d="M6.5 1.8V4M9.5 1.8V4M6.5 12v2.2M9.5 12v2.2M1.8 6.5H4M1.8 9.5H4M12 6.5h2.2M12 9.5h2.2" />
+  {:else if name === "share"}<path d="M8 10V2.5M5.3 5L8 2.3 10.7 5M3.5 8v4.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V8" />
+  {:else if name === "seal"}<path d="M8 1.8l1.6 1.2 2-.1.7 1.9 1.6 1.2-.6 1.9.6 1.9-1.6 1.2-.7 1.9-2-.1L8 14.2l-1.6-1.2-2 .1-.7-1.9-1.6-1.2.6-1.9-.6-1.9 1.6-1.2.7-1.9 2 .1z" /><path d="M5.6 8.2l1.6 1.6 3.2-3.4" />
   {/if}
 </svg>
 

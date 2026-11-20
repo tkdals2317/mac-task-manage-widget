@@ -47,3 +47,21 @@ export async function requestText(url: string, timeoutMs = 10000): Promise<{ sta
     clearTimeout(timer);
   }
 }
+
+/** 바이트 그대로 주고받는 요청 (첨부 내려받기·올리기). noRedirect 면 3xx 를 따라가지 않고 그대로 돌려준다. */
+export async function requestBytes(
+  url: string,
+  init: { method?: string; headers?: Record<string, string>; body?: Uint8Array; timeoutMs?: number; noRedirect?: boolean } = {},
+): Promise<{ status: number; bytes: Uint8Array; headers: Headers }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? 30000);
+  try {
+    const res = await tauriFetch(url, {
+      method: init.method ?? "GET", headers: init.headers, body: init.body as BodyInit | undefined, signal: ctrl.signal,
+      ...(init.noRedirect ? { maxRedirections: 0 } : {}),
+    });
+    return { status: res.status, bytes: new Uint8Array(await res.arrayBuffer()), headers: res.headers };
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -55,8 +55,8 @@ export const native = {
   portListening: (port: number) => invoke<boolean>("port_listening", { port }),
   portOwner: (port: number) => invoke<[number, string] | null>("port_owner", { port }),
   killPid: (pid: number) => invoke<void>("kill_pid", { pid }),
-  tunnelSpawn: (key: string, program: string, args: string[], log: string) =>
-    invoke<number>("tunnel_spawn", { key, program, args, log }),
+  tunnelSpawn: (key: string, program: string, args: string[], log: string, env?: Record<string, string>) =>
+    invoke<number>("tunnel_spawn", { key, program, args, log, env: env ?? null }),
   /** 돌고 있으면 null, 끝났으면 종료 코드 (모르는 이름은 -1). */
   tunnelExit: (key: string) => invoke<number | null>("tunnel_exit", { key }),
   tunnelStop: (key: string) => invoke<void>("tunnel_stop", { key }),
@@ -80,6 +80,25 @@ export const native = {
   openDataPath: (name: string, createFile = false) => invoke<void>("open_data_path", { name, createFile }),
   revealPath: (path: string) => invoke<void>("reveal_path", { path }),
   exportDiagnostics: (report: string) => invoke<string>("export_diagnostics", { report }),
+  // E2E (Aside)
+  asideWorkDir: (accountId: number, jobId: string) => invoke<string>("aside_work_dir", { accountId, jobId }),
+  asideRead: (rel: string) => invoke<string | null>("aside_read", { rel }),
+  asideBrowser: () => invoke<string | null>("aside_browser"),
+  asideOpenUrl: (url: string) => invoke<void>("aside_open_url", { url }),
+  asideLaunch: () => invoke<void>("aside_launch"),
+  asideTerminal: (exe: string, sub: "update" | "login") => invoke<void>("aside_terminal", { exe, sub }),
+  killPidIfAside: (pid: number) => invoke<boolean>("kill_pid_if_aside", { pid }),
+  e2eWorkPrepare: (accountId: number, jobId: string, request: string) => invoke<void>("e2e_work_prepare", { accountId, jobId, request }),
+  e2eWorkImport: (accountId: number, jobId: string) => invoke<string[]>("e2e_work_import", { accountId, jobId }),
+  e2eWorkPrune: (before: string) => invoke<string[]>("e2e_work_prune", { before }),
+  e2eLogAppend: (jobId: string, text: string) => invoke<void>("e2e_log_append", { jobId, text }),
+  e2eLogText: (jobId: string) => invoke<string>("e2e_log_text", { jobId }),
+  e2eScreenshots: (jobId: string, names: string[]) => invoke<string[]>("e2e_screenshots", { jobId, names }),
+  e2eScreenshotData: (jobId: string, name: string) => invoke<[string, string] | null>("e2e_screenshot_data", { jobId, name }),
+  e2eScreenshotOpen: (jobId: string, name: string) => invoke<void>("e2e_screenshot_open", { jobId, name }),
+  e2eJobWrite: (jobId: string, rel: string, data: Uint8Array) => invoke<void>("e2e_job_write", data, { headers: { "x-job-id": jobId, "x-rel": rel } }),
+  e2eJobDelete: (jobId: string) => invoke<void>("e2e_job_delete", { jobId }),
+  e2eExportHtml: (fileName: string, content: string) => invoke<string>("e2e_export_html", { fileName, content }),
 };
 
 export interface RunOptions {

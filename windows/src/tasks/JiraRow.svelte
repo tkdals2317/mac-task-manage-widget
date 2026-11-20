@@ -1,7 +1,9 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { issueURL, normalizeBase, versionTag, type JiraIssue } from "../lib/jira";
-  import { settings } from "../lib/settings.svelte";
+  import { ALL_TABS, enabledTabs, settings } from "../lib/settings.svelte";
+  import { e2e, openResult } from "../lib/e2e.svelte";
+  import VerdictBadge from "../e2e/VerdictBadge.svelte";
   import { jira } from "./jiraState.svelte";
   import Icon from "./Icon.svelte";
   import Menu from "./Menu.svelte";
@@ -18,6 +20,8 @@
   const prio = $derived(["Highest", "High"].includes(issue.priority ?? "") ? "var(--danger)" : issue.priority === "Medium" ? "var(--warn)" : "var(--fg3)");
   const tag = $derived(trailing === "version" ? versionTag(issue, prefix) : null);
   const busy = $derived(jira.busy.includes(issue.id));
+  // E2E 탭이 켜져 있으면 최근 검증 판정을 보여주고, 누르면 결과로 간다
+  const verdict = $derived(enabledTabs(settings.enabledTabs, ALL_TABS).includes("e2e") ? e2e.verdictByKey[issue.id] : undefined);
 
   function open() {
     const base = normalizeBase(settings.jiraBaseURL);
@@ -33,6 +37,9 @@
     <span class="sum" use:truncTitle={{ full: issue.summary }}>{issue.summary}</span>
     {#if tag}<span class="ver mono">{tag}</span>{/if}
   </button>
+  {#if verdict}
+    <button class="vbtn" title="최근 E2E 검증 결과 · 눌러서 보기" onclick={() => openResult(verdict.jobId)}><VerdictBadge verdict={verdict.verdict} /></button>
+  {/if}
   {#if busy}
     <span class="spin" aria-label="변경 중"></span>
   {:else}
@@ -62,6 +69,7 @@
     background: color-mix(in srgb, var(--t) 16%, transparent); border: 1px solid color-mix(in srgb, var(--t) 25%, transparent);
   }
   .status:hover { background: color-mix(in srgb, var(--t) 26%, transparent); }
+  .vbtn { border: none; background: transparent; padding: 0; flex: none; cursor: pointer; }
   .sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .spin { width: 0.9em; height: 0.9em; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite; flex: none; }
   @keyframes spin { to { transform: rotate(360deg); } }

@@ -157,7 +157,11 @@ pub fn which(name: &str) -> Option<(String, String)> {
         }
     }
     let h = home();
-    let mut known: Vec<PathBuf> = vec![h.join(".local").join("bin"), h.join(".claude").join("local"), h.join(".bun").join("bin")];
+    // .aside\cli·.aside\bin 은 Aside CLI 의 설치 위치로 가정한 것 (Windows 에서 확인 전)
+    let mut known: Vec<PathBuf> = vec![
+        h.join(".local").join("bin"), h.join(".claude").join("local"), h.join(".bun").join("bin"),
+        h.join(".aside").join("cli"), h.join(".aside").join("bin"),
+    ];
     if let Some(a) = env_path("APPDATA") {
         known.push(a.join("npm"));
     }
@@ -243,7 +247,7 @@ fn tunnels() -> &'static Mutex<HashMap<String, Tunnel>> {
 }
 
 /// 오래 도는 프로세스(`tsh proxy db`)를 띄워 이름으로 잡아 둔다. 출력은 로그 파일로.
-pub fn spawn_tunnel(key: &str, program: &str, args: &[String], log: &Path) -> Result<u32, String> {
+pub fn spawn_tunnel(key: &str, program: &str, args: &[String], log: &Path, env: &HashMap<String, String>) -> Result<u32, String> {
     stop_tunnel(key);
     if let Some(d) = log.parent() {
         let _ = std::fs::create_dir_all(d);
@@ -251,7 +255,7 @@ pub fn spawn_tunnel(key: &str, program: &str, args: &[String], log: &Path) -> Re
     let f = std::fs::OpenOptions::new().create(true).append(true).open(log).map_err(|e| e.to_string())?;
     let f2 = f.try_clone().map_err(|e| e.to_string())?;
     let mut cmd = Command::new(program);
-    cmd.args(args).stdin(Stdio::null()).stdout(f).stderr(f2);
+    cmd.args(args).envs(env).stdin(Stdio::null()).stdout(f).stderr(f2);
     hide(&mut cmd);
     let child = cmd.spawn().map_err(|e| format!("{program} 실행 실패: {e}"))?;
     let pid = child.id();
@@ -312,6 +316,29 @@ pub fn port_owner(port: u16) -> Option<(u32, String)> {
     {
         let _ = port;
         None
+    }
+}
+
+/// pid 의 이미지 이름이 image(.exe 제외, 대소문자 무시)일 때만 트리째 끝낸다. 끝냈으면 true.
+pub fn kill_pid_if_image(pid: u32, image: &str) -> bool {
+    #[cfg(windows)]
+    {
+        let t = run(
+            "tasklist",
+            &["/FI".into(), format!("PID eq {pid}"), "/FO".into(), "CSV".into(), "/NH".into()],
+            RunOptions { timeout_ms: Some(5000), ..Default::default() },
+        );
+        let name = t.stdout.split(',').next().unwrap_or("").trim_matches('"').to_lowercase();
+        if name.trim_end_matches(".exe") != image.to_lowercase() {
+            return false;
+        }
+        kill_pid(pid);
+        true
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (pid, image);
+        false
     }
 }
 

@@ -2,7 +2,7 @@
   // 설정 도우미 (Mac OnboardingView): 쓸 기능 고르기 → 고른 기능에 필요한 설정을 차례로 → 마무리(테마·단축키·로그인 시 실행).
   import { onMount } from "svelte";
   import { emit } from "@tauri-apps/api/event";
-  import { setSetting, settings } from "../lib/settings.svelte";
+  import { ALL_TABS, setSetting, settings } from "../lib/settings.svelte";
   import { native } from "../lib/native";
   import { JIRA_KEYCHAIN_SERVICE } from "../lib/jira";
   import { hookStatus, installHook, installTodoSkill, installWorklogSkill, todoSkillInstalled, worklogSkillInstalled, locateClaude } from "../lib/claude";
@@ -11,6 +11,8 @@
   import JiraPane from "./JiraPane.svelte";
   import NotesPane from "./NotesPane.svelte";
   import PRPane from "./PRPane.svelte";
+  import SetupList from "../e2e/SetupList.svelte";
+  import { checkAside, e2e, reload as reloadE2E, setupItems } from "../lib/e2e.svelte";
   import { PRESETS } from "../lib/theme";
 
   let { ondone }: { ondone: () => void } = $props();
@@ -20,6 +22,7 @@
     { id: "notes", title: "노트", desc: "잠글 수 있는 메모, 링크, Confluence 별표", icon: "notes", tab: "notes" },
     { id: "summary", title: "요약", desc: "Claude Code 세션으로 하루·주간 업무 요약", icon: "sparkles", tab: "summary" },
     { id: "pr", title: "PR", desc: "GitHub·Bitbucket 리뷰 요청과 내 PR", icon: "branch", tab: "pr" },
+    { id: "e2e", title: "E2E 검증", desc: "내 Aside 브라우저로 Jira 이슈를 테스트 환경에서 검증", icon: "seal", tab: "e2e" },
     { id: "teleport", title: "Teleport", desc: "DB 터널 자동 로그인·유지", icon: "globe", tab: "teleport" },
   ];
 
@@ -41,14 +44,13 @@
     skill = await worklogSkillInstalled().catch(() => false);
     todoSkill = await todoSkillInstalled().catch(() => false);
   }
-  onMount(() => { void refresh(); });
+  onMount(() => { void refresh(); void reloadE2E(); });
 
   function toggle(id: string) { const s = new Set(picked); if (!s.delete(id)) s.add(id); picked = s; }
 
   function applyTabs() {
     const tabs = ["tasks", ...FEATURES.filter((f) => f.tab && picked.has(f.id)).map((f) => f.tab!)];
-    const order = ["tasks", "summary", "notes", "pr", "teleport"];
-    setSetting("enabledTabs", order.filter((t) => tabs.includes(t)).join(","));
+    setSetting("enabledTabs", ALL_TABS.filter((t) => tabs.includes(t)).join(","));
   }
 
   async function setupClaudeAll() {
@@ -121,6 +123,10 @@
     <div class="hint">~/.claude/settings.json 은 바꾸기 전에 백업해요. 훅은 새 Claude Code 세션부터 기록해요.</div>
   {:else if current?.id === "pr"}
     <PRPane />
+  {:else if current?.id === "e2e"}
+    <div class="hint">검증은 내 Aside 브라우저가 해요. 아래 항목을 위에서부터 채우면 돼요. 지금 다 못 해도 탭은 켜 둘 수 있고, E2E 탭에서 이어서 할 수 있어요.</div>
+    <div class="card"><div class="srow col"><SetupList items={setupItems()} recheck /></div></div>
+    <div class="hint">환경 주소(DV/ST/ST2)와 테스트 계정 ID 는 설정 &gt; E2E 에서 넣어요. 테스트 계정은 주소 옆 'Aside 에서 열기'로 직접 로그인해 Aside Vault 에 저장해요. 비밀번호는 ATM 이 넘기지 않아요.</div>
   {:else if current?.id === "teleport"}
     <div class="card">
       <div class="srow col">
@@ -154,7 +160,7 @@
     <span class="grow"></span>
     {#if step === 0}<button class="btn" onclick={finish}>건너뛰기</button>{/if}
     {#if step <= steps.length}
-      <button class="btn primary" onclick={() => { if (step === 0) applyTabs(); step += 1; void refresh(); }}>다음</button>
+      <button class="btn primary" onclick={() => { if (step === 0) applyTabs(); step += 1; void refresh(); if (!e2e.report) void checkAside(); }}>다음</button>
     {:else}
       <button class="btn primary" onclick={finish}>시작하기</button>
     {/if}
