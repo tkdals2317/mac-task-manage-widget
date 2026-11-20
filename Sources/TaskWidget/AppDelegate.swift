@@ -103,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 알림을 눌렀을 때 PR 주소를 열고, 앞에 떠 있을 때도 배너를 보여준다. 번들 없이 실행하면 UNUserNotificationCenter 가 죽는다.
         if Bundle.main.bundleIdentifier != nil { UNUserNotificationCenter.current().delegate = notificationDelegate }
         state.pr.startLoop()
+        state.e2e.start()
 
         // 시작 10초 후 한 번, 이후 30분마다 업데이트 확인 (소스 폴더 정보가 없으면 checkForUpdates 가 무시)
         updateTask = Task { [state] in
@@ -141,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        state.e2e.shutdown()
         state.teleport.shutdown()
         state.notes.flushPending()
     }

@@ -31,5 +31,6 @@ final class OnboardingTests: XCTestCase {
         XCTAssertEqual(Onboarding.enabledTabs(summary: true, notes: true, teleport: true), "tasks,summary,notes,teleport")
         XCTAssertEqual(Onboarding.enabledTabs(summary: false, notes: true, teleport: true), "tasks,notes,teleport")
         XCTAssertEqual(Onboarding.enabledTabs(summary: true, notes: true, teleport: true, pr: true), "tasks,summary,notes,pr,teleport")
+        XCTAssertEqual(Onboarding.enabledTabs(summary: true, notes: false, teleport: true, pr: true, e2e: true), "tasks,summary,pr,e2e,teleport")
     }
 }

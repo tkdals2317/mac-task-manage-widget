@@ -1,0 +1,33 @@
+{
+  "key": "ABC-101",
+  "fields": {
+    "summary": "주문 취소 시 쿠폰 복원",
+    "description": "h3. 인수 조건\n* 전체 취소하면 쿠폰이 사용 가능으로 돌아온다\n* 부분 취소는 범위 아님",
+    "status": { "name": "검토 중", "statusCategory": { "key": "indeterminate" } },
+    "issuetype": { "name": "버그" },
+    "priority": { "name": "High" },
+    "assignee": { "displayName": "김개발" },
+    "reporter": null,
+    "labels": ["coupon", "order"],
+    "components": [{ "name": "주문" }],
+    "fixVersions": [{ "name": "SHOP_v2.3" }],
+    "parent": { "key": "ABC-100", "fields": { "summary": "쿠폰 개선", "status": { "name": "진행 중" } } },
+    "subtasks": [{ "key": "ABC-102", "fields": { "summary": "API 수정", "status": { "name": "완료" } } }],
+    "issuelinks": [
+      { "type": { "inward": "is blocked by", "outward": "blocks" }, "outwardIssue": { "key": "ABC-200", "fields": { "summary": "정산 배치", "status": { "name": "할 일" } } } },
+      { "type": { "inward": "is blocked by", "outward": "blocks" }, "inwardIssue": { "key": "ABC-50", "fields": { "summary": "쿠폰 테이블", "status": { "name": "완료" } } } }
+    ],
+    "comment": {
+      "comments": [
+        { "author": { "displayName": "박QA" }, "body": "ST 에서 재현돼요", "created": "2026-10-01T10:00:00.000+0900" },
+        { "author": null, "body": "배포했어요", "created": "2026-10-02T11:00:00.000+0900" }
+      ]
+    },
+    "attachment": [
+      { "id": "9001", "filename": "screen/shot.png", "mimeType": "image/png", "size": 3, "content": "https://x.example.com/rest/api/2/attachment/content/9001" },
+      { "id": "9002", "filename": "big.png", "mimeType": "image/png", "size": 99999999, "content": "https://x.example.com/rest/api/2/attachment/content/9002" },
+      { "id": "9003", "filename": "log.txt", "mimeType": "text/plain", "size": 10, "content": "https://x.example.com/rest/api/2/attachment/content/9003" },
+      { "id": "9004", "filename": "other.png", "mimeType": "image/png", "size": 3, "content": "https://evil.example.org/a.png" }
+    ]
+  }
+}

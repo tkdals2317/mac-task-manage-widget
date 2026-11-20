@@ -1,0 +1,31 @@
+{
+  "status": "done",
+  "startedAt": "2026-10-19T08:00:04Z",
+  "finishedAt": "2026-10-19T08:05:10Z",
+  "summary": "운영 환경이라 조회만 했어요. 환불 화면의 금액 표시는 기대대로예요.",
+  "issues": [
+    {
+      "key": "SHOP-1229", "title": "환불 금액 검증 로직 보완", "url": "https://example.atlassian.net/browse/SHOP-1229",
+      "verdict": "PASS",
+      "assumptions": ["관리자 조회 권한으로 환불 요청 상세를 볼 수 있다고 봤어요"],
+      "scenarios": [
+        {
+          "name": "환불 요청 상세의 금액 표시",
+          "steps": ["관리자 콘솔 > 환불 요청 #9921 열기"],
+          "expected": "환불 예정 금액이 결제 금액을 넘지 않는다",
+          "actual": "결제 32,000원 · 환불 예정 32,000원 · 한도 32,000원으로 보여요",
+          "verdict": "PASS",
+          "screenshots": ["SHOP-1229-1.png"]
+        },
+        {
+          "name": "한도를 넘는 부분 환불 시도",
+          "steps": ["부분 환불 금액에 40,000 입력 후 저장"],
+          "expected": "저장이 막힌다",
+          "actual": "운영 환경이라 저장하지 않았어요",
+          "verdict": "SKIPPED"
+        }
+      ],
+      "notes": ""
+    }
+  ]
+}

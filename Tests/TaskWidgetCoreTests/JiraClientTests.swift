@@ -75,6 +75,7 @@ final class JiraTransitionTests: XCTestCase {
         nonisolated(unsafe) static var body = Data()
         nonisolated(unsafe) static var last: URLRequest?
         nonisolated(unsafe) static var lastBody: Data?
+        nonisolated(unsafe) static var headers: [String: String]?
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for r: URLRequest) -> URLRequest { r }
         override func startLoading() {
@@ -85,7 +86,7 @@ final class JiraTransitionTests: XCTestCase {
                 while s.hasBytesAvailable { let n = s.read(&buf, maxLength: 1024); if n <= 0 { break }; d.append(buf, count: n) }
                 Self.lastBody = d
             } else { Self.lastBody = request.httpBody }
-            let r = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: nil)!
+            let r = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: Self.headers)!
             client?.urlProtocol(self, didReceive: r, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: Self.body)
             client?.urlProtocolDidFinishLoading(self)
@@ -94,7 +95,7 @@ final class JiraTransitionTests: XCTestCase {
     }
 
     func client(status: Int, body: String = "") -> JiraClient {
-        Stub.status = status; Stub.body = Data(body.utf8); Stub.last = nil; Stub.lastBody = nil
+        Stub.status = status; Stub.body = Data(body.utf8); Stub.last = nil; Stub.lastBody = nil; Stub.headers = nil
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [Stub.self]
         return JiraClient(baseURL: URL(string: "https://x.example.com")!, email: "a@b.c", token: "t", session: URLSession(configuration: cfg))
@@ -130,6 +131,86 @@ final class JiraTransitionTests: XCTestCase {
         do { _ = try await c.fetchTransitions(issueKey: "X-1"); XCTFail() }
         catch let e as JiraError { XCTAssertEqual(e.userMessage, "권한 없음") }
         catch { XCTFail("\(error)") }
+    }
+
+    func testAddCommentPostsDocument() async throws {
+        let c = client(status: 201, body: #"{"id":"10042","body":{}}"#)
+        let doc: [String: Any] = ["type": "doc", "version": 1, "content": [["type": "paragraph", "content": [["type": "text", "text": "hi"]]]]]
+        let id = try await c.addComment(issueKey: "NMRS-1", document: doc)
+        XCTAssertEqual(id, "10042")
+        XCTAssertEqual(Stub.last?.httpMethod, "POST")
+        XCTAssertEqual(Stub.last?.url?.path, "/rest/api/3/issue/NMRS-1/comment")
+        XCTAssertEqual(Stub.last?.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: Stub.lastBody ?? Data()) as? [String: Any])
+        XCTAssertEqual((sent["body"] as? [String: Any])?["type"] as? String, "doc")
+    }
+
+    func testAddAttachmentSendsMultipartWithNoCheckHeader() async throws {
+        let c = client(status: 200, body: "[]")
+        try await c.addAttachment(issueKey: "NMRS-1", fileName: "shot.png", mime: "image/png", data: Data([9, 8, 7]))
+        XCTAssertEqual(Stub.last?.httpMethod, "POST")
+        XCTAssertEqual(Stub.last?.url?.path, "/rest/api/3/issue/NMRS-1/attachments")
+        XCTAssertEqual(Stub.last?.value(forHTTPHeaderField: "X-Atlassian-Token"), "no-check")
+        let type = try XCTUnwrap(Stub.last?.value(forHTTPHeaderField: "Content-Type"))
+        XCTAssertTrue(type.hasPrefix("multipart/form-data; boundary=atm-"))
+        let boundary = String(type.dropFirst("multipart/form-data; boundary=".count))
+        XCTAssertEqual(Stub.lastBody, JiraClient.multipart(boundary: boundary, fileName: "shot.png", mime: "image/png", data: Data([9, 8, 7])))
+    }
+
+    func testAddAttachmentReturnsAttachmentId() async throws {
+        let c = client(status: 200, body: #"[{"id":"243883","filename":"shot.png"}]"#)
+        let id = try await c.addAttachment(issueKey: "NMRS-1", fileName: "shot.png", mime: "image/png", data: Data([1]))
+        XCTAssertEqual(id, "243883")
+        let odd = client(status: 200, body: "{}")
+        let none = try await odd.addAttachment(issueKey: "NMRS-1", fileName: "shot.png", mime: "image/png", data: Data([1]))
+        XCTAssertEqual(none, "")
+    }
+
+    func testMediaFileIdReadsRedirectLocation() async {
+        let c = client(status: 303)
+        Stub.headers = ["Location": "https://api.media.atlassian.com/file/aeffdd59-91ff-4f91-b887-707f290ef51c/binary?token=t&dl=true&name=a.png"]
+        let id = await c.mediaFileId(attachmentId: "243883")
+        XCTAssertEqual(id, "aeffdd59-91ff-4f91-b887-707f290ef51c")
+        XCTAssertEqual(Stub.last?.httpMethod, "GET")
+        XCTAssertEqual(Stub.last?.url?.path, "/rest/api/3/attachment/content/243883")
+
+        // 넘겨 주지 않거나(200·404) 모양이 다르면 nil
+        let direct = await client(status: 200).mediaFileId(attachmentId: "1")
+        XCTAssertNil(direct)
+        let missing = await client(status: 404).mediaFileId(attachmentId: "1")
+        XCTAssertNil(missing)
+        // 숫자 id 가 아니면 요청을 보내지 않는다
+        let bad = client(status: 303)
+        let badId = await bad.mediaFileId(attachmentId: "../1")
+        XCTAssertNil(badId)
+        XCTAssertNil(Stub.last)
+    }
+
+    func testMediaFileIdFromLocation() {
+        XCTAssertEqual(JiraClient.mediaFileId(location: "https://api.media.atlassian.com/file/aeffdd59-91ff-4f91-b887-707f290ef51c/binary?x=1"),
+                       "aeffdd59-91ff-4f91-b887-707f290ef51c")
+        XCTAssertNil(JiraClient.mediaFileId(location: "https://api.media.atlassian.com/file/not-a-uuid/binary"))
+        XCTAssertNil(JiraClient.mediaFileId(location: "https://example.com/download/a.png"))
+        XCTAssertNil(JiraClient.mediaFileId(location: nil))
+    }
+
+    func testCommentAndAttachmentErrors() async {
+        let expect: [(Int, String)] = [(400, "Jira 가 댓글 요청을 받아 주지 않았어요 (본문 오류)"), (401, "토큰 만료"),
+                                       (403, "이 이슈에 댓글 권한이 없어요"), (404, "이슈를 찾지 못했어요"), (500, "HTTP 500")]
+        for (code, text) in expect {
+            let c = client(status: code, body: #"{"errorMessages":["본문 오류"]}"#)
+            do { _ = try await c.addComment(issueKey: "NMRS-1", document: [:]); XCTFail("\(code)") }
+            catch let e as JiraError { XCTAssertTrue(e.userMessage.hasPrefix(text), "\(code): \(e.userMessage)") }
+            catch { XCTFail("\(error)") }
+        }
+        let big = client(status: 413)
+        do { try await big.addAttachment(issueKey: "NMRS-1", fileName: "a.png", mime: "image/png", data: Data()); XCTFail() }
+        catch let e as JiraError { XCTAssertEqual(e.userMessage, "너무 커서 Jira 가 받지 않았어요 (첨부)") }
+        catch { XCTFail("\(error)") }
+        // 이슈 키 모양이 아니면 요청을 보내지 않는다
+        let c = client(status: 201)
+        do { _ = try await c.addComment(issueKey: "../x", document: [:]); XCTFail() }
+        catch { XCTAssertNil(Stub.last) }
     }
 
     func testDecodePageWithExpandedTransitions() throws {

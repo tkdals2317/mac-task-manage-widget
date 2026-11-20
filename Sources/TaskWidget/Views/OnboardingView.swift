@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 import TaskWidgetCore
 
-private enum OStep { case features, storage, atlassian, notes, pr, prRepos, claude, teleport, finish }
+private enum OStep { case features, storage, atlassian, notes, pr, prRepos, e2e, claude, teleport, finish }
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -31,6 +31,7 @@ struct OnboardingView: View {
     @State private var useSummary = true
     @State private var useTeleport = false
     @State private var usePR = false
+    @State private var useE2E = false
     // 2 저장 위치
     @State private var storage = Settings.shared.secretStorage
     @State private var storageErr = ""
@@ -90,6 +91,7 @@ struct OnboardingView: View {
             // 저장소 고르기는 Bitbucket 이 켜져 있고 연결이 확인된 뒤에만
             if prBitbucketOn, bb?.ok == true { s.append(.prRepos) }
         }
+        if useE2E { s.append(.e2e) }
         if useSummary { s.append(.claude) }
         if useTeleport { s.append(.teleport) }
         s.append(.finish)
@@ -109,6 +111,7 @@ struct OnboardingView: View {
                     case .notes: notesStep
                     case .pr: prStep
                     case .prRepos: prReposStep
+                    case .e2e: e2eStep
                     case .claude: claudeStep
                     case .teleport: teleportStep
                     case .finish: finishStep
@@ -225,6 +228,8 @@ struct OnboardingView: View {
                 chip("chevron.right", "다음", .solid, !busy) { Task { await nextPR() } }
             case .prRepos:
                 chip("chevron.right", "다음", .solid, !busy) { savePRRepos(); advance() }
+            case .e2e:
+                chip("chevron.right", "다음", .solid) { advance() }
             case .claude:
                 chip(claudePathFound == nil ? "chevron.right" : "arrow.down.circle", claudePathFound == nil ? "다음" : "설치하고 다음", .solid, !busy && claudeSearched) { installClaude() }
             case .teleport:
@@ -270,6 +275,8 @@ struct OnboardingView: View {
             }
         case .prRepos:
             prRepos = Set(Settings.shared.prBitbucketRepoList)
+        case .e2e where !state.e2e.asideReady:
+            Task { await state.e2e.checkAside() }
         case .teleport where tp == nil:
             tp = TeleportSetupModel(tp: state.teleport)
             if let path = state.teleport.tshPath {
@@ -288,6 +295,7 @@ struct OnboardingView: View {
         useNotes = tabs.contains("notes")
         useTeleport = tabs.contains("teleport")
         usePR = tabs.contains("pr")
+        useE2E = tabs.contains("e2e")
         email = s.jiraEmail
         jiraURL = s.jiraBaseURL
         confURL = s.confluenceBaseURL
@@ -312,6 +320,10 @@ struct OnboardingView: View {
             }.buttonStyle(.plain)
             Button { usePR.toggle() } label: {
                 choice(usePR ? "checkmark.square.fill" : "square", on: usePR, "PR", "GitHub·Bitbucket 에서 나한테 온 리뷰 요청과 내가 올린 PR 의 승인 상태를 모아 봐요. 승인되면 알려줘요.")
+            }.buttonStyle(.plain)
+            Button { useE2E.toggle() } label: {
+                choice(useE2E ? "checkmark.square.fill" : "square", on: useE2E, "E2E 검증",
+                       "Jira 이슈를 고르면 내 Aside 브라우저가 테스트 환경에서 직접 동작을 확인하고 PASS/FAIL 과 스크린샷을 남겨요. Aside 브라우저와 CLI 가 필요해요.")
             }.buttonStyle(.plain)
             Button { useTeleport.toggle() } label: {
                 choice(useTeleport ? "checkmark.square.fill" : "square", on: useTeleport, "Teleport", "개발·스테이징 DB 에 로그인하고 터널을 자동으로 열어 둬요. DB 툴에서 localhost 포트로 접속하면 돼요.")
@@ -512,6 +524,17 @@ struct OnboardingView: View {
 
     private func savePRRepos() { Settings.shared.prBitbucketRepoList = Array(prRepos) }
 
+    // MARK: - E2E (Aside)
+
+    private var e2eStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header("E2E 검증 · Aside", "검증은 내 Aside 브라우저가 해요. 아래 항목을 위에서부터 채우면 돼요. 지금 다 못 해도 탭은 켜 둘 수 있고, E2E 탭에서 이어서 할 수 있어요.")
+            card { E2ESetupList(e2e: state.e2e, items: state.e2e.setupItems(), recheck: true) }
+            helper("Aside 계정은 Aside 브라우저와 CLI 가 같이 써요. 로그인은 Aside 브라우저의 설정 > 계정에서 한 번만 하면 되고, 터미널의 aside login 은 필요 없어요.")
+            helper("환경 주소(DV/ST/ST2)와 테스트 계정 ID 는 설정 > E2E 에서 넣어요. 테스트 계정은 주소 옆 'Aside 에서 열기'로 직접 로그인해 Aside Vault 에 저장해요. 비밀번호는 ATM 이 넘기지 않아요.")
+        }
+    }
+
     // MARK: - 5 Claude 연동
 
     private var claudeStep: some View {
@@ -604,7 +627,7 @@ struct OnboardingView: View {
     }
 
     private var summaryItems: [String] {
-        var r = ["탭: " + allTabs.filter { Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR).split(separator: ",").contains(Substring($0.id)) }.map(\.title).joined(separator: " · ")]
+        var r = ["탭: " + allTabs.filter { Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR, e2e: useE2E).split(separator: ",").contains(Substring($0.id)) }.map(\.title).joined(separator: " · ")]
         if useJira || useNotes {
             r.append(atlOK ? "Atlassian 연결됨" : (hasToken ? "Atlassian 토큰 저장됨 (연결은 확인 안 함)" : "Atlassian 토큰 없음 — 설정 > Jira 에서 입력"))
         }
@@ -618,6 +641,10 @@ struct OnboardingView: View {
             if prGitHubOn { if case .ok = state.pr.githubStatus { parts.append("GitHub ✓") } else { parts.append("GitHub (로그인 필요)") } }
             if prBitbucketOn { parts.append(bb?.ok == true ? "Bitbucket 저장소 \(Settings.shared.prBitbucketRepoList.count)개" : "Bitbucket 미연결") }
             r.append("PR: " + (parts.isEmpty ? "연결 안 함 — 설정 > PR 에서" : parts.joined(separator: " / ")))
+        }
+        if useE2E {
+            r.append(state.e2e.asideReady ? "E2E: Aside 준비됨 · 환경 주소와 테스트 계정은 설정 > E2E 에서"
+                                          : "E2E: Aside 준비 필요 — E2E 탭의 '준비'에서 이어서 할 수 있어요")
         }
         if useTeleport { r.append(tpCount > 0 ? "Teleport 터널 \(tpCount)개" : "Teleport 미설정 — 탭에서 이어서 할 수 있어요") }
         return r
@@ -638,7 +665,7 @@ struct OnboardingView: View {
 
     private func finish() {
         let s = Settings.shared
-        s.enabledTabs = Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR)
+        s.enabledTabs = Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR, e2e: useE2E)
         s.onboardingDone = true
         onClose()
         onFinish()

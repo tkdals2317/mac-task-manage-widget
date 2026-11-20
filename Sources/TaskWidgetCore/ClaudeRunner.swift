@@ -62,9 +62,12 @@ public struct ClaudeRunner {
     }
 
     /// 로그인 셸에서 `command -v claude`. GUI 앱은 셸 PATH 를 못 받으므로 셸에게 묻는다.
-    public static func loginShellLookup() -> String? {
+    public static func loginShellLookup() -> String? { loginShellLookup(command: "claude") }
+
+    /// command 는 고정된 이름만 넘긴다 (셸 문자열에 그대로 들어간다).
+    public static func loginShellLookup(command: String) -> String? {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let r = ProcessRunner.run(executable: shell, arguments: ["-lc", "command -v claude"], timeout: 5)
+        let r = ProcessRunner.run(executable: shell, arguments: ["-lc", "command -v \(command)"], timeout: 5)
         guard !r.timedOut, r.status == 0 else { return nil }
         return r.stdout.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
             .last { !$0.isEmpty }

@@ -58,6 +58,7 @@ struct RootView: View {
         case "summary": SummaryView()
         case "notes": NotesView()
         case "pr": PRView(pr: state.pr)
+        case "e2e": E2EView(e2e: state.e2e)
         case "teleport": TeleportView(tp: state.teleport)
         default: TasksView()
         }

@@ -3,7 +3,7 @@ import ServiceManagement
 import TaskWidgetCore
 
 private enum Pane: String, CaseIterable, Identifiable {
-    case appearance, window, tags, jira, notes, pr, summary, claude, teleport, about
+    case appearance, window, tags, jira, notes, pr, e2e, summary, claude, teleport, about
     var id: Self { self }
 
     var title: String {
@@ -14,6 +14,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         case .jira: return "Jira"
         case .notes: return "노트"
         case .pr: return "PR"
+        case .e2e: return "E2E"
         case .summary: return "요약"
         case .claude: return "Claude 연동"
         case .teleport: return "Teleport"
@@ -29,6 +30,7 @@ private enum Pane: String, CaseIterable, Identifiable {
         case .jira: return "ticket"
         case .notes: return "note.text"
         case .pr: return "arrow.triangle.pull"
+        case .e2e: return "checkmark.seal"
         case .summary: return "doc.text"
         case .claude: return "sparkles"
         case .teleport: return "network"
@@ -139,6 +141,7 @@ struct SettingsView: View {
         case .jira: jiraPane
         case .notes: NotesSettingsSections(notes: state.notes)
         case .pr: PRSettingsSections(pr: state.pr)
+        case .e2e: E2ESettingsSections(e2e: state.e2e)
         case .summary: summaryPane
         case .claude: claudePane
         case .teleport: teleportPane

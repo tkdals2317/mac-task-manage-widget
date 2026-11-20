@@ -17,6 +17,7 @@ public enum Paths {
     public static var teleportFile: URL { dataDir.appendingPathComponent("teleport.json") }
     public static var secretsFile: URL { dataDir.appendingPathComponent("secrets.json") }
     public static var logsDir: URL { dataDir.appendingPathComponent("logs", isDirectory: true) }
+    public static var e2eJobsDir: URL { dataDir.appendingPathComponent("e2e/jobs", isDirectory: true) }
     public static var claudeDir: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude", isDirectory: true)
     }

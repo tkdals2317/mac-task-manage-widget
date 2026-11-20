@@ -1,0 +1,62 @@
+{
+  "status": "done",
+  "startedAt": "2026-11-09T14:15:00+09:00",
+  "finishedAt": "2026-11-09T14:21:30+09:00",
+  "summary": "2건 중 1건 통과, 1건은 저장 버튼 문구가 바뀌지 않아 실패했어요.",
+  "issues": [
+    {
+      "key": "NMRS-22374",
+      "title": "목록 화면 필터 초기화 버튼 추가",
+      "url": "https://example.atlassian.net/browse/NMRS-22374",
+      "verdict": "PASS",
+      "assumptions": ["초기화는 날짜 필터도 비운다고 봤어요"],
+      "scenarios": [
+        {
+          "name": "필터를 고른 뒤 초기화",
+          "steps": ["목록 화면 열기", "상태 필터 '진행 중' 선택", "초기화 클릭"],
+          "expected": "모든 필터가 기본값으로 돌아간다",
+          "actual": "상태·날짜 필터가 모두 비워졌어요",
+          "verdict": "PASS",
+          "screenshots": ["NMRS-22374-1.png", "NMRS-22374-2.png"]
+        },
+        {
+          "name": "필터가 없을 때 초기화",
+          "steps": "초기화 버튼 확인",
+          "expected": "버튼이 비활성화",
+          "actual": "비활성화돼 있어요",
+          "verdict": "pass",
+          "screenshot": "NMRS-22374-3.png"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "key": "nmrs-22380",
+      "title": "저장 버튼 문구 변경",
+      "url": "https://example.atlassian.net/browse/NMRS-22380",
+      "verdict": "PASS",
+      "scenarios": [
+        {
+          "name": "편집 화면 저장 버튼 문구",
+          "steps": ["편집 화면 열기"],
+          "expected": "버튼 문구가 '저장하기'",
+          "actual": "여전히 '저장'으로 보여요",
+          "verdict": "FAIL",
+          "screenshots": ["NMRS-22380-1.png"]
+        },
+        {
+          "name": "운영 데이터 저장",
+          "expected": "저장된다",
+          "actual": "쓰기 동작이라 건너뜀",
+          "verdict": "SKIPPED"
+        }
+      ],
+      "notes": ["콘솔 에러 없음", "네트워크 실패 없음"]
+    },
+    {
+      "key": "NMRS-1",
+      "title": "판정 없는 이슈",
+      "verdict": "maybe"
+    }
+  ]
+}

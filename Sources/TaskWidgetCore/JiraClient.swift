@@ -68,7 +68,7 @@ public struct JiraClient {
         return try JSONDecoder().decode(Me.self, from: data).displayName
     }
 
-    private func get(_ url: URL) async throws -> Data {
+    func get(_ url: URL) async throws -> Data {
         let (data, code) = try await send(url)
         switch code {
         case 200...299: return data
@@ -78,22 +78,39 @@ public struct JiraClient {
         }
     }
 
-    private func send(_ url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, Int) {
+    func send(_ url: URL, method: String = "GET", body: Data? = nil, contentType: String = "application/json",
+              headers: [String: String] = [:], timeout: TimeInterval = 20) async throws -> (Data, Int) {
+        let (data, resp) = try await exchange(url, method: method, body: body, contentType: contentType, headers: headers, timeout: timeout)
+        return (data, resp?.statusCode ?? 0)
+    }
+
+    /// followRedirects 가 false 면 3xx 를 따라가지 않고 그 응답을 그대로 돌려준다 (Location 을 읽을 때).
+    func exchange(_ url: URL, method: String = "GET", body: Data? = nil, contentType: String = "application/json",
+                  headers: [String: String] = [:], timeout: TimeInterval = 20,
+                  followRedirects: Bool = true) async throws -> (Data, HTTPURLResponse?) {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.httpBody = body
-        if body != nil { req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        req.timeoutInterval = 20
+        if body != nil { req.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        req.timeoutInterval = timeout
         req.setValue("Basic " + Data("\(email):\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            (data, resp) = try await session.data(for: req, delegate: followRedirects ? nil : NoRedirect())
         } catch {
             throw JiraError.network(error.localizedDescription)
         }
-        return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+        return (data, resp as? HTTPURLResponse)
+    }
+
+    private final class NoRedirect: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+            completionHandler(nil)
+        }
     }
 
     // MARK: - Transitions
@@ -120,6 +137,78 @@ public struct JiraClient {
         case 401: return .message("토큰 만료 — 설정에서 토큰을 다시 입력하세요")
         case 403: return .message("권한 없음")
         case 404: return .message("이슈 없음")
+        default: return .http(code)
+        }
+    }
+
+    // MARK: - 댓글·첨부
+
+    /// ADF 문서를 이슈 댓글로 남기고 댓글 id 를 돌려준다.
+    @discardableResult
+    public func addComment(issueKey: String, document: [String: Any]) async throws -> String {
+        struct Created: Decodable { let id: String }
+        let body = try JSONSerialization.data(withJSONObject: ["body": document])
+        let (data, code) = try await send(try issueURL(issueKey, "comment"), method: "POST", body: body)
+        guard (200...299).contains(code) else { throw Self.writeError(code, data: data, what: "댓글") }
+        return (try? JSONDecoder().decode(Created.self, from: data))?.id ?? ""
+    }
+
+    /// 파일 하나를 이슈에 첨부하고 첨부 id 를 돌려준다 (응답을 못 읽으면 빈 값).
+    @discardableResult
+    public func addAttachment(issueKey: String, fileName: String, mime: String, data file: Data) async throws -> String {
+        struct Created: Decodable { let id: String }
+        let boundary = "atm-\(UUID().uuidString)"
+        let body = Self.multipart(boundary: boundary, fileName: fileName, mime: mime, data: file)
+        // X-Atlassian-Token 이 없으면 Jira 가 첨부 요청을 거절한다 (XSRF 검사).
+        let (data, code) = try await send(try issueURL(issueKey, "attachments"), method: "POST", body: body,
+                                          contentType: "multipart/form-data; boundary=\(boundary)",
+                                          headers: ["X-Atlassian-Token": "no-check"], timeout: 120)
+        guard (200...299).contains(code) else { throw Self.writeError(code, data: data, what: "첨부") }
+        return (try? JSONDecoder().decode([Created].self, from: data))?.first?.id ?? ""
+    }
+
+    /// 첨부의 Media 파일 id. 댓글(ADF) 안에 이미지로 넣을 때 쓴다. 알아내지 못하면 nil.
+    /// 첨부 내려받기 주소가 `api.media.atlassian.com/file/<id>/binary` 로 넘겨 주는 Location 에서 읽고, 따라가지는 않는다.
+    public func mediaFileId(attachmentId: String) async -> String? {
+        guard !attachmentId.isEmpty, attachmentId.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        let url = baseURL.appendingPathComponent("rest/api/3/attachment/content/\(attachmentId)")
+        guard let (_, resp) = try? await exchange(url, followRedirects: false), let resp, (300...399).contains(resp.statusCode)
+        else { return nil }
+        return Self.mediaFileId(location: resp.value(forHTTPHeaderField: "Location"))
+    }
+
+    /// `.../file/<uuid>/binary?...` 에서 uuid. 모양이 다르면 nil.
+    static func mediaFileId(location: String?) -> String? {
+        guard let location, let parts = URL(string: location)?.path.split(separator: "/"),
+              let i = parts.firstIndex(of: "file"), i + 1 < parts.count else { return nil }
+        let id = String(parts[i + 1])
+        return UUID(uuidString: id) == nil ? nil : id
+    }
+
+    /// 주소에 넣기 전에 이슈 키 모양인지 본다 (경로 조작 방지).
+    private func issueURL(_ key: String, _ tail: String) throws -> URL {
+        guard E2EIssueKeys.isKey(key) else { throw JiraError.message("이슈 키가 올바르지 않아요 (\(key))") }
+        return baseURL.appendingPathComponent("rest/api/3/issue/\(key)/\(tail)")
+    }
+
+    static func multipart(boundary: String, fileName: String, mime: String, data: Data) -> Data {
+        // "\r\n" 은 Character 하나라 isNewline 으로 거른다 (헤더에 줄이 끼어들지 않게).
+        let name = fileName.filter { !$0.isNewline && $0 != "\"" && $0 != "\\" }
+        var body = Data()
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\n".utf8))
+        body.append(Data("Content-Type: \(mime)\r\n\r\n".utf8))
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        return body
+    }
+
+    static func writeError(_ code: Int, data: Data, what: String) -> JiraError {
+        switch code {
+        case 400: return .message("Jira 가 \(what) 요청을 받아 주지 않았어요 (\(errorMessage(data)))")
+        case 401: return .message("토큰 만료 — 설정에서 토큰을 다시 입력하세요")
+        case 403: return .message("이 이슈에 \(what) 권한이 없어요")
+        case 404: return .message("이슈를 찾지 못했어요 (없거나 볼 권한이 없어요)")
+        case 413: return .message("너무 커서 Jira 가 받지 않았어요 (\(what))")
         default: return .http(code)
         }
     }

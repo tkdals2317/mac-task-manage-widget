@@ -1,0 +1,6 @@
+[ATM 2026-10-20 15:00:00] 시작 env=ST issues=SHOP-1234,SHOP-1241 timeout=1200s
+[ATM 2026-10-20 15:00:00] 실행 /Users/demo/.local/bin/aside exec --permission full-access <지시문>
+[err] created new session: demoSession01
+SHOP-1234 PASS · SHOP-1241 FAIL
+[ATM 2026-10-20 15:07:40] 종료 exit=0 session=demoSession01
+[ATM 2026-10-20 15:07:40] 결과 done

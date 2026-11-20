@@ -43,7 +43,7 @@ for k in themePreset theme opacity fontScale customBackground customAccent hover
   fi
 done
 d() { defaults write "$DEMO" "$@"; }
-d enabledTabs -string "tasks,summary,notes,pr,teleport"
+d enabledTabs -string "tasks,summary,notes,pr,e2e,teleport"
 d lastTab -string tasks
 d onboardingDone -bool true
 d notesTabIntroduced -bool true
@@ -54,6 +54,12 @@ d confluenceBaseURL -string "https://example.atlassian.net"
 d prGitHubEnabled -bool true
 d prBitbucketEnabled -bool true
 d teleportAutoConnect -bool false
+# E2E 데모 결과(10월)가 보관 기간에 지워지지 않게
+d e2eRetentionDays -int 0
+d e2eEnv -string ST
+d "e2eURL.DV" -string "https://dv.shop.example.com"
+d "e2eURL.ST" -string "https://st.shop.example.com"
+d "e2eURL.PR" -string "https://shop.example.com"
 d globalHotKeyEnabled -bool false
 d summaryNotify -bool false
 d prNotifyNewReview -bool false

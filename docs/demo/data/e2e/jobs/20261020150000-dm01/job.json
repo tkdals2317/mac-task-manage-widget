@@ -1,0 +1,17 @@
+{
+  "baseUrl" : "https://st.shop.example.com",
+  "createdAt" : "2026-10-20T06:00:00Z",
+  "env" : "ST",
+  "finishedAt" : "2026-10-20T06:07:40Z",
+  "id" : "20261020150000-dm01",
+  "issues" : [
+    { "key" : "SHOP-1234", "title" : "주문 취소 시 쿠폰 복원 처리", "url" : "https://example.atlassian.net/browse/SHOP-1234" },
+    { "key" : "SHOP-1241", "title" : "장바구니 쿠폰 중복 적용 오류", "url" : "https://example.atlassian.net/browse/SHOP-1241" }
+  ],
+  "notes" : "테스트 계정 주문 #20481 사용",
+  "readOnly" : false,
+  "requestedBy" : "demo@example.com",
+  "sessionId" : "demoSession01",
+  "status" : "done",
+  "username" : "qa_shop"
+}

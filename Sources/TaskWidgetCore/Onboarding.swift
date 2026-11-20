@@ -19,7 +19,8 @@ public enum Onboarding {
     }
 
     /// 고른 기능 → `enabledTabs` 저장 문자열 (할 일은 항상, 순서는 앱 탭 순서와 같다).
-    public static func enabledTabs(summary: Bool, notes: Bool, teleport: Bool, pr: Bool = false) -> String {
-        (["tasks"] + (summary ? ["summary"] : []) + (notes ? ["notes"] : []) + (pr ? ["pr"] : []) + (teleport ? ["teleport"] : [])).joined(separator: ",")
+    public static func enabledTabs(summary: Bool, notes: Bool, teleport: Bool, pr: Bool = false, e2e: Bool = false) -> String {
+        let picked: [(id: String, on: Bool)] = [("tasks", true), ("summary", summary), ("notes", notes), ("pr", pr), ("e2e", e2e), ("teleport", teleport)]
+        return picked.filter(\.on).map(\.id).joined(separator: ",")
     }
 }
