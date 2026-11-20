@@ -10,7 +10,7 @@
 
   const TABS = [
     { id: "tasks", title: "할 일" }, { id: "summary", title: "요약" }, { id: "notes", title: "노트" },
-    { id: "pr", title: "PR" }, { id: "teleport", title: "Teleport" },
+    { id: "pr", title: "PR" }, { id: "e2e", title: "E2E" }, { id: "teleport", title: "Teleport" },
   ];
   const ids = TABS.map((t) => t.id);
   const enabled = $derived(enabledTabs(settings.enabledTabs, ids));

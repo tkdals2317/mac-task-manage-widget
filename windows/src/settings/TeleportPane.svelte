@@ -2,12 +2,11 @@
   // 설정 > Teleport (Mac teleportPane): tsh 경로, 자동 연결·확인 주기, 설정 다시 하기, teleport.json 열기.
   import { onMount } from "svelte";
   import { emit } from "@tauri-apps/api/event";
-  import { setSetting, settings, toggledTabs, enabledTabs } from "../lib/settings.svelte";
+  import { ALL_TABS as ALL, setSetting, settings, toggledTabs, enabledTabs } from "../lib/settings.svelte";
   import { native } from "../lib/native";
   import Segmented from "./Segmented.svelte";
 
   let found = $state<[string, string] | null | undefined>(undefined);
-  const ALL = ["tasks", "summary", "notes", "pr", "teleport"];
 
   async function find() { found = await native.which("tsh", settings.tshPath).catch(() => null); }
   onMount(() => { void find(); });

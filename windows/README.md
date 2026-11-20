@@ -8,6 +8,7 @@ Mac 판 ATM 과 같은 떠 있는 패널을 Windows 에서 쓰는 버전이에�
 | 2 | 요약 / 업무 일지, Claude 연동 (활동 훅·/worklog·atm-todo) | ✅ 0.2.0 |
 | 3 | PR 탭 (GitHub·Bitbucket) | ✅ 0.2.0 |
 | 4 | Teleport 탭 | ✅ 0.2.0 |
+| 5 | E2E 탭 (Aside 로 Jira 이슈 검증) | ✅ 0.3.0 |
 | - | 설정 도우미, 진단 정보 내보내기, 비밀 정보 저장 위치 | ✅ 0.2.0 |
 
 ## 설치
@@ -15,7 +16,7 @@ Mac 판 ATM 과 같은 떠 있는 패널을 Windows 에서 쓰는 버전이에�
 1. [Releases](https://github.com/tkdals2317/mac-task-manage-widget/releases) 에서 `Windows v…` 릴리스의 `ATM_<버전>_x64-setup.exe` 를 받아 실행해요.
    - 서명하지 않은 설치 파일이라 처음엔 SmartScreen 경고가 떠요. **추가 정보 → 실행** 을 누르세요.
    - 관리자 권한 없이 내 계정에만 설치돼요.
-2. 설치가 끝나면 작업 표시줄 오른쪽 트레이에 ATM 아이콘이 생기고, 처음 실행하면 **설정 도우미**가 열려요. 쓸 기능(Jira·노트·요약·PR·Teleport)을 고르면 필요한 설정만 차례로 안내해요.
+2. 설치가 끝나면 작업 표시줄 오른쪽 트레이에 ATM 아이콘이 생기고, 처음 실행하면 **설정 도우미**가 열려요. 쓸 기능(Jira·노트·요약·PR·E2E·Teleport)을 고르면 필요한 설정만 차례로 안내해요.
 3. 도우미는 설정 > 정보 > **설정 도우미 열기** 로 언제든 다시 열 수 있어요.
 
 ## 쓰는 법
@@ -23,13 +24,14 @@ Mac 판 ATM 과 같은 떠 있는 패널을 Windows 에서 쓰는 버전이에�
 - **열고 닫기:** 트레이 아이콘 왼쪽 클릭, 또는 전역 단축키 `Ctrl + Alt + Q` (설정 > 창 · 일반 에서 바꿀 수 있어요).
 - **빨간 버튼·Esc:** 끄지 않고 트레이로 숨겨요. 완전히 끄려면 트레이 아이콘 오른쪽 클릭 → **종료**.
 - **노란 버튼:** 작업 표시줄로 최소화해요 (Mac 의 Dock 최소화). 작업 표시줄·트레이·단축키로 다시 열어요.
-- **패널 옮기기:** 맨 위 빈 줄을 끌어요. 가장자리를 끌면 크기가 바뀌어요. `Ctrl + 1~5` 로 탭을 바꿔요.
+- **패널 옮기기:** 맨 위 빈 줄을 끌어요. 가장자리를 끌면 크기가 바뀌어요. `Ctrl + 1~6` 로 탭을 바꿔요.
 - 화면과 기능은 Mac 판과 같아요. 자세한 설명은 [사용 설명서](../README.md#사용-설명서) 를 보세요. Windows 에서 다른 점:
   - Touch ID 대신 **Windows Hello**(지문·얼굴·PIN)로 잠긴 메모를 열어요. 설정 > 노트 에서 켜요.
   - 키체인 대신 **Windows 자격 증명 관리자**에 비밀값을 둬요 (설정 > 창 · 일반 > 비밀 정보 저장 에서 파일로 바꿀 수 있어요).
   - 요약은 `claude` CLI 를 PATH, `%USERPROFILE%\.local\bin`, npm 전역 폴더, Claude 데스크톱 앱이 받아 둔 Claude Code 순서로 찾아요. 로그인이 필요해요 (`claude` 실행 → `/login`).
   - PR 의 GitHub 는 `gh` CLI 로그인(`winget install GitHub.cli` → `gh auth login`)을 써요.
   - Teleport 는 `tsh` 가 PATH 에 있거나 설정 > Teleport 에 경로를 넣어야 해요. 로그인은 가상 콘솔(ConPTY)에서 비밀번호·OTP 를 대신 입력해요. OTP QR 이미지는 파일을 골라서 읽어요.
+  - E2E 는 Aside 브라우저와 Aside CLI(`aside`)가 필요해요. `aside` 를 PATH 에서 찾고(설정 > E2E 에서 경로 지정 가능), Aside 계정은 `%USERPROFILE%\.aside` 아래를 써요(Windows 에서의 위치는 아직 확인 전). 터미널 버튼은 PowerShell 에서 `aside update`·`aside login` 을 돌려요.
   - 요약 자동 생성·PR 알림·Teleport 자동 유지는 ATM 이 켜져 있는 동안(트레이에 숨겨도) 돌아가요.
 
 ## Claude Code 연동
