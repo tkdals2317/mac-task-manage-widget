@@ -113,7 +113,9 @@ $effect.root(() => {
   $effect(() => {
     if (!store.loaded) return;
     const today = dayKey(new Date());
-    const n = store.todos.filter((t) => !t.done).reduce((c, t) =>
+    // 할 일 탭을 꺼 뒀으면 마감 개수도 숨긴다.
+    const tasksOn = enabledTabs(settings.enabledTabs, ALL_TABS).includes("tasks");
+    const n = !tasksOn ? 0 : store.todos.filter((t) => !t.done).reduce((c, t) =>
       c + (t.dueDate && t.dueDate <= today ? 1 : 0) + t.subtasks.filter((s) => !s.done && s.dueDate && s.dueDate <= today).length, 0);
     native.setTrayTooltip(n ? `ATM · 오늘까지 할 일 ${n}개` : "ATM").catch(() => {});
   });

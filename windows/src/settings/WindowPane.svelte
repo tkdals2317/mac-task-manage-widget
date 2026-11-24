@@ -5,6 +5,8 @@
   import { native } from "../lib/native";
   import Segmented from "./Segmented.svelte";
   import HotKeyRecorder from "./HotKeyRecorder.svelte";
+  import Confirm from "../lib/Confirm.svelte";
+  import { ROLES, jqlFor, preset, tabsString, type UserRole } from "../lib/rolePreset";
   import { hotkeyStatus, watchHotkeyStatus } from "../lib/hotkeyStatus.svelte";
   $effect(() => watchHotkeyStatus());
 
@@ -15,6 +17,18 @@
   const ids = TABS.map((t) => t.id);
   const enabled = $derived(enabledTabs(settings.enabledTabs, ids));
   const dev = import.meta.env.DEV;
+
+  const role = $derived(ROLES.find((r) => r.id === settings.userRole) ?? ROLES[2]);
+  let confirmRole = $state(false);
+
+  /** 직무 기본값(탭·Jira 목록·E2E 기준)으로 맞춘다. */
+  function applyRolePreset() {
+    const p = preset(role.id);
+    setSetting("enabledTabs", tabsString(p.tabs));
+    const q = jqlFor(p.jira);
+    if (q !== null) setSetting("jiraJQL", q);
+    setSetting("e2eIssueScope", p.e2eScope);
+  }
 
   let moving = $state(false);
   let moveMsg = $state("");
@@ -60,6 +74,22 @@
       </div>
     {/if}
   </div>
+
+  <div class="card-title">직무</div>
+  <div class="card">
+    <div class="srow">
+      <span>직무</span>
+      <Segmented value={role.id} onpick={(v: UserRole) => setSetting("userRole", v)}
+        options={ROLES.map((r) => ({ value: r.id, label: r.short }))} />
+    </div>
+    {#if role.id !== "custom"}
+      <div class="srow col">
+        <div class="actions"><button class="btn" onclick={() => (confirmRole = true)}>직무에 맞게 다시 맞추기</button></div>
+        <div class="hint">탭과 Jira 목록 조건을 {role.short} 기본값으로 되돌려요.</div>
+      </div>
+    {/if}
+  </div>
+  <Confirm bind:open={confirmRole} title="탭과 Jira 목록 조건을 {role.short} 기본값으로 바꿀까요?" confirm="바꾸기" onconfirm={applyRolePreset} />
 
   <div class="card-title">탭</div>
   <div class="card">

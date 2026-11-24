@@ -3,7 +3,7 @@ import ServiceManagement
 import SwiftUI
 import TaskWidgetCore
 
-private enum OStep { case features, storage, atlassian, notes, pr, prRepos, e2e, claude, teleport, finish }
+private typealias OStep = SetupStep
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -24,14 +24,14 @@ struct OnboardingView: View {
     @AppStorage(SettingsKey.summaryMinute) private var summaryMinute = 0
     @Environment(\.atmAccent) private var accent
 
-    @State private var step: OStep = .features
-    // 1 기능
-    @State private var useJira = false
-    @State private var useNotes = false
-    @State private var useSummary = true
-    @State private var useTeleport = false
-    @State private var usePR = false
-    @State private var useE2E = false
+    @State private var step: OStep = .role
+    // 1 직무
+    @State private var role: UserRole?
+    @State private var tabs: Set<String> = []
+    @State private var jiraScope: JiraListScope = .assignee
+    @State private var e2eScope = "assignee"
+    /// 지금 저장된 JQL 이 담당·보고·둘 다 어디에도 안 맞는 직접 쓴 값이면 "지금 값 유지" 를 고를 수 있게 한다.
+    @State private var customJQL = false
     // 2 저장 위치
     @State private var storage = Settings.shared.secretStorage
     @State private var storageErr = ""
@@ -75,27 +75,22 @@ struct OnboardingView: View {
     @State private var busy = false
     @State private var loaded = false
 
+    private var useNotes: Bool { tabs.contains("notes") }
+    private var useSummary: Bool { tabs.contains("summary") }
+    private var usePR: Bool { tabs.contains("pr") }
+    private var useE2E: Bool { tabs.contains("e2e") }
+    private var useTeleport: Bool { tabs.contains("teleport") }
+    /// Jira 주소·토큰이 필요한 탭 (할 일 · E2E)
+    private var useJira: Bool { tabs.contains("tasks") || tabs.contains("e2e") }
+
     private var isBundled: Bool { Bundle.main.bundleIdentifier != nil }
     private var integration: ClaudeIntegration {
         ClaudeIntegration(executablePath: Bundle.main.executablePath ?? CommandLine.arguments[0])
     }
 
-    /// 고른 기능에 해당하는 단계만.
+    /// 고른 탭에 해당하는 단계만. 저장소 고르기는 Bitbucket 이 켜져 있고 연결이 확인된 뒤에만.
     private var steps: [OStep] {
-        var s: [OStep] = [.features]
-        if useJira || useNotes || useTeleport || usePR { s.append(.storage) }
-        if useJira || useNotes { s.append(.atlassian) }
-        if useNotes { s.append(.notes) }
-        if usePR {
-            s.append(.pr)
-            // 저장소 고르기는 Bitbucket 이 켜져 있고 연결이 확인된 뒤에만
-            if prBitbucketOn, bb?.ok == true { s.append(.prRepos) }
-        }
-        if useE2E { s.append(.e2e) }
-        if useSummary { s.append(.claude) }
-        if useTeleport { s.append(.teleport) }
-        s.append(.finish)
-        return s
+        RolePreset.steps(tabs: tabs, showPRRepos: prBitbucketOn && bb?.ok == true)
     }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
 
@@ -105,7 +100,7 @@ struct OnboardingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     switch step {
-                    case .features: featuresStep
+                    case .role: roleStep
                     case .storage: storageStep
                     case .atlassian: atlassianStep
                     case .notes: notesStep
@@ -214,9 +209,9 @@ struct OnboardingView: View {
             Spacer()
             if busy { ProgressView().controlSize(.small) }
             switch step {
-            case .features:
+            case .role:
                 chip("clock", "나중에 하기", .plain) { Settings.shared.onboardingDone = true; onClose() }
-                chip("chevron.right", "다음", .solid) { advance() }
+                chip("chevron.right", "다음", .solid, role != nil && RolePreset.isValid(tabs: tabs)) { advance() }
             case .storage:
                 chip("chevron.right", "다음", .solid, !busy) { applyStorage() }
             case .atlassian:
@@ -290,45 +285,93 @@ struct OnboardingView: View {
 
     private func load() {
         let s = Settings.shared
-        let tabs = TabConfig.enabled(from: s.enabledTabs, all: allTabs.map(\.id))
-        useSummary = tabs.contains("summary")
-        useNotes = tabs.contains("notes")
-        useTeleport = tabs.contains("teleport")
-        usePR = tabs.contains("pr")
-        useE2E = tabs.contains("e2e")
+        // 다시 열면 저장된 직무를 고르고, 편집 영역은 직무 기본값이 아니라 지금 값으로 채운다.
+        tabs = Set(TabConfig.enabled(from: s.enabledTabs, all: RolePreset.tabOrder))
+        let cur = RolePreset.scope(forJQL: s.jiraJQL)
+        customJQL = cur == .keep
+        jiraScope = cur
+        e2eScope = s.e2eIssueScope == "reporter" ? "reporter" : "assignee"
+        role = UserRole(rawValue: s.userRole) ?? (s.onboardingDone ? .custom : nil)
         email = s.jiraEmail
         jiraURL = s.jiraBaseURL
         confURL = s.confluenceBaseURL
-        useJira = !s.jiraEmail.isEmpty
         if !s.jiraEmail.isEmpty { Task { hasToken = await state.jiraToken(for: s.jiraEmail) != nil } }
     }
 
-    // MARK: - 1 기능 고르기
+    // MARK: - 1 직무 고르기
 
-    private var featuresStep: some View {
+    private static let roleCards: [(UserRole, String, String)] = [
+        (.developer, "chevron.left.forwardslash.chevron.right", "내 이슈 처리 · PR 리뷰 · DB 접속"),
+        (.planner, "doc.text.magnifyingglass", "내가 올린 이슈 추적 · 동작 검증 · 문서"),
+        (.custom, "slider.horizontal.3", "아무것도 미리 정하지 않고 하나씩 골라요"),
+    ]
+
+    private func pick(_ r: UserRole) {
+        role = r
+        let p = RolePreset.preset(for: r)
+        tabs = p.tabs; jiraScope = p.jira; e2eScope = p.e2eScope
+    }
+
+    private var roleStep: some View {
         VStack(alignment: .leading, spacing: 8) {
-            header("ATM 에서 무엇을 쓸까요?", "고른 것만 설정해요. 나중에 언제든 설정에서 켜고 끌 수 있어요.")
-            choice("checkmark.square.fill", on: true, "할 일", "오늘 할 일을 적고 체크해요. 하위 할 일·마감일·태그도 붙일 수 있어요. 따로 설정할 건 없어요.", enabled: false)
-            Button { useJira.toggle() } label: {
-                choice(useJira ? "checkmark.square.fill" : "square", on: useJira, "Jira", "나한테 배정된 이슈를 할 일 아래에 보여주고, 상태도 여기서 바로 바꿔요. Atlassian 토큰이 필요해요.")
-            }.buttonStyle(.plain)
-            Button { useNotes.toggle() } label: {
-                choice(useNotes ? "checkmark.square.fill" : "square", on: useNotes, "노트", "메모를 적고 비밀번호로 잠글 수 있어요. 자주 여는 링크와 Confluence 에서 별표한 문서도 모아 보여줘요.")
-            }.buttonStyle(.plain)
-            Button { useSummary.toggle() } label: {
-                choice(useSummary ? "checkmark.square.fill" : "square", on: useSummary, "요약", "Claude Code 로 한 작업·커밋·할 일을 모아 저녁에 하루 업무 요약을 만들어요. Claude Code 가 설치돼 있어야 해요.")
-            }.buttonStyle(.plain)
-            Button { usePR.toggle() } label: {
-                choice(usePR ? "checkmark.square.fill" : "square", on: usePR, "PR", "GitHub·Bitbucket 에서 나한테 온 리뷰 요청과 내가 올린 PR 의 승인 상태를 모아 봐요. 승인되면 알려줘요.")
-            }.buttonStyle(.plain)
-            Button { useE2E.toggle() } label: {
-                choice(useE2E ? "checkmark.square.fill" : "square", on: useE2E, "E2E 검증",
-                       "Jira 이슈를 고르면 내 Aside 브라우저가 테스트 환경에서 직접 동작을 확인하고 PASS/FAIL 과 스크린샷을 남겨요. Aside 브라우저와 CLI 가 필요해요.")
-            }.buttonStyle(.plain)
-            Button { useTeleport.toggle() } label: {
-                choice(useTeleport ? "checkmark.square.fill" : "square", on: useTeleport, "Teleport", "개발·스테이징 DB 에 로그인하고 터널을 자동으로 열어 둬요. DB 툴에서 localhost 포트로 접속하면 돼요.")
-            }.buttonStyle(.plain)
+            header("어떤 일을 하세요?", "직무에 맞게 미리 맞춰 둘게요. 아래에서 바로 바꿀 수 있어요.")
+            ForEach(Self.roleCards, id: \.0) { r, icon, desc in
+                Button { pick(r) } label: { choice(icon, on: role == r, r.title, desc) }.buttonStyle(.plain)
+            }
+            if role != nil { tuneSection.padding(.top, 6) }
         }
+    }
+
+    private func toggleTab(_ id: String) {
+        if tabs.contains(id) { tabs.remove(id) } else { tabs.insert(id) }
+    }
+
+    private func segment<T: Hashable>(_ options: [(T, String)], selection: Binding<T>, dimmed: Bool) -> some View {
+        HStack(spacing: 6) {
+            ForEach(options.indices, id: \.self) { i in
+                let on = selection.wrappedValue == options[i].0
+                Button { selection.wrappedValue = options[i].0 } label: {
+                    AccentChip(icon: on ? "checkmark" : "circle", text: options[i].1, style: on ? .soft : .plain)
+                }.buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .opacity(dimmed ? 0.45 : 1)
+    }
+
+    private var tuneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("이렇게 맞춰 둬요").font(.system(size: 12.5 * scale, weight: .semibold))
+            labeled("쓸 탭") {
+                HStack(spacing: 6) {
+                    ForEach(allTabs, id: \.id) { t in
+                        let on = tabs.contains(t.id)
+                        Button { toggleTab(t.id) } label: {
+                            AccentChip(icon: on ? "checkmark" : "plus", text: t.title, style: on ? .soft : .plain)
+                        }.buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 0)
+                }
+                if !RolePreset.isValid(tabs: tabs) { line("탭을 하나 이상 골라 주세요.", .red) }
+            }
+            labeled("할 일 · Jira 목록") {
+                segment(jiraOptions, selection: $jiraScope, dimmed: !tabs.contains("tasks"))
+            }
+            labeled("E2E 이슈 기본") {
+                segment([("assignee", "담당"), ("reporter", "보고")], selection: $e2eScope, dimmed: !tabs.contains("e2e"))
+            }
+            let st = steps
+            VStack(alignment: .leading, spacing: 2) {
+                Text("설정 도우미 \(st.count)단계").font(.system(size: 11 * scale, weight: .medium))
+                helper(RolePreset.previewLine(st))
+            }
+        }
+    }
+
+    private var jiraOptions: [(JiraListScope, String)] {
+        var o: [(JiraListScope, String)] = [(.assignee, "담당"), (.reporter, "보고"), (.both, "둘 다")]
+        if customJQL { o.append((.keep, "지금 값 유지")) }
+        return o
     }
 
     // MARK: - 2 비밀 저장 위치
@@ -627,8 +670,8 @@ struct OnboardingView: View {
     }
 
     private var summaryItems: [String] {
-        var r = ["탭: " + allTabs.filter { Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR, e2e: useE2E).split(separator: ",").contains(Substring($0.id)) }.map(\.title).joined(separator: " · ")]
-        if useJira || useNotes {
+        var r = ["탭: " + allTabs.filter { tabs.contains($0.id) }.map(\.title).joined(separator: " · ")]
+        if RolePreset.needsAtlassian(tabs) {
             r.append(atlOK ? "Atlassian 연결됨" : (hasToken ? "Atlassian 토큰 저장됨 (연결은 확인 안 함)" : "Atlassian 토큰 없음 — 설정 > Jira 에서 입력"))
         }
         if useNotes { r.append(hasLock ? "노트 잠금 설정됨" : "노트 잠금 안 씀") }
@@ -665,7 +708,8 @@ struct OnboardingView: View {
 
     private func finish() {
         let s = Settings.shared
-        s.enabledTabs = Onboarding.enabledTabs(summary: useSummary, notes: useNotes, teleport: useTeleport, pr: usePR, e2e: useE2E)
+        RolePreset.apply(RolePlan(tabs: tabs, jira: jiraScope, e2eScope: e2eScope), to: s)
+        if let role { s.userRole = role.rawValue }
         s.onboardingDone = true
         onClose()
         onFinish()

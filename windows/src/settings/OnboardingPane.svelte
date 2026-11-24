@@ -1,8 +1,9 @@
 <script lang="ts">
-  // 설정 도우미 (Mac OnboardingView): 쓸 기능 고르기 → 고른 기능에 필요한 설정을 차례로 → 마무리(테마·단축키·로그인 시 실행).
+  // 설정 도우미 (Mac OnboardingView): 직무 고르기(탭·Jira 목록 기본값) → 고른 기능에 필요한 설정을 차례로 → 마무리(테마·단축키·로그인 시 실행).
   import { onMount } from "svelte";
   import { emit } from "@tauri-apps/api/event";
-  import { ALL_TABS, setSetting, settings } from "../lib/settings.svelte";
+  import { setSetting, settings, enabledTabs } from "../lib/settings.svelte";
+  import { ROLES, TAB_ORDER, isValid, jqlFor, preset, previewLine, scopeForJQL, steps, STEP_TITLE, tabsString, type E2EScope, type JiraScope, type SetupStep, type UserRole } from "../lib/rolePreset";
   import { native } from "../lib/native";
   import { JIRA_KEYCHAIN_SERVICE } from "../lib/jira";
   import { hookStatus, installHook, installTodoSkill, installWorklogSkill, todoSkillInstalled, worklogSkillInstalled, locateClaude } from "../lib/claude";
@@ -17,20 +18,36 @@
 
   let { ondone }: { ondone: () => void } = $props();
 
-  const FEATURES: { id: string; title: string; desc: string; icon: SymName; tab?: string }[] = [
-    { id: "jira", title: "Jira", desc: "내게 할당된 이슈를 할 일 탭에", icon: "jira" },
-    { id: "notes", title: "노트", desc: "잠글 수 있는 메모, 링크, Confluence 별표", icon: "notes", tab: "notes" },
-    { id: "summary", title: "요약", desc: "Claude Code 세션으로 하루·주간 업무 요약", icon: "sparkles", tab: "summary" },
-    { id: "pr", title: "PR", desc: "GitHub·Bitbucket 리뷰 요청과 내 PR", icon: "branch", tab: "pr" },
-    { id: "e2e", title: "E2E 검증", desc: "내 Aside 브라우저로 Jira 이슈를 테스트 환경에서 검증", icon: "seal", tab: "e2e" },
-    { id: "teleport", title: "Teleport", desc: "DB 터널 자동 로그인·유지", icon: "globe", tab: "teleport" },
+  const ROLE_ICON: Record<UserRole, SymName> = { developer: "terminal", planner: "doc", custom: "wand" };
+  const TAB_TITLE: Record<string, string> = { tasks: "할 일", summary: "요약", notes: "노트", pr: "PR", e2e: "E2E", teleport: "Teleport" };
+
+  // 다시 열면 저장된 직무를 고르고, 편집 영역은 직무 기본값이 아니라 지금 값으로 채운다.
+  let role = $state<UserRole | null>(
+    ROLES.some((r) => r.id === settings.userRole) ? (settings.userRole as UserRole) : settings.onboardingDone ? "custom" : null,
+  );
+  let tabs = $state(new Set<string>(enabledTabs(settings.enabledTabs, TAB_ORDER)));
+  const curScope = scopeForJQL(settings.jiraJQL);
+  /** 지금 저장된 JQL 이 담당·보고·둘 다 어디에도 안 맞는 직접 쓴 값이면 "지금 값 유지" 를 고를 수 있게 한다. */
+  const customJQL = curScope === "keep";
+  let jiraScope = $state<JiraScope>(curScope);
+  let e2eScope = $state<E2EScope>(settings.e2eIssueScope === "reporter" ? "reporter" : "assignee");
+  const jiraOptions = [
+    { value: "assignee" as JiraScope, label: "담당" }, { value: "reporter" as JiraScope, label: "보고" }, { value: "both" as JiraScope, label: "둘 다" },
+    ...(customJQL ? [{ value: "keep" as JiraScope, label: "지금 값 유지" }] : []),
   ];
 
-  const cur = settings.enabledTabs.split(",");
-  let picked = $state(new Set<string>([...FEATURES.filter((f) => f.tab && cur.includes(f.tab)).map((f) => f.id), ...(settings.jiraEmail ? ["jira"] : [])]));
-  let step = $state(0); // 0 = 고르기, 1..n = 기능별, n+1 = 마무리
-  let steps = $derived(FEATURES.filter((f) => picked.has(f.id)));
-  let current = $derived(step >= 1 && step <= steps.length ? steps[step - 1] : null);
+  let step = $state(0); // steps 목록의 위치 (0 = 직무)
+  let list = $derived(steps(tabs));
+  let current = $derived<SetupStep>(list[Math.min(step, list.length - 1)]);
+  let valid = $derived(isValid(tabs));
+  let applied = false;
+
+  function pick(r: UserRole) {
+    role = r;
+    const p = preset(r);
+    tabs = new Set(p.tabs); jiraScope = p.jira; e2eScope = p.e2eScope;
+  }
+  function toggleTab(id: string) { const s = new Set(tabs); if (!s.delete(id)) s.add(id); tabs = s; }
 
   let jiraOk = $state(false);
   let claude = $state<{ path: string } | null | undefined>(undefined);
@@ -46,11 +63,15 @@
   }
   onMount(() => { void refresh(); void reloadE2E(); });
 
-  function toggle(id: string) { const s = new Set(picked); if (!s.delete(id)) s.add(id); picked = s; }
-
-  function applyTabs() {
-    const tabs = ["tasks", ...FEATURES.filter((f) => f.tab && picked.has(f.id)).map((f) => f.tab!)];
-    setSetting("enabledTabs", ALL_TABS.filter((t) => tabs.includes(t)).join(","));
+  /** 고른 탭·Jira 목록 기준·E2E 기준·직무를 설정에 적용한다. 직무를 안 골랐으면 아무것도 안 바꾼다. */
+  function applyPlan(force = false) {
+    if (!role || (applied && !force)) return;
+    if (valid) setSetting("enabledTabs", tabsString(tabs));
+    const q = jqlFor(jiraScope);
+    if (q !== null) setSetting("jiraJQL", q);
+    setSetting("e2eIssueScope", e2eScope);
+    setSetting("userRole", role);
+    applied = true;
   }
 
   async function setupClaudeAll() {
@@ -61,7 +82,7 @@
   }
 
   function finish() {
-    applyTabs();
+    applyPlan();
     setSetting("onboardingDone", true);
     void emit("pr-config-changed");
     ondone();
@@ -70,22 +91,50 @@
 
 <div class="pane">
   <div class="steps">
-    {#each ["기능 고르기", ...steps.map((s) => s.title), "마무리"] as s, i (i)}
-      <span class:on={i === step} class:done={i < step}>{i + 1}. {s}</span>
+    {#each list as s, i (s)}
+      <span class:on={i === step} class:done={i < step}>{i + 1}. {STEP_TITLE[s]}</span>
     {/each}
   </div>
 
-  {#if step === 0}
-    <div class="hint">쓸 기능을 고르면, 고른 기능에 필요한 설정만 차례로 안내해요. 할 일 탭은 늘 켜져 있어요. 나중에 설정 &gt; 정보 &gt; 설정 도우미 열기로 다시 할 수 있어요.</div>
+  {#if current === "role"}
+    <div class="hint">직무에 맞게 미리 맞춰 둘게요. 아래에서 바로 바꿀 수 있어요. 나중에 설정 &gt; 정보 &gt; 설정 도우미 열기로 다시 할 수 있어요.</div>
     <div class="feats">
-      {#each FEATURES as f (f.id)}
-        <button class="feat" class:on={picked.has(f.id)} onclick={() => toggle(f.id)}>
-          <span class="fi"><Sym name={f.icon} size={1.3} /></span>
-          <span class="ft"><b>{f.title}</b><span>{f.desc}</span></span>
-          <span class="chk">{#if picked.has(f.id)}<Sym name="check-circle" size={1.2} />{/if}</span>
+      {#each ROLES as r (r.id)}
+        <button class="feat" class:on={role === r.id} onclick={() => pick(r.id)}>
+          <span class="fi"><Sym name={ROLE_ICON[r.id]} size={1.3} /></span>
+          <span class="ft"><b>{r.title}</b><span>{r.desc}</span></span>
+          <span class="chk">{#if role === r.id}<Sym name="check-circle" size={1.2} />{/if}</span>
         </button>
       {/each}
     </div>
+    {#if role}
+      <div class="card-title">이렇게 맞춰 둬요</div>
+      <div class="card">
+        <div class="srow col">
+          <span>쓸 탭</span>
+          <div class="tabchips">
+            {#each TAB_ORDER as id (id)}
+              <button class="chip" class:soft={tabs.has(id)} class:plain={!tabs.has(id)} aria-pressed={tabs.has(id)} onclick={() => toggleTab(id)}>
+                <Sym name={tabs.has(id) ? "check" : "plus"} size={0.8} />{TAB_TITLE[id]}
+              </button>
+            {/each}
+          </div>
+          {#if !valid}<div class="hint err">탭을 하나 이상 골라 주세요.</div>{/if}
+        </div>
+        <div class="srow" class:dim={!tabs.has("tasks")}>
+          <span>할 일 · Jira 목록</span>
+          <Segmented value={jiraScope} onpick={(v) => (jiraScope = v)} options={jiraOptions} />
+        </div>
+        <div class="srow" class:dim={!tabs.has("e2e")}>
+          <span>E2E 이슈 기본</span>
+          <Segmented value={e2eScope} onpick={(v) => (e2eScope = v)} options={[{ value: "assignee", label: "담당" }, { value: "reporter", label: "보고" }]} />
+        </div>
+        <div class="srow col">
+          <span>설정 도우미 {list.length}단계</span>
+          <div class="hint">{previewLine(list)}</div>
+        </div>
+      </div>
+    {/if}
     <div class="card-title">비밀 정보 저장</div>
     <div class="card">
       <div class="srow">
@@ -94,11 +143,11 @@
           options={[{ value: "credman", label: "자격 증명 관리자 (권장)" }, { value: "file", label: "파일" }]} />
       </div>
     </div>
-  {:else if current?.id === "jira"}
+  {:else if current === "jira"}
     <JiraPane bind:hasToken={jiraOk} />
-  {:else if current?.id === "notes"}
+  {:else if current === "notes"}
     <NotesPane />
-  {:else if current?.id === "summary"}
+  {:else if current === "summary"}
     <div class="card">
       <div class="srow">
         <div class="grow"><div>Claude Code CLI</div><div class="hint selectable">{claude ? claude.path : claude === null ? "찾지 못함 · Claude Code 를 설치하고 로그인해 주세요 (claude → /login)" : "찾는 중…"}</div></div>
@@ -121,17 +170,17 @@
       </div>
     </div>
     <div class="hint">~/.claude/settings.json 은 바꾸기 전에 백업해요. 훅은 새 Claude Code 세션부터 기록해요.</div>
-  {:else if current?.id === "pr"}
+  {:else if current === "pr"}
     <PRPane />
-  {:else if current?.id === "e2e"}
+  {:else if current === "e2e"}
     <div class="hint">검증은 내 Aside 브라우저가 해요. 아래 항목을 위에서부터 채우면 돼요. 지금 다 못 해도 탭은 켜 둘 수 있고, E2E 탭에서 이어서 할 수 있어요.</div>
     <div class="card"><div class="srow col"><SetupList items={setupItems()} recheck /></div></div>
     <div class="hint">환경 주소(DV/ST/ST2)와 테스트 계정 ID 는 설정 &gt; E2E 에서 넣어요. 테스트 계정은 주소 옆 'Aside 에서 열기'로 직접 로그인해 Aside Vault 에 저장해요. 비밀번호는 ATM 이 넘기지 않아요.</div>
-  {:else if current?.id === "teleport"}
+  {:else if current === "teleport"}
     <div class="card">
       <div class="srow col">
         <div>Teleport 로그인과 DB 고르기는 패널의 Teleport 탭에서 이어서 해요.</div>
-        <div class="actions"><button class="btn primary" onclick={() => { applyTabs(); setSetting("lastTab", "teleport"); void emit("teleport-setup-requested"); }}>Teleport 탭 열기</button></div>
+        <div class="actions"><button class="btn primary" onclick={() => { applyPlan(); setSetting("lastTab", "teleport"); void emit("teleport-setup-requested"); }}>Teleport 탭 열기</button></div>
         <div class="hint">tsh(Teleport 클라이언트)가 PATH 에 있어야 해요. 없으면 설정 &gt; Teleport 에서 경로를 지정할 수 있어요.</div>
       </div>
     </div>
@@ -159,8 +208,9 @@
     {#if step > 0}<button class="btn" onclick={() => (step -= 1)}>이전</button>{/if}
     <span class="grow"></span>
     {#if step === 0}<button class="btn" onclick={finish}>건너뛰기</button>{/if}
-    {#if step <= steps.length}
-      <button class="btn primary" onclick={() => { if (step === 0) applyTabs(); step += 1; void refresh(); if (!e2e.report) void checkAside(); }}>다음</button>
+    {#if current !== "finish"}
+      <button class="btn primary" disabled={step === 0 && (!role || !valid)}
+        onclick={() => { if (step === 0) applyPlan(true); step += 1; void refresh(); if (!e2e.report) void checkAside(); }}>다음</button>
     {:else}
       <button class="btn primary" onclick={finish}>시작하기</button>
     {/if}
@@ -181,4 +231,8 @@
   .nav-row { display: flex; gap: 8px; margin-top: 10px; }
   .grow { flex: 1; }
   select.field { width: auto; }
+  .tabchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tabchips .chip { padding: 3px 10px; cursor: pointer; }
+  .srow.dim { opacity: 0.45; }
+  .hint.err { color: var(--danger); }
 </style>

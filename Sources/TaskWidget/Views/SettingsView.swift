@@ -63,6 +63,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.teleportAutoConnect) private var teleportAutoConnect = true
     @AppStorage(SettingsKey.teleportCheckSeconds) private var teleportCheckSeconds = 60
     @AppStorage(SettingsKey.enabledTabs) private var enabledTabs = "tasks,summary"
+    @AppStorage(SettingsKey.userRole) private var userRole = ""
+    @State private var confirmRolePreset = false
     @AppStorage(SettingsKey.sortTodosByTag) private var sortByTag = true
     @AppStorage(SettingsKey.summaryInstructions) private var summaryInstructions = ""
     @AppStorage(SettingsKey.secretStorage) private var secretStorage = "keychain"
@@ -193,6 +195,23 @@ struct SettingsView: View {
             Toggle("모든 Spaces에 표시", isOn: $allSpaces)
             Toggle("전역 단축키로 패널 열기/닫기", isOn: $globalHotKey)
             if globalHotKey { HotKeyRecorder() }
+        }
+        Section("직무") {
+            let role = UserRole(rawValue: userRole) ?? .custom
+            Picker("직무", selection: Binding(get: { role }, set: { userRole = $0.rawValue })) {
+                ForEach(UserRole.allCases, id: \.self) { Text($0.shortTitle).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            if role != .custom {
+                Button("직무에 맞게 다시 맞추기") { confirmRolePreset = true }
+                Text("탭과 Jira 목록 조건을 \(role.shortTitle) 기본값으로 되돌려요.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .alert("탭과 Jira 목록 조건을 \((UserRole(rawValue: userRole) ?? .custom).shortTitle) 기본값으로 바꿀까요?", isPresented: $confirmRolePreset) {
+            Button("바꾸기") {
+                if let r = UserRole(rawValue: userRole) { RolePreset.apply(RolePreset.preset(for: r), to: Settings.shared) }
+            }
+            Button("취소", role: .cancel) {}
         }
         Section("탭") {
             let ids = allTabs.map(\.id)

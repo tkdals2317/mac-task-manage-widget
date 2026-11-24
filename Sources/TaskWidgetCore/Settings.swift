@@ -77,6 +77,8 @@ public enum SettingsKey {
     public static let e2eIssuesCollapsed = "e2eIssuesCollapsed"
     /// E2E 이슈 목록 기준: "assignee"(담당, 기본) | "reporter"(보고)
     public static let e2eIssueScope = "e2eIssueScope"
+    /// 설정 도우미에서 고른 직무: "developer" | "planner" | "custom"
+    public static let userRole = "userRole"
     public static let e2eHistoryCollapsed = "e2eHistoryCollapsed"
     public static let e2eSetupCollapsed = "e2eSetupCollapsed"
     public static func e2eURL(_ env: E2EEnv) -> String { "e2eURL.\(env.rawValue)" }
@@ -233,6 +235,14 @@ public final class Settings {
         set { d.set(newValue, forKey: SettingsKey.confluenceBaseURL) }
     }
     /// 설정 도우미를 끝냈거나 건너뛴 적이 있는지 (기존 사용자는 첫 실행 때 조용히 true).
+    public var userRole: String {
+        get { string(SettingsKey.userRole, "") }
+        set { d.set(newValue, forKey: SettingsKey.userRole) }
+    }
+    public var e2eIssueScope: String {
+        get { string(SettingsKey.e2eIssueScope, "assignee") }
+        set { d.set(newValue, forKey: SettingsKey.e2eIssueScope) }
+    }
     public var onboardingDone: Bool {
         get { bool(SettingsKey.onboardingDone, false) }
         set { d.set(newValue, forKey: SettingsKey.onboardingDone) }
