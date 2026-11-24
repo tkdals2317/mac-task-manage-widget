@@ -11,6 +11,12 @@ final class AppState: ObservableObject {
     @Published var jiraLoading = false
     @Published var jiraConfigured = false
     @Published var jiraTruncated = false
+    /// E2E 탭 "보고" 목록 (내가 보고한 미완료 이슈). 할 일 탭 목록과 따로 가져온다.
+    @Published var reporterIssues: [JiraIssue] = []
+    @Published var reporterError: String?
+    @Published var reporterUpdatedAt: Date?
+    @Published var reporterLoading = false
+    @Published var reporterTruncated = false
     @Published var summary: Summary?
     @Published var worklogRaw: String?
     @Published var summaryDay = Date()
@@ -428,6 +434,38 @@ final class AppState: ObservableObject {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
             jiraError = error.localizedDescription
             DiagLog.append("jira refresh error: \(error.localizedDescription)")
+        }
+    }
+
+    func refreshReporterJira() async {
+        if let issues = DemoFixtures.load("jira", as: [JiraIssue].self) {
+            reporterIssues = JiraClient.sortedForDisplay(issues)
+            reporterTruncated = false
+            reporterUpdatedAt = Date()
+            reporterError = nil
+            return
+        }
+        guard !reporterLoading else { return }
+        guard let client = await jiraClient() else {
+            reporterError = "설정 > Jira 에서 주소·이메일·토큰을 입력하세요"; return
+        }
+        reporterLoading = true
+        defer { reporterLoading = false }
+        do {
+            let page = try await client.fetchMyOpenIssues(jql: JiraClient.reporterJQL)
+            reporterIssues = JiraClient.sortedForDisplay(page.issues)
+            reporterTruncated = page.truncated
+            reporterUpdatedAt = Date()
+            reporterError = nil
+        } catch let e as JiraError {
+            if Task.isCancelled { return }
+            if case .unauthorized = e { cachedToken = nil }
+            reporterError = e.userMessage
+            DiagLog.append("jira reporter refresh error: \(e.userMessage)")
+        } catch {
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+            reporterError = error.localizedDescription
+            DiagLog.append("jira reporter refresh error: \(error.localizedDescription)")
         }
     }
 

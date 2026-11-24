@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { log, native } from "../lib/native";
 import { settings } from "../lib/settings.svelte";
 import {
-  JIRA_KEYCHAIN_SERVICE, JiraError, doTransition, effectiveJQL, fetchMyOpenIssues, fetchTransitions, normalizeBase,
+  JIRA_KEYCHAIN_SERVICE, JiraError, REPORTER_JQL, doTransition, effectiveJQL, fetchMyOpenIssues, fetchTransitions, normalizeBase,
   sortedForDisplay, type JiraCreds, type JiraIssue, type JiraTransition,
 } from "../lib/jira";
 
@@ -15,6 +15,15 @@ export const jira = $state({
   configured: false,
   truncated: false,
   busy: [] as string[], // 상태 변경 중인 이슈 키
+});
+
+/** E2E 탭 "보고" 목록 (내가 보고한 미완료 이슈). 할 일 탭 목록(jira)과 따로 가져온다. */
+export const reporter = $state({
+  issues: [] as JiraIssue[],
+  error: null as string | null,
+  updatedAt: null as Date | null,
+  loading: false,
+  truncated: false,
 });
 
 let cachedToken: { account: string; token: string } | null = null;
@@ -62,6 +71,26 @@ export async function refreshJira(): Promise<void> {
     log(`jira refresh error: ${msg(e)}`);
   } finally {
     jira.loading = false;
+  }
+}
+
+export async function refreshReporter(): Promise<void> {
+  if (reporter.loading) return;
+  const c = await creds();
+  if (!c) { reporter.error = "설정 > Jira 에서 주소·이메일·토큰을 입력하세요"; return; }
+  reporter.loading = true;
+  try {
+    const page = await fetchMyOpenIssues(c, REPORTER_JQL);
+    reporter.issues = sortedForDisplay(page.issues);
+    reporter.truncated = page.truncated;
+    reporter.updatedAt = new Date();
+    reporter.error = null;
+  } catch (e) {
+    if (e instanceof JiraError && e.kind === "unauthorized") cachedToken = null;
+    reporter.error = msg(e);
+    log(`jira reporter refresh error: ${msg(e)}`);
+  } finally {
+    reporter.loading = false;
   }
 }
 

@@ -75,6 +75,8 @@ public enum SettingsKey {
     public static let e2eMaxIssues = "e2eMaxIssues"
     public static let e2eRetentionDays = "e2eRetentionDays"
     public static let e2eIssuesCollapsed = "e2eIssuesCollapsed"
+    /// E2E 이슈 목록 기준: "assignee"(담당, 기본) | "reporter"(보고)
+    public static let e2eIssueScope = "e2eIssueScope"
     public static let e2eHistoryCollapsed = "e2eHistoryCollapsed"
     public static let e2eSetupCollapsed = "e2eSetupCollapsed"
     public static func e2eURL(_ env: E2EEnv) -> String { "e2eURL.\(env.rawValue)" }

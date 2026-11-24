@@ -26,6 +26,8 @@ private struct E2ERequestView: View {
     @AppStorage(SettingsKey.jiraVersionFilter) private var versionFilter = ""
     @AppStorage(SettingsKey.jiraGroupByVersion) private var groupByVersion = false
     @AppStorage(SettingsKey.e2eIssuesCollapsed) private var issuesCollapsed = false
+    @AppStorage(SettingsKey.e2eIssueScope) private var scopeRaw = "assignee"
+    @AppStorage(SettingsKey.jiraRefreshMinutes) private var refreshMinutes = 5
     @AppStorage(SettingsKey.e2eHistoryCollapsed) private var historyCollapsed = false
     @State private var confirmPR = false
     /// PR 환경 job 을 다시 실행하기 전 확인 중인 job id
@@ -40,9 +42,19 @@ private struct E2ERequestView: View {
         return E2EEnv.selectable(allowPR: allowPR).contains(e) ? e : .st
     }
 
+    /// 담당(기본)은 할 일 탭 목록(사용자 JQL 포함), 보고는 E2E 가 따로 받은 목록.
+    private var reporter: Bool { scopeRaw == "reporter" }
+    private var listedIssues: [JiraIssue] { reporter ? state.reporterIssues : state.jiraIssues }
+    private var listError: String? { reporter ? state.reporterError : state.jiraError }
+    private var listUpdatedAt: Date? { reporter ? state.reporterUpdatedAt : state.jiraUpdatedAt }
+
+    private func refreshList() async {
+        if reporter { await state.refreshReporterJira() } else { await state.refreshJira() }
+    }
+
     /// 실행할 키: 목록에서 고른 것(목록 순서) → 목록에 없는 고른 것 → 직접 입력. 중복 없이.
     private var keys: [String] {
-        let listed = state.jiraIssues.map(\.id), selected = e2e.draftSelected
+        let listed = listedIssues.map(\.id), selected = e2e.draftSelected
         let ordered = listed.filter(selected.contains) + selected.subtracting(listed).sorted() + E2EIssueKeys.parse(e2e.draftKeys)
         var seen = Set<String>()
         return ordered.filter { seen.insert($0).inserted }
@@ -55,8 +67,8 @@ private struct E2ERequestView: View {
                 E2ESetupSection(e2e: e2e, env: env).id(env)
 
                 SectionHeader(title: "이슈 선택", count: keys.count, collapsed: $issuesCollapsed) {
-                    JiraVersionMenu()
-                    Button { Task { await state.refreshJira() } } label: {
+                    JiraVersionMenu(issues: listedIssues)
+                    Button { Task { await refreshList() } } label: {
                         Image(systemName: "arrow.clockwise").font(.system(size: 10 * scale))
                     }
                     .buttonStyle(.plain)
@@ -76,6 +88,16 @@ private struct E2ERequestView: View {
         .task {
             if e2e.report == nil { await e2e.checkAside() }
             if state.jiraUpdatedAt == nil { await state.refreshJira() }
+        }
+        // 보고 목록은 담당 목록(할 일 탭)이 갱신되는 주기로, 패널이 보일 때만 다시 받는다.
+        .task(id: "\(scopeRaw)-\(refreshMinutes)") {
+            guard reporter else { return }
+            await state.refreshReporterJira()
+            while !Task.isCancelled {
+                guard (try? await Task.sleep(for: .seconds(max(1, refreshMinutes) * 60))) != nil else { break }
+                guard NSApp.windows.contains(where: { $0 is FloatingPanel && $0.isVisible }) else { continue }
+                await state.refreshReporterJira()
+            }
         }
         .onAppear { e2e.reload() }
         .e2ePRConfirm(isPresented: $confirmPR) { submit() }
@@ -115,9 +137,10 @@ private struct E2ERequestView: View {
             Text("Jira 를 연결하면 내 이슈에서 고를 수 있어요. 아래에 키를 직접 넣어도 돼요.")
                 .font(.system(size: 11 * scale)).foregroundStyle(.secondary).padding(.vertical, 6)
         } else {
-            let issues = JiraVersions.filter(state.jiraIssues, VersionFilter(storage: versionFilter))
+            scopeRow
+            let issues = JiraVersions.filter(listedIssues, VersionFilter(storage: versionFilter))
             if groupByVersion {
-                let prefix = JiraVersions.commonPrefix(state.jiraIssues.flatMap(\.fixVersions))
+                let prefix = JiraVersions.commonPrefix(listedIssues.flatMap(\.fixVersions))
                 ForEach(Array(JiraVersions.grouped(issues).enumerated()), id: \.offset) { _, group in
                     JiraGroupHeader(text: "\(group.title.map { JiraVersions.display($0, prefix: prefix) } ?? "버전 없음") · \(group.issues.count)")
                     ForEach(group.issues) { issueRow($0) }
@@ -125,13 +148,32 @@ private struct E2ERequestView: View {
             } else {
                 ForEach(issues) { issueRow($0) }
             }
-            if issues.isEmpty && state.jiraUpdatedAt != nil {
+            if issues.isEmpty && listUpdatedAt != nil {
                 Text("보여줄 이슈가 없어요").font(.system(size: 11.5 * scale)).foregroundStyle(.tertiary).padding(.vertical, 6)
             }
-            if let e = state.jiraError {
+            if let e = listError {
                 Text(e).font(.system(size: 10.5 * scale)).foregroundStyle(.red).lineLimit(1).padding(.vertical, 4)
             }
+            if reporter && state.reporterLoading && state.reporterUpdatedAt == nil {
+                ProgressView().controlSize(.small).padding(.vertical, 6)
+            }
         }
+    }
+
+    /// 담당 · 보고 토글. 담당은 할 일 탭과 같은 목록, 보고는 내가 보고한 이슈 (기획자용).
+    private var scopeRow: some View {
+        HStack(spacing: 6) {
+            ForEach([("assignee", "담당"), ("reporter", "보고")], id: \.0) { raw, label in
+                let on = scopeRaw == raw
+                Button { scopeRaw = raw } label: {
+                    AccentChip(icon: on ? "checkmark" : "circle", text: label, style: on ? .soft : .plain)
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .help("담당: 내가 맡은 이슈 (할 일 탭 목록) · 보고: 내가 보고한 이슈")
     }
 
     private func issueRow(_ issue: JiraIssue) -> some View {
@@ -207,7 +249,7 @@ private struct E2ERequestView: View {
     }
 
     private func submit() {
-        let titles = Dictionary(state.jiraIssues.map { ($0.id, $0.summary) }, uniquingKeysWith: { a, _ in a })
+        let titles = Dictionary((state.jiraIssues + state.reporterIssues).map { ($0.id, $0.summary) }, uniquingKeysWith: { a, _ in a })
         let run = keys, memo = e2e.draftNotes, target = env
         Task { _ = await e2e.submit(env: target, keys: run, notes: memo, titles: titles) }
     }

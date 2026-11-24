@@ -34,6 +34,9 @@ public struct JiraClient {
 
     public static let defaultJQL = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
 
+    /// E2E 탭 "보고" 목록 (기획자용). 할 일 탭의 JQL 설정과 무관하다.
+    public static let reporterJQL = "reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+
     public static func effectiveJQL(custom: String) -> String {
         let t = custom.trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? defaultJQL : t

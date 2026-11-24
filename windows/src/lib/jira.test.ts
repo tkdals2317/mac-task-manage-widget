@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  commonPrefix, decodeIssueDetail, decodeRemoteLinks, mediaFileIdFromLocation, multipart, decodePage, displayVersion, effectiveJQL, DEFAULT_JQL, filterByVersion, groupedByStatus, groupedByVersion,
+  commonPrefix, decodeIssueDetail, decodeRemoteLinks, mediaFileIdFromLocation, multipart, decodePage, displayVersion, effectiveJQL, DEFAULT_JQL, REPORTER_JQL, filterByVersion, groupedByStatus, groupedByVersion,
   normalizeBase, parseJiraDate, parseVersionFilter, releaseOrder, transitionError, versionCounts, versionFilterStorage, versionTag,
   type JiraIssue,
 } from "./jira";
@@ -70,6 +70,10 @@ describe("misc", () => {
   it("effectiveJQL", () => {
     expect(effectiveJQL("  ")).toBe(DEFAULT_JQL);
     expect(effectiveJQL(" project = X ")).toBe("project = X");
+  });
+  it("REPORTER_JQL", () => {
+    expect(REPORTER_JQL).toBe("reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC");
+    expect(REPORTER_JQL).not.toBe(DEFAULT_JQL);
   });
   it("normalizeBase only https", () => {
     expect(normalizeBase(" https://a.atlassian.net/ ")).toBe("https://a.atlassian.net");

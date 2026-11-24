@@ -308,10 +308,13 @@ struct JiraRow: View {
 /// Jira 헤더의 버전 필터/묶기 메뉴 pill.
 struct JiraVersionMenu: View {
     @EnvironmentObject var state: AppState
+    /// 비우면 할 일 탭의 Jira 목록. E2E 의 "보고" 목록처럼 다른 목록을 줄 수 있다.
+    var issues: [JiraIssue]?
     @Environment(\.fontScale) private var scale
     @AppStorage(SettingsKey.jiraVersionFilter) private var stored = ""
     @AppStorage(SettingsKey.jiraGroupByVersion) private var groupBy = false
 
+    private var list: [JiraIssue] { issues ?? state.jiraIssues }
     private var filter: VersionFilter { VersionFilter(storage: stored) }
 
     var body: some View {
@@ -333,9 +336,9 @@ struct JiraVersionMenu: View {
     }
 
     @ViewBuilder private var menuItems: some View {
-        let c = JiraVersions.counts(state.jiraIssues)
+        let c = JiraVersions.counts(list)
         let prefix = JiraVersions.commonPrefix(c.versions.map(\.name))
-        item("전체 (\(state.jiraIssues.count))", on: filter == .all, to: .all)
+        item("전체 (\(list.count))", on: filter == .all, to: .all)
         ForEach(c.versions, id: \.name) { v in
             item("\(JiraVersions.display(v.name, prefix: prefix)) (\(v.count))", on: filter == .named(v.name), to: .named(v.name))
         }
@@ -354,7 +357,7 @@ struct JiraVersionMenu: View {
         switch filter {
         case .all: label = groupBy ? "버전별" : "버전 전체"
         case .none: label = "버전 없음"
-        case .named(let n): label = JiraVersions.display(n, prefix: JiraVersions.commonPrefix(state.jiraIssues.flatMap(\.fixVersions)))
+        case .named(let n): label = JiraVersions.display(n, prefix: JiraVersions.commonPrefix(list.flatMap(\.fixVersions)))
         }
         return HStack(spacing: 3) {
             if filter == .all && groupBy { Image(systemName: "rectangle.split.1x2") }

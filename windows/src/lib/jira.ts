@@ -25,6 +25,8 @@ export class JiraError extends Error {
 }
 
 export const DEFAULT_JQL = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC";
+/** E2E 탭 "보고" 목록 (기획자용). 할 일 탭의 JQL 설정과 무관하다. */
+export const REPORTER_JQL = "reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC";
 export const effectiveJQL = (custom: string) => custom.trim() || DEFAULT_JQL;
 
 /** https 주소만 (토큰·링크가 엉뚱한 곳으로 나가지 않게). 끝 '/' 제거. */
