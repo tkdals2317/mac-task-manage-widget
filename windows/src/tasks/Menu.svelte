@@ -6,6 +6,7 @@
     label?: string;
     checked?: boolean;
     header?: boolean;
+    disabled?: boolean;
     separator?: boolean;
     onselect?: () => void;
   }
@@ -22,7 +23,7 @@
       {:else if it.header}
         <div class="hdr">{it.label}</div>
       {:else}
-        <button class="item" onclick={() => { it.onselect?.(); onclose(); }}>
+        <button class="item" disabled={it.disabled} onclick={() => { it.onselect?.(); onclose(); }}>
           <span class="check">{it.checked ? "✓" : ""}</span>{it.label}
         </button>
       {/if}
@@ -33,7 +34,8 @@
 <style>
   .menu { display: flex; flex-direction: column; min-width: 150px; margin: -6px; padding: 4px 0; }
   .item { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border: none; background: transparent; text-align: left; cursor: pointer; border-radius: 4px; margin: 0 3px; }
-  .item:hover { background: var(--fill2); }
+  .item:hover:not(:disabled) { background: var(--fill2); }
+  .item:disabled { opacity: 0.45; }
   .check { width: 1em; color: var(--accent); font-size: 0.9em; }
   .hdr { padding: 4px 10px 2px; font-size: 0.85em; font-weight: 600; color: var(--fg2); }
   .sep { height: 1px; background: var(--line); margin: 3px 0; }

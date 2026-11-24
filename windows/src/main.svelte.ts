@@ -10,11 +10,12 @@ import { log, native } from "./lib/native";
 import { setHotkeyError } from "./lib/hotkeyStatus.svelte";
 import { displayAccelerator } from "./lib/hotkey";
 import { listen } from "@tauri-apps/api/event";
-import { enabledTabs } from "./lib/settings.svelte";
+import { ALL_TABS, enabledTabs } from "./lib/settings.svelte";
 import { startSummaryScheduler } from "./lib/summary.svelte";
 import { refreshPR, resetBitbucketCache, startPRLoop } from "./lib/pr.svelte";
 import { locateTsh, reloadConfig, refreshStatus as refreshTeleportStatus, startTeleport, tp } from "./lib/teleport.svelte";
 import { startTasks, store } from "./lib/todos.svelte";
+import { startE2E } from "./lib/e2e.svelte";
 import { dayKey } from "./lib/summaryCore";
 
 await loadSettings();
@@ -90,7 +91,6 @@ mount(App, { target: document.getElementById("app")! });
 
 // ---- 백그라운드 일: 요약 자동 생성, PR 새로고침·알림, Teleport 자동 유지 ----
 // 패널 창은 숨겨도 살아 있으므로 여기서 돌린다 (Mac AppDelegate 의 Scheduler·PRModel.startLoop·TeleportManager.start).
-const ALL_TABS = ["tasks", "summary", "notes", "pr", "teleport"];
 let panelVisible = true;
 const checkVisible = () => win.isVisible().then((v) => (panelVisible = v)).catch(() => {});
 setInterval(checkVisible, 10_000);
@@ -98,6 +98,7 @@ listen("panel-hidden", () => (panelVisible = false)).catch(() => {});
 win.onFocusChanged(({ payload }) => { if (payload) panelVisible = true; }).catch(() => {});
 
 startTasks();
+void startE2E();
 startSummaryScheduler();
 startPRLoop(() => panelVisible);
 startTeleport(() => enabledTabs(settings.enabledTabs, ALL_TABS).includes("teleport"));

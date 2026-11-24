@@ -14,6 +14,7 @@
   import TagsPane from "./TagsPane.svelte";
   import NotesPane from "./NotesPane.svelte";
   import PRPane from "./PRPane.svelte";
+  import E2EPane from "./E2EPane.svelte";
   import SummaryPane from "./SummaryPane.svelte";
   import ClaudePane from "./ClaudePane.svelte";
   import TeleportPane from "./TeleportPane.svelte";
@@ -27,6 +28,7 @@
     { id: "jira", title: "Jira", icon: "jira" },
     { id: "notes", title: "노트", icon: "notes" },
     { id: "pr", title: "PR", icon: "branch" },
+    { id: "e2e", title: "E2E", icon: "seal" },
     { id: "summary", title: "요약", icon: "doc" },
     { id: "claude", title: "Claude 연동", icon: "sparkles" },
     { id: "teleport", title: "Teleport", icon: "globe" },
@@ -76,6 +78,7 @@
       {:else if pane === "tags"}<TagsPane />
       {:else if pane === "notes"}<NotesPane />
       {:else if pane === "pr"}<PRPane />
+      {:else if pane === "e2e"}<E2EPane />
       {:else if pane === "summary"}<SummaryPane />
       {:else if pane === "claude"}<ClaudePane />
       {:else if pane === "teleport"}<TeleportPane />

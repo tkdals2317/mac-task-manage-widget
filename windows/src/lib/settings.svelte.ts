@@ -72,6 +72,21 @@ export const DEFAULTS = {
   notesLinkFilter: "all",
   notesHello: false, // Mac 판 notesTouchID 자리 (Windows Hello)
   onboardingDone: false,
+  // E2E (Aside)
+  e2eEnv: "ST",
+  e2eAllowPR: false,
+  e2eTabIntroduced: false,
+  e2eAsidePath: "",
+  e2eModel: "",
+  e2eMinutesPerIssue: 10,
+  e2eMaxMinutes: 30,
+  e2eMaxIssues: 5,
+  e2eRetentionDays: 30,
+  e2eIssuesCollapsed: false,
+  e2eHistoryCollapsed: false,
+  e2eSetupCollapsed: false,
+  "e2eURL.DV": "", "e2eURL.ST": "", "e2eURL.ST2": "", "e2eURL.PR": "",
+  "e2eUser.DV": "", "e2eUser.ST": "", "e2eUser.ST2": "", "e2eUser.PR": "",
 };
 
 export type Settings = typeof DEFAULTS;
@@ -120,6 +135,9 @@ export function setSetting<K extends SettingsKey>(key: K, value: Settings[K]): v
   }, 300);
 }
 
+/** 탭 순서 (Mac allTabs 와 같다). */
+export const ALL_TABS = ["tasks", "summary", "notes", "pr", "e2e", "teleport"];
+
 /** 켜진 탭 id (Mac TabConfig.enabled 와 같은 규칙: all 순서, 모르는 id 무시, 비면 첫 탭). */
 export function enabledTabs(raw: string, all: string[]): string[] {
   const wanted = new Set(raw.split(",").map((s) => s.trim()));
@@ -138,3 +156,7 @@ export function toggledTabs(id: string, raw: string, all: string[]): string {
   } else next.add(id);
   return all.filter((x) => next.has(x)).join(",");
 }
+
+/** 환경별 설정 키 (Mac SettingsKey.e2eURL·e2eUser). */
+export const e2eURLKey = (env: string) => `e2eURL.${env}` as SettingsKey;
+export const e2eUserKey = (env: string) => `e2eUser.${env}` as SettingsKey;

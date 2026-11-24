@@ -15,12 +15,14 @@
   import NotesTab from "./tabs/NotesTab.svelte";
   import PRTab from "./tabs/PRTab.svelte";
   import TeleportTab from "./tabs/TeleportTab.svelte";
+  import E2ETab from "./tabs/E2ETab.svelte";
 
   const TABS = [
     { id: "tasks", title: "할 일" },
     { id: "summary", title: "요약" },
     { id: "notes", title: "노트" },
     { id: "pr", title: "PR" },
+    { id: "e2e", title: "E2E" },
     { id: "teleport", title: "Teleport" },
   ];
 
@@ -59,7 +61,7 @@
     if (e.key === "Escape" && !e.defaultPrevented && tag !== "INPUT" && tag !== "TEXTAREA" && !document.querySelector(".modal-back, .popover")) hidePanel();
     if (e.key === "," && e.ctrlKey) native.openSettings();
     // Ctrl+1..5 탭 바꾸기
-    if (e.ctrlKey && /^[1-5]$/.test(e.key)) {
+    if (e.ctrlKey && /^[1-6]$/.test(e.key)) {
       const id = TABS.filter((t) => enabled.includes(t.id))[Number(e.key) - 1]?.id;
       if (id) { e.preventDefault(); setSetting("lastTab", id); }
     }
@@ -111,6 +113,7 @@
     {#if current === "notes"}<NotesTab />
     {:else if current === "summary"}<SummaryTab />
     {:else if current === "pr"}<PRTab />
+    {:else if current === "e2e"}<E2ETab />
     {:else if current === "teleport"}<TeleportTab />
     {:else}<TasksTab />{/if}
     {#if toast.text}

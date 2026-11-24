@@ -46,9 +46,9 @@ pub fn kill_pid(pid: u32) {
 }
 
 #[tauri::command]
-pub fn tunnel_spawn(key: String, program: String, args: Vec<String>, log: String) -> Result<u32, String> {
+pub fn tunnel_spawn(key: String, program: String, args: Vec<String>, log: String, env: Option<HashMap<String, String>>) -> Result<u32, String> {
     let p = safe_path(&log)?;
-    proc::spawn_tunnel(&key, &program, &args, &p)
+    proc::spawn_tunnel(&key, &program, &args, &p, &env.unwrap_or_default())
 }
 
 /// 돌고 있으면 null, 끝났으면 종료 코드.

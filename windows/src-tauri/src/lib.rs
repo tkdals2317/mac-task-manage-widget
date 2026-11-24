@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod e2e;
 mod proc;
 
 pub use cli::handle as handle_cli;
@@ -254,8 +255,8 @@ fn settings_ready(app: AppHandle) {
 /// 새 창이 빈 화면으로 멈추고 숨기기·닫기·종료까지 전부 막힌다 (Tauri 문서의 경고).
 #[tauri::command]
 async fn open_settings(app: AppHandle, pane: Option<String>) -> Result<(), String> {
-    // 화면 id 는 영문 소문자만 (스크립트에 넣으므로)
-    let pane = pane.filter(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_lowercase()));
+    // 화면 id 는 영문 소문자·숫자만 (스크립트에 넣으므로)
+    let pane = pane.filter(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.show();
         let _ = w.unminimize();
@@ -356,7 +357,25 @@ pub fn run() {
             commands::open_data_path,
             commands::reveal_path,
             commands::export_diagnostics,
-            commands::tsh_repair_empty_keys
+            commands::tsh_repair_empty_keys,
+            e2e::aside_work_dir,
+            e2e::aside_read,
+            e2e::aside_browser,
+            e2e::aside_open_url,
+            e2e::aside_launch,
+            e2e::aside_terminal,
+            e2e::kill_pid_if_aside,
+            e2e::e2e_work_prepare,
+            e2e::e2e_work_import,
+            e2e::e2e_work_prune,
+            e2e::e2e_log_append,
+            e2e::e2e_log_text,
+            e2e::e2e_screenshots,
+            e2e::e2e_screenshot_data,
+            e2e::e2e_screenshot_open,
+            e2e::e2e_job_write,
+            e2e::e2e_job_delete,
+            e2e::e2e_export_html
         ])
         .setup(|app| {
             let _ = fs::create_dir_all(data_dir().join("logs"));

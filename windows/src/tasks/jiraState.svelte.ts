@@ -34,7 +34,7 @@ async function token(account: string): Promise<string | null> {
 
 const msg = (e: unknown) => (e instanceof JiraError ? e.userMessage : e instanceof Error ? e.message : String(e));
 
-async function creds(): Promise<JiraCreds | null> {
+export async function creds(): Promise<JiraCreds | null> {
   const email = settings.jiraEmail;
   const t = email ? await token(email) : null;
   const baseURL = normalizeBase(settings.jiraBaseURL);
