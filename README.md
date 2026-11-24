@@ -16,7 +16,7 @@ macOS 메뉴바에 상주하는 플로팅 위젯이다. 한 패널에서 다음�
 
 ## 설치
 
-> **Windows 를 쓰나요?** [Windows 판](windows/README.md) 을 보세요. 지금은 할 일·노트 탭까지 있고, 요약·PR·Teleport 는 차례로 추가돼요.
+> **Windows 를 쓰나요?** [Windows 판](windows/README.md) 을 보세요. 할 일·요약·노트·PR·Teleport 를 Mac 과 같은 화면으로 쓸 수 있고, 설치 파일과 앱 안 업데이트를 제공해요.
 
 ### 준비물
 
