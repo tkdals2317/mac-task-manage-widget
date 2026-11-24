@@ -72,6 +72,7 @@ export const DEFAULTS = {
   notesLinkFilter: "all",
   notesHello: false, // Mac 판 notesTouchID 자리 (Windows Hello)
   onboardingDone: false,
+  userRole: "", // developer | planner | custom (설정 도우미에서 고른 직무)
   // E2E (Aside)
   e2eEnv: "ST",
   e2eAllowPR: false,

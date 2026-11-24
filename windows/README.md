@@ -16,7 +16,7 @@ Mac 판 ATM 과 같은 떠 있는 패널을 Windows 에서 쓰는 버전이에�
 1. [Releases](https://github.com/tkdals2317/mac-task-manage-widget/releases) 에서 `Windows v…` 릴리스의 `ATM_<버전>_x64-setup.exe` 를 받아 실행해요.
    - 서명하지 않은 설치 파일이라 처음엔 SmartScreen 경고가 떠요. **추가 정보 → 실행** 을 누르세요.
    - 관리자 권한 없이 내 계정에만 설치돼요.
-2. 설치가 끝나면 작업 표시줄 오른쪽 트레이에 ATM 아이콘이 생기고, 처음 실행하면 **설정 도우미**가 열려요. 쓸 기능(Jira·노트·요약·PR·E2E·Teleport)을 고르면 필요한 설정만 차례로 안내해요.
+2. 설치가 끝나면 작업 표시줄 오른쪽 트레이에 ATM 아이콘이 생기고, 처음 실행하면 **설정 도우미**가 열려요. 첫 단계에서 **어떤 일을 하세요?** (개발자 · 기획자 · 직접 고를게요)에 답하면 직무에 맞는 탭과 Jira 목록 기준(담당 · 보고 · 둘 다)이 미리 채워지고, 바로 고칠 수 있어요. 고른 탭에 필요한 설정만 차례로 안내해요.
 3. 도우미는 설정 > 정보 > **설정 도우미 열기** 로 언제든 다시 열 수 있어요.
 
 ## 쓰는 법
@@ -31,6 +31,7 @@ Mac 판 ATM 과 같은 떠 있는 패널을 Windows 에서 쓰는 버전이에�
   - 요약은 `claude` CLI 를 PATH, `%USERPROFILE%\.local\bin`, npm 전역 폴더, Claude 데스크톱 앱이 받아 둔 Claude Code 순서로 찾아요. 로그인이 필요해요 (`claude` 실행 → `/login`).
   - PR 의 GitHub 는 `gh` CLI 로그인(`winget install GitHub.cli` → `gh auth login`)을 써요.
   - Teleport 는 `tsh` 가 PATH 에 있거나 설정 > Teleport 에 경로를 넣어야 해요. 로그인은 가상 콘솔(ConPTY)에서 비밀번호·OTP 를 대신 입력해요. OTP QR 이미지는 파일을 골라서 읽어요.
+  - 설정 > 창 · 일반 의 **직무** 에서 **직무에 맞게 다시 맞추기** 로 탭과 Jira 목록 조건을 직무 기본값으로 되돌릴 수 있어요. 할 일 탭도 끌 수 있어요.
   - E2E 이슈 목록 위 **담당 · 보고** 로 내가 담당한 이슈(기본, 할 일 탭과 같은 목록)와 내가 보고한 이슈(기획자용)를 바꿀 수 있어요.
   - E2E 는 Aside 브라우저와 Aside CLI(`aside`)가 필요해요. `aside` 를 PATH 에서 찾고(설정 > E2E 에서 경로 지정 가능), Aside 계정은 `%USERPROFILE%\.aside` 아래를 써요(Windows 에서의 위치는 아직 확인 전). 터미널 버튼은 PowerShell 에서 `aside update`·`aside login` 을 돌려요.
   - 요약 자동 생성·PR 알림·Teleport 자동 유지는 ATM 이 켜져 있는 동안(트레이에 숨겨도) 돌아가요.

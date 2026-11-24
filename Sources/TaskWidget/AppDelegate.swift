@@ -242,6 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func newTodo() {
+        // 할 일 탭을 꺼 뒀으면 입력칸이 없으니 패널만 연다 (RootView 가 첫 켜진 탭을 보여준다).
+        guard TabConfig.enabled(from: Settings.shared.enabledTabs, all: allTabs.map(\.id)).contains("tasks") else { showPanel(); return }
         panel.keepFocusOnce = true   // 열면서 입력칸 포커스를 자동 해제하지 않게
         showPanel()
         UserDefaults.standard.set("tasks", forKey: SettingsKey.lastTab)
@@ -257,7 +259,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateBadge(_ todos: [Todo]) {
-        let n = DueBadge.urgentCount(todos: todos, now: Date())
+        // 할 일 탭을 꺼 뒀으면 마감 배지도 숨긴다.
+        let tasksOn = TabConfig.enabled(from: Settings.shared.enabledTabs, all: allTabs.map(\.id)).contains("tasks")
+        let n = tasksOn ? DueBadge.urgentCount(todos: todos, now: Date()) : 0
         guard let b = statusItem.button else { return }
         b.title = n > 0 ? " \(n)" : ""
         b.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
