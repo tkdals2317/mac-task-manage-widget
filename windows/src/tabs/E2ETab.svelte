@@ -8,7 +8,7 @@
   import Menu, { type MenuItem } from "../tasks/Menu.svelte";
   import SectionHeader from "../tasks/SectionHeader.svelte";
   import JiraVersionMenu from "../tasks/JiraVersionMenu.svelte";
-  import { jira, refreshJira } from "../tasks/jiraState.svelte";
+  import { jira, refreshJira, refreshReporter, reporter } from "../tasks/jiraState.svelte";
   import { checkAside, cancelJob, job as jobOf, commentableIssues, commentId, deleteJob, e2e, existingScreenshots, isRunning, issueLink, openLog, openResult, reload, retry, revealJob, exportReport, submit } from "../lib/e2e.svelte";
   import { e2eURLKey, setSetting, settings } from "../lib/settings.svelte";
   import { commonPrefix, displayVersion, filterByVersion, groupedByVersion, parseVersionFilter, type JiraIssue } from "../lib/jira";
@@ -35,15 +35,20 @@
   });
   const envURL = $derived(String(settings[e2eURLKey(env)]));
 
+  /** 담당(기본)은 할 일 탭 목록(사용자 JQL 포함), 보고는 E2E 가 따로 받은 목록. */
+  const isReporter = $derived(settings.e2eIssueScope === "reporter");
+  const list = $derived(isReporter ? reporter : jira);
+  const refreshList = () => (isReporter ? refreshReporter() : refreshJira());
+
   /** 실행할 키: 목록에서 고른 것(목록 순서) → 목록에 없는 고른 것 → 직접 입력. 중복 없이. */
   const keys = $derived.by(() => {
-    const listed = jira.issues.map((i) => i.id), sel = new Set(e2e.draftSelected);
+    const listed = list.issues.map((i) => i.id), sel = new Set(e2e.draftSelected);
     const ordered = [...listed.filter((k) => sel.has(k)), ...[...sel].filter((k) => !listed.includes(k)).sort(), ...parseIssueKeys(e2e.draftKeys)];
     return [...new Set(ordered)];
   });
 
-  const filtered = $derived(filterByVersion(jira.issues, parseVersionFilter(settings.jiraVersionFilter)));
-  const prefix = $derived(commonPrefix(jira.issues.flatMap((i) => i.fixVersions)));
+  const filtered = $derived(filterByVersion(list.issues, parseVersionFilter(settings.jiraVersionFilter)));
+  const prefix = $derived(commonPrefix(list.issues.flatMap((i) => i.fixVersions)));
 
   onMount(() => {
     void reload();
@@ -51,10 +56,19 @@
     if (!jira.updatedAt) void refreshJira();
   });
 
+  // 보고 목록은 담당 목록(할 일 탭)이 갱신되는 주기로, 패널이 보일 때만 다시 받는다.
+  $effect(() => {
+    if (!isReporter) return;
+    const ms = Math.max(1, settings.jiraRefreshMinutes) * 60_000;
+    void refreshReporter();
+    const t = setInterval(() => { if (document.visibilityState === "visible") void refreshReporter(); }, ms);
+    return () => clearInterval(t);
+  });
+
   const toggle = (k: string) => { e2e.draftSelected = e2e.draftSelected.includes(k) ? e2e.draftSelected.filter((x) => x !== k) : [...e2e.draftSelected, k]; };
 
   function doSubmit() {
-    const titles = Object.fromEntries(jira.issues.map((i) => [i.id, i.summary]));
+    const titles = Object.fromEntries([...jira.issues, ...reporter.issues].map((i) => [i.id, i.summary]));
     void submit(env, keys, e2e.draftNotes, titles);
   }
 
@@ -112,14 +126,20 @@
 
     <SectionHeader title="이슈 선택" count={keys.length} bind:collapsed={() => settings.e2eIssuesCollapsed, (v) => setSetting("e2eIssuesCollapsed", v)}>
       {#snippet trailing()}
-        <JiraVersionMenu />
-        <button class="icon-btn mini" title="Jira 새로고침" aria-label="Jira 새로고침" onclick={() => refreshJira()}><Icon name="refresh" size={0.9} /></button>
+        <JiraVersionMenu issues={list.issues} />
+        <button class="icon-btn mini" title="Jira 새로고침" aria-label="Jira 새로고침" onclick={() => refreshList()}><Icon name="refresh" size={0.9} /></button>
       {/snippet}
     </SectionHeader>
     {#if !settings.e2eIssuesCollapsed}
       {#if !jira.configured}
         <div class="muted pad">Jira 를 연결하면 내 이슈에서 고를 수 있어요. 아래에 키를 직접 넣어도 돼요.</div>
       {:else}
+        <div class="scope" title="담당: 내가 맡은 이슈 (할 일 탭 목록) · 보고: 내가 보고한 이슈">
+          {#each [["assignee", "담당"], ["reporter", "보고"]] as [v, label] (v)}
+            {@const on = settings.e2eIssueScope === v}
+            <button class="chip {on ? 'soft' : 'plain'}" onclick={() => setSetting("e2eIssueScope", v)}><Sym name={on ? "check" : "dot"} size={0.8} />{label}</button>
+          {/each}
+        </div>
         {#if settings.jiraGroupByVersion}
           {#each groupedByVersion(filtered) as g (g.title ?? "\u0000none")}
             <div class="ghdr">{g.title === null ? "버전 없음" : displayVersion(g.title, prefix)} · {g.issues.length}</div>
@@ -128,8 +148,9 @@
         {:else}
           {#each filtered as i (i.id)}{@render issueRow(i)}{/each}
         {/if}
-        {#if filtered.length === 0 && jira.updatedAt}<div class="faint pad">보여줄 이슈가 없어요</div>{/if}
-        {#if jira.error}<div class="err1">{jira.error}</div>{/if}
+        {#if isReporter && reporter.loading && !reporter.updatedAt}<div class="faint pad"><span class="spin sp"></span></div>{/if}
+        {#if filtered.length === 0 && list.updatedAt}<div class="faint pad">보여줄 이슈가 없어요</div>{/if}
+        {#if list.error}<div class="err1">{list.error}</div>{/if}
       {/if}
     {/if}
 
@@ -228,6 +249,7 @@
   .eurl { font-size: 0.88em; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; direction: rtl; text-align: left; }
   .eurl.none { color: var(--warn); direction: ltr; }
   .pad { padding: 6px 0; }
+  .scope { display: flex; gap: 6px; padding: 4px 0; }
   .muted { color: var(--fg2); font-size: 0.92em; }
   .faint { color: var(--fg3); }
   .sm { font-size: 0.82em; }

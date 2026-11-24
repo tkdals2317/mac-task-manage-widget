@@ -61,6 +61,11 @@ final class JiraClientTests: XCTestCase {
         XCTAssertEqual(JiraClient.effectiveJQL(custom: "project = NMRS"), "project = NMRS")
     }
 
+    func testReporterJQL() {
+        XCTAssertEqual(JiraClient.reporterJQL, "reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC")
+        XCTAssertNotEqual(JiraClient.reporterJQL, JiraClient.defaultJQL)
+    }
+
     func testErrorMessages() {
         XCTAssertEqual(JiraError.unauthorized.userMessage, "토큰 확인 필요 (401/403)")
         XCTAssertEqual(JiraError.badQuery("x").userMessage, "JQL 오류: x")

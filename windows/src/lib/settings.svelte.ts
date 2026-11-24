@@ -83,6 +83,7 @@ export const DEFAULTS = {
   e2eMaxIssues: 5,
   e2eRetentionDays: 30,
   e2eIssuesCollapsed: false,
+  e2eIssueScope: "assignee", // assignee(담당) | reporter(보고)
   e2eHistoryCollapsed: false,
   e2eSetupCollapsed: false,
   "e2eURL.DV": "", "e2eURL.ST": "", "e2eURL.ST2": "", "e2eURL.PR": "",

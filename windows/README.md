@@ -31,6 +31,7 @@ Mac 판 ATM 과 같은 떠 있는 패널을 Windows 에서 쓰는 버전이에�
   - 요약은 `claude` CLI 를 PATH, `%USERPROFILE%\.local\bin`, npm 전역 폴더, Claude 데스크톱 앱이 받아 둔 Claude Code 순서로 찾아요. 로그인이 필요해요 (`claude` 실행 → `/login`).
   - PR 의 GitHub 는 `gh` CLI 로그인(`winget install GitHub.cli` → `gh auth login`)을 써요.
   - Teleport 는 `tsh` 가 PATH 에 있거나 설정 > Teleport 에 경로를 넣어야 해요. 로그인은 가상 콘솔(ConPTY)에서 비밀번호·OTP 를 대신 입력해요. OTP QR 이미지는 파일을 골라서 읽어요.
+  - E2E 이슈 목록 위 **담당 · 보고** 로 내가 담당한 이슈(기본, 할 일 탭과 같은 목록)와 내가 보고한 이슈(기획자용)를 바꿀 수 있어요.
   - E2E 는 Aside 브라우저와 Aside CLI(`aside`)가 필요해요. `aside` 를 PATH 에서 찾고(설정 > E2E 에서 경로 지정 가능), Aside 계정은 `%USERPROFILE%\.aside` 아래를 써요(Windows 에서의 위치는 아직 확인 전). 터미널 버튼은 PowerShell 에서 `aside update`·`aside login` 을 돌려요.
   - 요약 자동 생성·PR 알림·Teleport 자동 유지는 ATM 이 켜져 있는 동안(트레이에 숨겨도) 돌아가요.
 

@@ -1,30 +1,34 @@
 <script lang="ts">
   // Jira 헤더의 버전 필터/묶기 메뉴 pill.
   import {
-    commonPrefix, displayVersion, parseVersionFilter, sameFilter, versionCounts, versionFilterStorage, type VersionFilter,
+    commonPrefix, displayVersion, parseVersionFilter, sameFilter, versionCounts, versionFilterStorage, type JiraIssue, type VersionFilter,
   } from "../lib/jira";
   import { setSetting, settings } from "../lib/settings.svelte";
   import { jira } from "./jiraState.svelte";
   import Icon from "./Icon.svelte";
   import Menu, { type MenuItem } from "./Menu.svelte";
 
+  /** 비우면 할 일 탭의 Jira 목록. E2E 의 "보고" 목록처럼 다른 목록을 줄 수 있다. */
+  let { issues: given }: { issues?: JiraIssue[] } = $props();
+  const issues = $derived(given ?? jira.issues);
+
   let open = $state(false);
   let btn: HTMLElement | undefined = $state();
 
   const filter = $derived(parseVersionFilter(settings.jiraVersionFilter));
-  const counts = $derived(versionCounts(jira.issues));
+  const counts = $derived(versionCounts(issues));
   const prefix = $derived(commonPrefix(counts.versions.map((v) => v.name)));
   const selected = $derived(filter.kind !== "all");
   const label = $derived(
     filter.kind === "all" ? (settings.jiraGroupByVersion ? "버전별" : "버전 전체")
       : filter.kind === "none" ? "버전 없음"
-      : displayVersion(filter.name, commonPrefix(jira.issues.flatMap((i) => i.fixVersions))),
+      : displayVersion(filter.name, commonPrefix(issues.flatMap((i) => i.fixVersions))),
   );
 
   const pick = (f: VersionFilter) => setSetting("jiraVersionFilter", versionFilterStorage(f));
   const item = (title: string, f: VersionFilter): MenuItem => ({ label: title, checked: sameFilter(filter, f), onselect: () => pick(f) });
   const items = $derived<MenuItem[]>([
-    item(`전체 (${jira.issues.length})`, { kind: "all" }),
+    item(`전체 (${issues.length})`, { kind: "all" }),
     ...counts.versions.map((v) => item(`${displayVersion(v.name, prefix)} (${v.count})`, { kind: "named", name: v.name })),
     item(`버전 없음 (${counts.noneCount})`, { kind: "none" }),
     { separator: true },
